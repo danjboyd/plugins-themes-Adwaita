@@ -12,6 +12,14 @@ use case today is making it possible to build new GNUstep apps that feel at
 home on GNOME. Backward-compatibility improvements may still happen later, but
 they are not the primary design constraint for this release.
 
+## Screenshots
+
+<p>
+  <img src="Docs/Screenshots/theme-controls.png" alt="ThemeDemo controls page" width="32%">
+  <img src="Docs/Screenshots/theme-text.png" alt="ThemeDemo text inputs page" width="32%">
+  <img src="Docs/Screenshots/theme-data.png" alt="ThemeDemo data views page" width="32%">
+</p>
+
 ## Status
 
 This project should currently be treated as an `0.1.0-alpha1` release.
