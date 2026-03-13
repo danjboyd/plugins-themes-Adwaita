@@ -1,0 +1,18 @@
+{
+  NSExecutable = "Adwaita";
+  NSPrincipalClass = "GnomeTheme";
+  GSThemeAuthors = (
+    "Daniel Boyd"
+  );
+  GSThemeDetails = "Adwaita GNUstep theme for GNOME";
+  GSThemeVersion = "0.1.0-alpha1";
+  GSThemeDomain = {
+    NSInterfaceStyleDefault = NSWindows95InterfaceStyle;
+    NSMenuInterfaceStyle = NSWindows95InterfaceStyle;
+    NSScrollViewInterfaceStyle = NSWindows95InterfaceStyle;
+    NSScrollerInterfaceStyle = NSWindows95InterfaceStyle;
+    GSSuppressAppIcon = YES;
+    GSScrollerButtonsOffset = 0;
+    GSScrollerArrowsSameEnd = NO;
+  };
+}
