@@ -6,6 +6,12 @@ The goal is pragmatic rather than literal pixel-perfect GTK emulation: make
 GNUstep applications feel at home on a modern GNOME desktop while staying
 inside the GNUstep theme layer wherever possible.
 
+The current priority is forward-looking GNOME integration, not strict backward
+compatibility with the appearance of existing GNUstep applications. The main
+use case today is making it possible to build new GNUstep apps that feel at
+home on GNOME. Backward-compatibility improvements may still happen later, but
+they are not the primary design constraint for this release.
+
 ## Status
 
 This project should currently be treated as an `0.1.0-alpha1` release.
@@ -41,6 +47,8 @@ It does not currently aim to:
 - support arbitrary third-party GTK themes
 - reproduce GTK4's rendering architecture
 - patch `libs-gui` unless a clear framework blocker remains after theme work
+- guarantee that existing GNUstep applications will preserve their prior look
+  unchanged under this theme
 
 ## Repository Layout
 
