@@ -22,7 +22,17 @@
 #import "ThemeDemoTableDataSource.h"
 
 #import <Foundation/Foundation.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #import <GNUstepBase/GSObjCRuntime.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+@interface NSComboBoxCell (ThemeDemoPrivate)
+- (void) _performClickWithFrame: (NSRect)cellFrame
+                         inView: (NSView *)controlView;
+@end
 
 static const CGFloat kDemoPadding = 20.0;
 static CGFloat kDemoRowSpacing = 14.0;
@@ -38,6 +48,9 @@ static NSString *ThemeDemoCaptureMenuHighlightKey = @"ThemeDemoCaptureMenuHighli
 static NSString *ThemeDemoDumpMenuGeometryKey = @"ThemeDemoDumpMenuGeometry";
 static NSString *ThemeDemoDumpTabGeometryKey = @"ThemeDemoDumpTabGeometry";
 static NSString *ThemeDemoDumpTypographyKey = @"ThemeDemoDumpTypography";
+static NSString *ThemeDemoCommandScriptKey = @"ThemeDemoCommandScript";
+static NSString *ThemeDemoCommandFIFOKey = @"ThemeDemoCommandFIFO";
+static NSString *ThemeDemoScreenshotOutputKey = @"ThemeDemoScreenshotOutput";
 
 static NSString *
 ThemeDemoFontDescription(NSFont *font)
@@ -70,7 +83,34 @@ ThemeDemoPrintLine(NSString *line)
 - (BOOL) performRequestedGeometryDumpIfNeeded;
 - (BOOL) performRequestedTabDumpIfNeeded;
 - (BOOL) performRequestedTypographyDumpIfNeeded;
+- (BOOL) performRequestedScreenshotIfNeeded;
 - (void) openRequestedMenu;
+- (void) startRequestedCommandInterfaceIfNeeded;
+- (void) runRequestedCommandScript;
+- (void) pollCommandFIFO: (NSTimer *)timer;
+- (void) closeCommandFIFO;
+- (void) executeCommandLine: (NSString *)line;
+- (void) executeCommandLines: (NSString *)commands;
+- (NSView *) textAuditControlNamed: (NSString *)name;
+- (void) focusTextAuditControlNamed: (NSString *)name selectingAll: (BOOL)selectingAll;
+- (void) selectFocusedTextAuditControl;
+- (void) openDropdownNamed: (NSString *)name;
+- (void) captureDropdownNamed: (NSString *)name toPath: (NSString *)path;
+- (void) performPendingDropdownCapture: (NSTimer *)timer;
+- (void) captureAlertToPath: (NSString *)path;
+- (void) clickViewCenter: (NSView *)view;
+- (BOOL) writeWindowScreenshotToPath: (NSString *)path;
+- (BOOL) writeScreenScreenshotToPath: (NSString *)path;
+- (BOOL) writeInternalScreenScreenshotToPath: (NSString *)path;
+- (BOOL) imageAppearsBlank: (NSImage *)image;
+- (BOOL) runScreenshotToolAtPath: (NSString *)toolPath
+                         toPath: (NSString *)path;
+- (BOOL) writeImage: (NSImage *)image toPNGPath: (NSString *)path;
+- (void) sendMouseEventOfType: (NSEventType)type
+              atWindowTopLeft: (NSPoint)point
+                   clickCount: (NSInteger)clickCount;
+- (void) clickWindowTopLeftPoint: (NSPoint)point;
+- (void) sendKeyString: (NSString *)string;
 - (void) selectPageNamed: (NSString *)name;
 - (NSTabViewItem *) tabItemNamed: (NSString *)name;
 - (IBAction) showControlsPage: (id)sender;
@@ -121,6 +161,17 @@ ThemeDemoPrintLine(NSString *line)
 
 @implementation AppController
 
+- (id) init
+{
+  self = [super init];
+  if (self != nil)
+    {
+      _commandFIFODescriptor = -1;
+    }
+
+  return self;
+}
+
 - (void) dealloc
 {
   RELEASE (_window);
@@ -134,6 +185,16 @@ ThemeDemoPrintLine(NSString *line)
   RELEASE (_segmentedControl);
   RELEASE (_demoMenuButton);
   RELEASE (_stressMenuButton);
+  RELEASE (_primaryTextField);
+  RELEASE (_passwordField);
+  RELEASE (_searchField);
+  RELEASE (_disabledTextField);
+  RELEASE (_bodyTextView);
+  RELEASE (_textComboBox);
+  RELEASE (_pendingDropdownCaptureName);
+  RELEASE (_pendingDropdownCapturePath);
+  RELEASE (_commandFIFOBuffer);
+  [self closeCommandFIFO];
   [super dealloc];
 }
 
@@ -162,7 +223,13 @@ ThemeDemoPrintLine(NSString *line)
       return;
     }
   [_window makeKeyAndOrderFront: self];
+  [_window makeFirstResponder: nil];
   [self applyLaunchOptions];
+  if ([self performRequestedScreenshotIfNeeded])
+    {
+      return;
+    }
+  [self startRequestedCommandInterfaceIfNeeded];
 }
 
 - (BOOL) applicationShouldTerminateAfterLastWindowClosed: (NSApplication *)sender
@@ -355,6 +422,830 @@ ThemeDemoPrintLine(NSString *line)
     {
       [NSApp performSelector: @selector(terminate:) withObject: self afterDelay: quitAfter];
     }
+}
+
+- (BOOL) performRequestedScreenshotIfNeeded
+{
+  NSString *outputPath = [[NSUserDefaults standardUserDefaults]
+    stringForKey: ThemeDemoScreenshotOutputKey];
+
+  if ([outputPath length] == 0)
+    {
+      return NO;
+    }
+
+  [_window displayIfNeeded];
+  if ([self writeWindowScreenshotToPath: outputPath] == NO)
+    {
+      NSLog (@"Failed to capture ThemeDemo window to %@", outputPath);
+    }
+
+  [NSApp terminate: self];
+  return YES;
+}
+
+- (void) startRequestedCommandInterfaceIfNeeded
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *fifoPath = [defaults stringForKey: ThemeDemoCommandFIFOKey];
+  NSString *scriptPath = [defaults stringForKey: ThemeDemoCommandScriptKey];
+
+  if ([scriptPath length] > 0)
+    {
+      [self performSelector: @selector(runRequestedCommandScript)
+                 withObject: nil
+                 afterDelay: 0.2];
+    }
+
+  if ([fifoPath length] > 0)
+    {
+      _commandFIFODescriptor = open ([fifoPath fileSystemRepresentation],
+                                     O_RDONLY | O_NONBLOCK);
+      if (_commandFIFODescriptor < 0)
+        {
+          NSLog (@"Failed to open ThemeDemo command FIFO %@: %s",
+                 fifoPath,
+                 strerror (errno));
+          return;
+        }
+
+      _commandFIFOBuffer = [[NSMutableData alloc] init];
+      _commandFIFOTimer = [NSTimer scheduledTimerWithTimeInterval: 0.05
+                                                           target: self
+                                                         selector: @selector(pollCommandFIFO:)
+                                                         userInfo: nil
+                                                          repeats: YES];
+    }
+}
+
+- (void) runRequestedCommandScript
+{
+  NSString *path = [[NSUserDefaults standardUserDefaults]
+    stringForKey: ThemeDemoCommandScriptKey];
+  NSString *commands = nil;
+
+  if ([path length] == 0)
+    {
+      return;
+    }
+
+  commands = [NSString stringWithContentsOfFile: path];
+  if (commands == nil)
+    {
+      NSLog (@"Failed to read ThemeDemo command script %@", path);
+      return;
+    }
+
+  [self executeCommandLines: commands];
+}
+
+- (void) pollCommandFIFO: (NSTimer *)timer
+{
+  char buffer[4096];
+  ssize_t count = 0;
+
+  (void)timer;
+
+  if (_commandFIFODescriptor < 0)
+    {
+      return;
+    }
+
+  while ((count = read (_commandFIFODescriptor, buffer, sizeof (buffer))) > 0)
+    {
+      [_commandFIFOBuffer appendBytes: buffer length: count];
+    }
+
+  if (count < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+    {
+      NSLog (@"ThemeDemo command FIFO read failed: %s", strerror (errno));
+      [self closeCommandFIFO];
+      return;
+    }
+
+  while ([_commandFIFOBuffer length] > 0)
+    {
+      const char *bytes = [_commandFIFOBuffer bytes];
+      NSUInteger length = [_commandFIFOBuffer length];
+      NSUInteger index = 0;
+      BOOL foundLine = NO;
+
+      for (index = 0; index < length; index++)
+        {
+          if (bytes[index] == '\n')
+            {
+              NSData *lineData = nil;
+              NSString *line = nil;
+
+              lineData = [NSData dataWithBytes: bytes length: index];
+              line = AUTORELEASE ([[NSString alloc] initWithData: lineData
+                                                        encoding: NSUTF8StringEncoding]);
+              [_commandFIFOBuffer replaceBytesInRange: NSMakeRange (0, index + 1)
+                                            withBytes: NULL
+                                               length: 0];
+              [self executeCommandLine: line];
+              foundLine = YES;
+              break;
+            }
+        }
+
+      if (foundLine == NO)
+        {
+          break;
+        }
+    }
+}
+
+- (void) closeCommandFIFO
+{
+  if (_commandFIFOTimer != nil)
+    {
+      [_commandFIFOTimer invalidate];
+      _commandFIFOTimer = nil;
+    }
+  if (_commandFIFODescriptor >= 0)
+    {
+      close (_commandFIFODescriptor);
+      _commandFIFODescriptor = -1;
+    }
+}
+
+- (void) executeCommandLines: (NSString *)commands
+{
+  NSArray *lines = [commands componentsSeparatedByCharactersInSet:
+    [NSCharacterSet newlineCharacterSet]];
+  NSEnumerator *enumerator = [lines objectEnumerator];
+  NSString *line = nil;
+
+  while ((line = [enumerator nextObject]) != nil)
+    {
+      [self executeCommandLine: line];
+    }
+}
+
+- (void) executeCommandLine: (NSString *)line
+{
+  NSString *trimmed = [line stringByTrimmingCharactersInSet:
+    [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSArray *parts = nil;
+  NSString *command = nil;
+
+  if ([trimmed length] == 0 || [trimmed hasPrefix: @"#"])
+    {
+      return;
+    }
+
+  parts = [trimmed componentsSeparatedByCharactersInSet:
+    [NSCharacterSet whitespaceCharacterSet]];
+  command = [parts objectAtIndex: 0];
+
+  if ([command isEqualToString: @"page"] && [parts count] >= 2)
+    {
+      [self selectPageNamed: [parts objectAtIndex: 1]];
+      [_window displayIfNeeded];
+    }
+  else if (([command isEqualToString: @"click"]
+      || [command isEqualToString: @"double-click"]) && [parts count] >= 3)
+    {
+      NSInteger clickCount = [command isEqualToString: @"double-click"] ? 2 : 1;
+      [self clickWindowTopLeftPoint:
+        NSMakePoint ([[parts objectAtIndex: 1] doubleValue],
+                     [[parts objectAtIndex: 2] doubleValue])];
+      if (clickCount == 2)
+        {
+          [self clickWindowTopLeftPoint:
+            NSMakePoint ([[parts objectAtIndex: 1] doubleValue],
+                         [[parts objectAtIndex: 2] doubleValue])];
+        }
+    }
+  else if ([command isEqualToString: @"mouse-down"] && [parts count] >= 3)
+    {
+      [self sendMouseEventOfType: NSLeftMouseDown
+                 atWindowTopLeft: NSMakePoint ([[parts objectAtIndex: 1] doubleValue],
+                                               [[parts objectAtIndex: 2] doubleValue])
+                      clickCount: 1];
+    }
+  else if ([command isEqualToString: @"mouse-up"] && [parts count] >= 3)
+    {
+      [self sendMouseEventOfType: NSLeftMouseUp
+                 atWindowTopLeft: NSMakePoint ([[parts objectAtIndex: 1] doubleValue],
+                                               [[parts objectAtIndex: 2] doubleValue])
+                      clickCount: 1];
+    }
+  else if ([command isEqualToString: @"type"] || [command isEqualToString: @"key"])
+    {
+      NSRange range = [trimmed rangeOfString: @" "];
+      if (range.location != NSNotFound)
+        {
+          [self sendKeyString: [trimmed substringFromIndex: NSMaxRange (range)]];
+        }
+    }
+  else if ([command isEqualToString: @"focus"] && [parts count] >= 2)
+    {
+      [self focusTextAuditControlNamed: [parts objectAtIndex: 1] selectingAll: NO];
+    }
+  else if ([command isEqualToString: @"blur-to"] && [parts count] >= 2)
+    {
+      [self focusTextAuditControlNamed: [parts objectAtIndex: 1] selectingAll: NO];
+    }
+  else if ([command isEqualToString: @"select-all"])
+    {
+      [self selectFocusedTextAuditControl];
+    }
+  else if ([command isEqualToString: @"open-dropdown"] && [parts count] >= 2)
+    {
+      [self openDropdownNamed: [parts objectAtIndex: 1]];
+    }
+  else if ([command isEqualToString: @"capture-dropdown"] && [parts count] >= 3)
+    {
+      [self captureDropdownNamed: [parts objectAtIndex: 1]
+                          toPath: [parts objectAtIndex: 2]];
+    }
+  else if ([command isEqualToString: @"capture-alert"] && [parts count] >= 2)
+    {
+      [self captureAlertToPath: [parts objectAtIndex: 1]];
+    }
+  else if ([command isEqualToString: @"screenshot"] && [parts count] >= 2)
+    {
+      [_window displayIfNeeded];
+      if ([self writeWindowScreenshotToPath: [parts objectAtIndex: 1]] == NO)
+        {
+          NSLog (@"Failed to write screenshot %@", [parts objectAtIndex: 1]);
+        }
+    }
+  else if ([command isEqualToString: @"screenshot-screen"] && [parts count] >= 2)
+    {
+      [_window displayIfNeeded];
+      if ([self writeScreenScreenshotToPath: [parts objectAtIndex: 1]] == NO)
+        {
+          NSLog (@"Failed to write screen screenshot %@", [parts objectAtIndex: 1]);
+        }
+    }
+  else if ([command isEqualToString: @"wait"] && [parts count] >= 2)
+    {
+      NSDate *until = [NSDate dateWithTimeIntervalSinceNow:
+        [[parts objectAtIndex: 1] doubleValue]];
+      while ([until timeIntervalSinceNow] > 0.0)
+        {
+          [[NSRunLoop currentRunLoop] runMode: NSDefaultRunLoopMode
+                                   beforeDate: until];
+        }
+    }
+  else if ([command isEqualToString: @"display"])
+    {
+      [_window displayIfNeeded];
+    }
+  else if ([command isEqualToString: @"quit"])
+    {
+      [NSApp terminate: self];
+    }
+  else
+    {
+      NSLog (@"Unknown ThemeDemo command: %@", trimmed);
+    }
+}
+
+- (NSView *) textAuditControlNamed: (NSString *)name
+{
+  if ([name isEqualToString: @"primary"])
+    {
+      return _primaryTextField;
+    }
+  if ([name isEqualToString: @"password"])
+    {
+      return _passwordField;
+    }
+  if ([name isEqualToString: @"search"])
+    {
+      return _searchField;
+    }
+  if ([name isEqualToString: @"combo"])
+    {
+      return _textComboBox;
+    }
+  if ([name isEqualToString: @"disabled"])
+    {
+      return _disabledTextField;
+    }
+  if ([name isEqualToString: @"body"])
+    {
+      return _bodyTextView;
+    }
+
+  return nil;
+}
+
+- (void) focusTextAuditControlNamed: (NSString *)name selectingAll: (BOOL)selectingAll
+{
+  NSView *view = [self textAuditControlNamed: name];
+  NSView *previous = _commandFocusedTextControl;
+
+  if (view == nil || _window == nil)
+    {
+      NSLog (@"Unknown ThemeDemo text audit target: %@", name);
+      return;
+    }
+
+  if (previous != nil && previous != view)
+    {
+      [previous setNeedsDisplay: YES];
+      if ([previous superview] != nil)
+        {
+          [[previous superview] setNeedsDisplayInRect: [previous frame]];
+        }
+    }
+
+  [NSApp activateIgnoringOtherApps: YES];
+  [_window makeKeyAndOrderFront: self];
+
+  if ([view isKindOfClass: [NSComboBox class]])
+    {
+      [_window makeFirstResponder: view];
+    }
+  else if ([view isKindOfClass: [NSTextField class]])
+    {
+      NSTextField *field = (NSTextField *)view;
+
+      if ([field isEnabled] && ([field isEditable] || [field isSelectable]))
+        {
+          [field selectText: self];
+          if (selectingAll == NO)
+            {
+              NSText *editor = [field currentEditor];
+              if (editor != nil)
+                {
+                  [editor setSelectedRange:
+                    NSMakeRange ([[editor string] length], 0)];
+                }
+            }
+        }
+      else
+        {
+          [_window makeFirstResponder: view];
+        }
+    }
+  else
+    {
+      [_window makeFirstResponder: view];
+    }
+
+  _commandFocusedTextControl = view;
+  [view setNeedsDisplay: YES];
+  [_window displayIfNeeded];
+}
+
+- (void) selectFocusedTextAuditControl
+{
+  id firstResponder = [_window firstResponder];
+
+  if ([firstResponder isKindOfClass: [NSText class]])
+    {
+      NSText *editor = (NSText *)firstResponder;
+      [editor setSelectedRange: NSMakeRange (0, [[editor string] length])];
+    }
+  else if ([_commandFocusedTextControl isKindOfClass: [NSTextField class]])
+    {
+      [(NSTextField *)_commandFocusedTextControl selectText: self];
+    }
+  else if ([_commandFocusedTextControl isKindOfClass: [NSTextView class]])
+    {
+      NSTextView *textView = (NSTextView *)_commandFocusedTextControl;
+      [textView setSelectedRange: NSMakeRange (0, [[textView string] length])];
+    }
+
+  if (_commandFocusedTextControl != nil)
+    {
+      [_commandFocusedTextControl setNeedsDisplay: YES];
+    }
+  [_window displayIfNeeded];
+}
+
+- (void) openDropdownNamed: (NSString *)name
+{
+  if ([name isEqualToString: @"combo"] && _textComboBox != nil)
+    {
+      NSComboBoxCell *cell = (NSComboBoxCell *)[_textComboBox cell];
+      NSRect bounds = [_textComboBox bounds];
+
+      [cell _performClickWithFrame: bounds
+                             inView: _textComboBox];
+      return;
+    }
+
+  NSLog (@"Unknown ThemeDemo dropdown audit target: %@", name);
+}
+
+- (void) captureDropdownNamed: (NSString *)name toPath: (NSString *)path
+{
+  NSTimer *timer = nil;
+
+  ASSIGN (_pendingDropdownCaptureName, name);
+  ASSIGN (_pendingDropdownCapturePath, path);
+
+  timer = [NSTimer timerWithTimeInterval: 0.4
+                                  target: self
+                                selector: @selector(performPendingDropdownCapture:)
+                                userInfo: nil
+                                 repeats: NO];
+  [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSDefaultRunLoopMode];
+  [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSEventTrackingRunLoopMode];
+  [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSModalPanelRunLoopMode];
+
+  [self openDropdownNamed: name];
+}
+
+- (void) performPendingDropdownCapture: (NSTimer *)timer
+{
+  NSString *path = _pendingDropdownCapturePath;
+  NSString *name = _pendingDropdownCaptureName;
+  BOOL wroteScreenshot = NO;
+
+  (void)timer;
+  (void)name;
+
+  if ([path length] > 0)
+    {
+      wroteScreenshot = [self writeInternalScreenScreenshotToPath: path];
+      if (wroteScreenshot == NO)
+        {
+          NSLog (@"Internal dropdown capture failed for %@; falling back to gnome-screenshot",
+                 path);
+          wroteScreenshot = [self runScreenshotToolAtPath: @"/usr/bin/gnome-screenshot"
+                                                   toPath: path];
+        }
+    }
+
+  if (wroteScreenshot == NO)
+    {
+      NSLog (@"Failed to capture dropdown %@ to %@", name, path);
+    }
+
+  RELEASE (_pendingDropdownCaptureName);
+  _pendingDropdownCaptureName = nil;
+  RELEASE (_pendingDropdownCapturePath);
+  _pendingDropdownCapturePath = nil;
+  [NSApp terminate: self];
+}
+
+- (void) captureAlertToPath: (NSString *)path
+{
+  NSTask *task = AUTORELEASE ([[NSTask alloc] init]);
+  NSString *escapedPath = [path stringByReplacingOccurrencesOfString: @"'"
+                                                          withString: @"'\\''"];
+  NSString *script = [NSString stringWithFormat:
+    @"sleep 0.4; /usr/bin/gnome-screenshot -f '%@'; pkill -f 'ThemeDemo.app/ThemeDemo'",
+    escapedPath];
+  NSAlert *alert = AUTORELEASE ([[NSAlert alloc] init]);
+
+  [task setLaunchPath: @"/bin/sh"];
+  [task setArguments: [NSArray arrayWithObjects: @"-c", script, nil]];
+  NS_DURING
+    {
+      [task launch];
+    }
+  NS_HANDLER
+    {
+    }
+  NS_ENDHANDLER
+
+  [alert setMessageText: @"Do you want to save the changes made to this document?"];
+  [alert setInformativeText: @"Your changes will be lost if you don't save them."];
+  [alert addButtonWithTitle: @"Save"];
+  [alert addButtonWithTitle: @"Cancel"];
+  [alert addButtonWithTitle: @"Don't Save"];
+  [alert runModal];
+}
+
+- (void) clickViewCenter: (NSView *)view
+{
+  NSRect bounds = [view bounds];
+  NSPoint center = NSMakePoint (NSMidX (bounds), NSMidY (bounds));
+  NSPoint windowPoint = [view convertPoint: center toView: nil];
+  NSPoint contentPoint = [[_window contentView] convertPoint: windowPoint fromView: nil];
+  NSRect contentBounds = [[_window contentView] bounds];
+  CGFloat scale = [_window userSpaceScaleFactor];
+
+  if (scale <= 0.0)
+    {
+      scale = 1.0;
+    }
+
+  [self clickWindowTopLeftPoint:
+    NSMakePoint (contentPoint.x * scale,
+                 (NSHeight (contentBounds) - contentPoint.y) * scale)];
+}
+
+- (BOOL) writeWindowScreenshotToPath: (NSString *)path
+{
+  NSView *contentView = [_window contentView];
+  NSRect bounds = [contentView bounds];
+  NSBitmapImageRep *bitmap = nil;
+  NSData *pngData = nil;
+  NSString *directory = [path stringByDeletingLastPathComponent];
+
+  [_window displayIfNeeded];
+  [contentView displayIfNeeded];
+
+  bitmap = [contentView bitmapImageRepForCachingDisplayInRect: bounds];
+  if (bitmap == nil)
+    {
+      GSDisplayServer *server = GSCurrentServer ();
+      NSImage *image = nil;
+
+      if (server != nil)
+        {
+          image = [server contentsOfScreen: 0 inRect: [_window frame]];
+        }
+
+      return (image != nil) ? [self writeImage: image toPNGPath: path] : NO;
+    }
+
+  [contentView cacheDisplayInRect: bounds toBitmapImageRep: bitmap];
+  pngData = [bitmap representationUsingType: NSPNGFileType
+                                 properties: [NSDictionary dictionary]];
+  if ([pngData length] == 0)
+    {
+      return NO;
+    }
+
+  if ([directory length] > 0)
+    {
+      [[NSFileManager defaultManager] createDirectoryAtPath: directory
+                                withIntermediateDirectories: YES
+                                                 attributes: nil
+                                                      error: NULL];
+    }
+
+  return [pngData writeToFile: path atomically: YES];
+}
+
+- (BOOL) writeScreenScreenshotToPath: (NSString *)path
+{
+  if ([self writeInternalScreenScreenshotToPath: path])
+    {
+      return YES;
+    }
+
+  return [self runScreenshotToolAtPath: @"/usr/bin/gnome-screenshot" toPath: path];
+}
+
+- (BOOL) writeInternalScreenScreenshotToPath: (NSString *)path
+{
+  GSDisplayServer *server = GSCurrentServer ();
+  NSRect screenRect = [[NSScreen mainScreen] frame];
+  NSImage *image = nil;
+
+  if (server == nil)
+    {
+      return NO;
+    }
+
+  image = [server contentsOfScreen: 0 inRect: screenRect];
+  if ([self imageAppearsBlank: image])
+    {
+      return NO;
+    }
+
+  return (image != nil) ? [self writeImage: image toPNGPath: path] : NO;
+}
+
+- (BOOL) imageAppearsBlank: (NSImage *)image
+{
+  NSData *tiffData = [image TIFFRepresentation];
+  NSBitmapImageRep *bitmap = nil;
+  NSInteger width = 0;
+  NSInteger height = 0;
+  NSInteger samples = 0;
+  NSInteger x = 0;
+  NSInteger y = 0;
+  NSColor *firstColor = nil;
+
+  if ([tiffData length] == 0)
+    {
+      return YES;
+    }
+
+  bitmap = AUTORELEASE ([[NSBitmapImageRep alloc] initWithData: tiffData]);
+  if (bitmap == nil)
+    {
+      return YES;
+    }
+
+  width = [bitmap pixelsWide];
+  height = [bitmap pixelsHigh];
+  if (width <= 0 || height <= 0)
+    {
+      return YES;
+    }
+
+  firstColor = [bitmap colorAtX: 0 y: 0];
+  if (firstColor == nil)
+    {
+      return YES;
+    }
+
+  for (y = 0; y < height; y += MAX (1, height / 24))
+    {
+      for (x = 0; x < width; x += MAX (1, width / 24))
+        {
+          NSColor *color = [bitmap colorAtX: x y: y];
+
+          samples++;
+          if (color == nil || [color isEqual: firstColor] == NO)
+            {
+              return NO;
+            }
+        }
+    }
+
+  return (samples > 0);
+}
+
+- (BOOL) runScreenshotToolAtPath: (NSString *)toolPath
+                         toPath: (NSString *)path
+{
+  NSTask *task = nil;
+  NSString *directory = [path stringByDeletingLastPathComponent];
+
+  if ([[NSFileManager defaultManager] isExecutableFileAtPath: toolPath] == NO)
+    {
+      return NO;
+    }
+
+  if ([directory length] > 0)
+    {
+      [[NSFileManager defaultManager] createDirectoryAtPath: directory
+                                withIntermediateDirectories: YES
+                                                 attributes: nil
+                                                      error: NULL];
+    }
+
+  task = AUTORELEASE ([[NSTask alloc] init]);
+  [task setLaunchPath: toolPath];
+  [task setArguments: [NSArray arrayWithObjects: @"-f", path, nil]];
+
+  NS_DURING
+    {
+      [task launch];
+      [task waitUntilExit];
+    }
+  NS_HANDLER
+    {
+      return NO;
+    }
+  NS_ENDHANDLER
+
+  return ([task terminationStatus] == 0
+    && [[NSFileManager defaultManager] fileExistsAtPath: path]);
+}
+
+- (BOOL) writeImage: (NSImage *)image toPNGPath: (NSString *)path
+{
+  NSData *tiffData = [image TIFFRepresentation];
+  NSBitmapImageRep *bitmap = nil;
+  NSData *pngData = nil;
+  NSString *directory = [path stringByDeletingLastPathComponent];
+
+  if ([tiffData length] == 0)
+    {
+      return NO;
+    }
+
+  bitmap = AUTORELEASE ([[NSBitmapImageRep alloc] initWithData: tiffData]);
+  if (bitmap == nil)
+    {
+      return NO;
+    }
+
+  pngData = [bitmap representationUsingType: NSPNGFileType
+                                 properties: [NSDictionary dictionary]];
+  if ([pngData length] == 0)
+    {
+      return NO;
+    }
+
+  if ([directory length] > 0)
+    {
+      [[NSFileManager defaultManager] createDirectoryAtPath: directory
+                                withIntermediateDirectories: YES
+                                                 attributes: nil
+                                                      error: NULL];
+    }
+
+  return [pngData writeToFile: path atomically: YES];
+}
+
+- (void) sendMouseEventOfType: (NSEventType)type
+              atWindowTopLeft: (NSPoint)point
+                   clickCount: (NSInteger)clickCount
+{
+  NSView *contentView = [_window contentView];
+  NSRect bounds = [contentView bounds];
+  CGFloat scale = [_window userSpaceScaleFactor];
+  NSPoint userPoint = point;
+  NSPoint contentPoint = NSZeroPoint;
+  NSPoint windowPoint = NSZeroPoint;
+  NSView *targetView = nil;
+  if (scale <= 0.0)
+    {
+      scale = 1.0;
+    }
+
+  userPoint.x = point.x / scale;
+  userPoint.y = point.y / scale;
+  contentPoint = NSMakePoint (userPoint.x, NSHeight (bounds) - userPoint.y);
+  windowPoint = [contentView convertPoint: contentPoint toView: nil];
+  targetView = [contentView hitTest: contentPoint];
+
+  NSEvent *event = [NSEvent mouseEventWithType: type
+                                      location: windowPoint
+                                 modifierFlags: 0
+                                     timestamp: [NSDate timeIntervalSinceReferenceDate]
+                                  windowNumber: [_window windowNumber]
+                                       context: nil
+                                   eventNumber: 0
+                                   clickCount: clickCount
+                                     pressure: (type == NSLeftMouseDown) ? 1.0 : 0.0];
+
+  [NSApp activateIgnoringOtherApps: YES];
+  [_window makeKeyAndOrderFront: self];
+  if (targetView != nil)
+    {
+      if (type == NSLeftMouseDown)
+        {
+          if ([targetView acceptsFirstResponder])
+            {
+              [_window makeFirstResponder: targetView];
+            }
+          if ([targetView isKindOfClass: [NSControl class]])
+            {
+              [_window makeFirstResponder: targetView];
+            }
+          if ([targetView isKindOfClass: [NSTextField class]]
+            && [(NSTextField *)targetView isEditable])
+            {
+              [(NSTextField *)targetView selectText: self];
+              _commandFocusedTextControl = targetView;
+            }
+        }
+      else if (type == NSLeftMouseUp)
+        {
+          if ([targetView isKindOfClass: [NSButton class]])
+            {
+              [(NSButton *)targetView performClick: self];
+            }
+        }
+    }
+  else
+    {
+      [_window sendEvent: event];
+    }
+}
+
+- (void) clickWindowTopLeftPoint: (NSPoint)point
+{
+  [self sendMouseEventOfType: NSLeftMouseDown
+             atWindowTopLeft: point
+                  clickCount: 1];
+  [self sendMouseEventOfType: NSLeftMouseUp
+             atWindowTopLeft: point
+                  clickCount: 1];
+  [_window displayIfNeeded];
+}
+
+- (void) sendKeyString: (NSString *)string
+{
+  NSUInteger index = 0;
+
+  for (index = 0; index < [string length]; index++)
+    {
+      NSString *character = [string substringWithRange: NSMakeRange (index, 1)];
+      NSEvent *down = [NSEvent keyEventWithType: NSKeyDown
+                                       location: NSZeroPoint
+                                  modifierFlags: 0
+                                      timestamp: [NSDate timeIntervalSinceReferenceDate]
+                                   windowNumber: [_window windowNumber]
+                                        context: nil
+                                     characters: character
+                    charactersIgnoringModifiers: character
+                                      isARepeat: NO
+                                        keyCode: 0];
+      NSEvent *up = [NSEvent keyEventWithType: NSKeyUp
+                                     location: NSZeroPoint
+                                modifierFlags: 0
+                                    timestamp: [NSDate timeIntervalSinceReferenceDate]
+                                 windowNumber: [_window windowNumber]
+                                      context: nil
+                                   characters: character
+                  charactersIgnoringModifiers: character
+                                    isARepeat: NO
+                                      keyCode: 0];
+
+      [_window sendEvent: down];
+      [_window sendEvent: up];
+    }
+
+  [_window displayIfNeeded];
 }
 
 - (BOOL) performRequestedCaptureIfNeeded
@@ -1334,13 +2225,18 @@ ThemeDemoPrintLine(NSString *line)
   [canvas addSubview: [self sectionTitleLabelWithString: @"Text Inputs" frame: NSMakeRect (kDemoPadding, y - kDemoControlHeight, 180, kDemoControlHeight)]];
   y -= ((kDemoControlHeight * 2.0) + kDemoRowSpacing);
 
-  [canvas addSubview: [self fieldWithValue: @"Primary text field" frame: NSMakeRect (kDemoPadding, y, 300, kDemoControlHeight)]];
+  _primaryTextField = [self fieldWithValue: @"Primary text field"
+                                     frame: NSMakeRect (kDemoPadding, y, 300, kDemoControlHeight)];
+  RETAIN (_primaryTextField);
+  [canvas addSubview: _primaryTextField];
 
   y -= (kDemoControlHeight + kDemoRowSpacing);
 
   NSSecureTextField *secure = AUTORELEASE ([[NSSecureTextField alloc] initWithFrame: NSMakeRect (kDemoPadding, y, 300, kDemoControlHeight)]);
   [secure setStringValue: @"password"];
   [secure setFont: [self controlFont]];
+  RETAIN (secure);
+  _passwordField = secure;
   [canvas addSubview: secure];
 
   y -= (kDemoControlHeight + kDemoRowSpacing);
@@ -1356,6 +2252,8 @@ ThemeDemoPrintLine(NSString *line)
       [combo setStringValue: [[combo objectValueOfSelectedItem] description]];
     }
   [combo setFont: [self controlFont]];
+  RETAIN (combo);
+  _textComboBox = combo;
   [canvas addSubview: combo];
 
   y -= (kDemoControlHeight + kDemoRowSpacing);
@@ -1363,6 +2261,8 @@ ThemeDemoPrintLine(NSString *line)
   NSSearchField *search = AUTORELEASE ([[NSSearchField alloc] initWithFrame: NSMakeRect (kDemoPadding, y, 300, kDemoControlHeight)]);
   [search setStringValue: @"Search query"];
   [search setFont: [self controlFont]];
+  RETAIN (search);
+  _searchField = search;
   [canvas addSubview: search];
 
   y -= (kDemoControlHeight + kDemoRowSpacing);
@@ -1371,6 +2271,8 @@ ThemeDemoPrintLine(NSString *line)
   [disabledField setStringValue: @"Disabled input"];
   [disabledField setEnabled: NO];
   [disabledField setFont: [self controlFont]];
+  RETAIN (disabledField);
+  _disabledTextField = disabledField;
   [canvas addSubview: disabledField];
 
   y -= (kDemoControlHeight + kDemoRowSpacing);
@@ -1386,6 +2288,8 @@ ThemeDemoPrintLine(NSString *line)
   [textView setAutoresizingMask: (NSViewWidthSizable | NSViewHeightSizable)];
   [textView setFont: [self controlFont]];
   [textView setString: @"NSTextView\n\nUse this page to inspect paragraph spacing, text selection, caret visibility, and how the theme handles dense multiline content.\n\nThe goal in Phases 2 and 3 is not custom widget chrome yet. It is typography, spacing, and visual rhythm."];
+  RETAIN (textView);
+  _bodyTextView = textView;
   [scroll setDocumentView: textView];
   [scroll reflectScrolledClipView: [scroll contentView]];
   [canvas addSubview: scroll];

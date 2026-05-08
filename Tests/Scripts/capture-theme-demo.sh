@@ -23,6 +23,7 @@ REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 OUTPUT=""
 PAGE="controls"
 OPEN_MENU=""
+SCALE=""
 TITLE="Adwaita Theme Demo"
 TMP_ROOT=""
 CAPTURE_ID="ThemeDemoCapture$$"
@@ -34,14 +35,17 @@ find_window_for_title() {
   while read -r candidate; do
     printf '%s\n' "$candidate"
     return 0
-  done < <(xwininfo -root -tree | awk -v title="$TITLE" 'index($0, "\"" title "\":") && index($0, "(\"ThemeDemo\" \"GNUstep\")") {print $1}')
+  done < <(xwininfo -root -tree | awk -v title="$TITLE" '
+    (index($0, "\"" title "\":") && (index($0, "(\"ThemeDemo\" \"GNUstep\")") || index($0, "(\"ThemeDemo\" \"ThemeDemo\")"))) {
+        print $1
+      }')
 
   return 1
 }
 
 list_theme_demo_menu_windows() {
   xwininfo -root -tree | awk '
-    index($0, "\"Window\":") && index($0, "(\"ThemeDemo\" \"GNUstep\")") {
+    (index($0, "\"Window\":") && (index($0, "(\"ThemeDemo\" \"GNUstep\")") || index($0, "(\"ThemeDemo\" \"ThemeDemo\")"))) {
       id = $1
       if (match($0, /[[:space:]]([0-9]+)x([0-9]+)\+[0-9-]+\+[0-9-]+/, dims)) {
         width = dims[1] + 0
@@ -108,6 +112,10 @@ while [ "$#" -gt 0 ]; do
       OUTPUT="$2"
       shift 2
       ;;
+    --scale)
+      SCALE="$2"
+      shift 2
+      ;;
     *)
       echo "unknown argument: $1" >&2
       exit 2
@@ -127,7 +135,11 @@ set +u
 set -u
 
 defaults write ThemeDemo GSTheme Adwaita
-defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
+if [ -n "$SCALE" ]; then
+  defaults write ThemeDemo GSScaleFactor "$SCALE"
+else
+  defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
+fi
 defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
 
 APP="$REPO_DIR/Examples/ThemeDemo/ThemeDemo.app/ThemeDemo"

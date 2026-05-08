@@ -936,7 +936,7 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
 
       GnomeThemePhase67DrawChevron (slotRect,
                                     [outlineView isItemExpanded: item] ? NO : YES,
-                                    [outlineView isItemExpanded: item] ? NO : YES,
+                                    YES,
                                     arrowColor);
     }
 

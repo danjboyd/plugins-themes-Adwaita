@@ -78,7 +78,7 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#e8e8e8") forKey: @"headerColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"headerTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#d6d6d6") forKey: @"gridColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#dbe7fb") forKey: @"highlightedTableRowBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#dfe6ef") forKey: @"highlightedTableRowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"highlightedTableRowTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"rowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f6f6f6") forKey: @"alternateRowBackgroundColor"];
@@ -87,8 +87,8 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#8c8c8c") forKey: @"shadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"windowFrameTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#4a4a4a") forKey: @"windowFrameColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"selectedTextBackgroundColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"selectedTextColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#99c1f1") forKey: @"selectedTextBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"selectedTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"labelColor"];
 }
 

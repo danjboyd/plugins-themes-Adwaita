@@ -147,6 +147,29 @@ Useful helpers:
 - `bash Tests/Scripts/capture-adwaita-demo.sh --page controls --output /tmp/adwaita-controls.png`
 - `python3 Reference/AdwaitaDemo/adwaita_demo.py --dump-metrics`
 
+ThemeDemo also accepts command automation for focused visual checks:
+
+```sh
+Examples/ThemeDemo/ThemeDemo.app/ThemeDemo --command-script /tmp/theme-demo.commands
+Examples/ThemeDemo/ThemeDemo.app/ThemeDemo --command-fifo /tmp/theme-demo.fifo
+python3 Reference/AdwaitaDemo/adwaita_demo.py --command-script /tmp/adwaita-demo.commands
+python3 Reference/AdwaitaDemo/adwaita_demo.py --command-fifo /tmp/adwaita-demo.fifo
+```
+
+Supported commands are `page NAME`, `click X Y`, `focus NAME`, `blur-to NAME`,
+`select-all`, `open-dropdown NAME`, `type TEXT`, `key TEXT`, `wait SECONDS`,
+`display`, `screenshot PATH`, `screenshot-screen PATH`,
+`capture-dropdown NAME PATH`, `capture-alert PATH`, and `quit`. Text audit names
+are `primary`, `password`, `search`, `disabled`, `body`, and `combo`.
+Coordinates are backing-pixel positions from the top-left of the internally
+captured content image, so they line up with screenshots produced by
+`screenshot PATH`. Use `screenshot-screen PATH` when auditing popups or dropdowns
+that render outside the application content view; it uses GNUstep screen capture
+first and falls back to `gnome-screenshot` only if needed. Use
+`capture-dropdown NAME PATH` for GNUstep combo boxes whose popup tracking is
+modal; it schedules the same internal screen capture while the popup is open.
+Use `capture-alert PATH` to audit a stock document-close `NSAlert`.
+
 ## Internal Notes
 
 If local-only working notes are needed, keep them under `.internal/`.

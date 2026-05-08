@@ -19,15 +19,22 @@
 # If not, see <http://www.gnu.org/licenses/>.
 
 import argparse
+import ctypes
+import ctypes.util
 import json
+import os
 import sys
 
 import gi
+from PIL import Image, ImageGrab
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
+gi.require_version("Graphene", "1.0")
+gi.require_version("Gsk", "4.0")
+gi.require_version("GdkX11", "4.0")
 
-from gi.repository import Adw, Gio, GLib, GObject, Gtk, Pango
+from gi.repository import Adw, Gio, GLib, GObject, Graphene, Gsk, Gtk, Pango, GdkX11
 
 
 PAGE_NAMES = ("controls", "text", "data", "menus", "stress")
@@ -145,6 +152,10 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         self._options = options
         self._measure_widgets = {}
         self._typography_widgets = {}
+        self._text_audit_widgets = {}
+        self._focused_text_audit_widget = None
+        self._command_fifo_fd = None
+        self._command_fifo_buffer = ""
         self.set_default_size(DEMO_WINDOW_WIDTH, DEMO_WINDOW_HEIGHT)
 
         header = Adw.HeaderBar()
@@ -175,6 +186,10 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
             GLib.idle_add(self._dump_metrics_and_quit, priority=GLib.PRIORITY_LOW)
         elif self._options.dump_typography:
             GLib.idle_add(self._dump_typography_and_quit, priority=GLib.PRIORITY_LOW)
+        elif self._options.screenshot:
+            GLib.timeout_add(200, self._screenshot_and_quit)
+        else:
+            self._start_command_interface()
 
     def _scrolled_page(self, child):
         scroll = Gtk.ScrolledWindow()
@@ -223,6 +238,7 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         frame = Gtk.Frame()
         frame.set_hexpand(True)
         frame.set_vexpand(True)
+        frame.set_focusable(True)
 
         scroll = Gtk.ScrolledWindow()
         scroll.set_min_content_height(min_height)
@@ -404,12 +420,14 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         entry.set_size_request(300, -1)
         entry.set_halign(Gtk.Align.START)
         self._measure_widgets["entry"] = entry
+        self._text_audit_widgets["primary"] = entry
         stack.append(entry)
 
         password = Gtk.PasswordEntry()
         password.set_text("password")
         password.set_size_request(300, -1)
         password.set_halign(Gtk.Align.START)
+        self._text_audit_widgets["password"] = password
         stack.append(password)
 
         combo = self._make_dropdown(
@@ -419,6 +437,7 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         )
         combo.set_halign(Gtk.Align.START)
         self._measure_widgets["combo"] = combo
+        self._text_audit_widgets["combo"] = combo
         stack.append(combo)
 
         search = Gtk.SearchEntry()
@@ -426,6 +445,7 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         search.set_size_request(300, -1)
         search.set_halign(Gtk.Align.START)
         self._measure_widgets["search"] = search
+        self._text_audit_widgets["search"] = search
         stack.append(search)
 
         disabled = Gtk.Entry()
@@ -433,9 +453,11 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         disabled.set_sensitive(False)
         disabled.set_size_request(300, -1)
         disabled.set_halign(Gtk.Align.START)
+        self._text_audit_widgets["disabled"] = disabled
         stack.append(disabled)
 
         text_frame = self._make_text_frame("NSTextView\n\n" + TEXT_VIEW_BODY, min_height=240)
+        self._text_audit_widgets["body"] = text_frame
         stack.append(text_frame)
 
         page.append(stack)
@@ -679,6 +701,342 @@ class AdwaitaDemoWindow(Adw.ApplicationWindow):
         self.get_application().quit()
         return GLib.SOURCE_REMOVE
 
+    def _screenshot_and_quit(self):
+        if not self._write_screenshot(self._options.screenshot):
+            print(f"failed to write screenshot: {self._options.screenshot}", file=sys.stderr)
+        self.get_application().quit()
+        return GLib.SOURCE_REMOVE
+
+    def _start_command_interface(self):
+        if self._options.command_script:
+            GLib.idle_add(self._run_command_script, priority=GLib.PRIORITY_LOW)
+
+        if self._options.command_fifo:
+            try:
+                fd = os.open(self._options.command_fifo, os.O_RDWR | os.O_NONBLOCK)
+            except OSError as exc:
+                print(f"failed to open command fifo {self._options.command_fifo}: {exc}", file=sys.stderr)
+                return
+
+            self._command_fifo_fd = fd
+            GLib.timeout_add(50, self._poll_command_fifo)
+
+    def _run_command_script(self):
+        try:
+            with open(self._options.command_script, "r", encoding="utf-8") as command_file:
+                commands = command_file.read()
+        except OSError as exc:
+            print(f"failed to read command script {self._options.command_script}: {exc}", file=sys.stderr)
+            return GLib.SOURCE_REMOVE
+
+        self._execute_command_lines(commands)
+        return GLib.SOURCE_REMOVE
+
+    def _poll_command_fifo(self):
+        if self._command_fifo_fd is None:
+            return GLib.SOURCE_REMOVE
+        try:
+            data = os.read(self._command_fifo_fd, 4096)
+        except BlockingIOError:
+            return GLib.SOURCE_CONTINUE
+        except OSError as exc:
+            print(f"failed to read command fifo: {exc}", file=sys.stderr)
+            return GLib.SOURCE_REMOVE
+
+        if not data:
+            return GLib.SOURCE_CONTINUE
+
+        self._command_fifo_buffer += data.decode("utf-8", errors="replace")
+        while "\n" in self._command_fifo_buffer:
+            line, self._command_fifo_buffer = self._command_fifo_buffer.split("\n", 1)
+            self._execute_command_line(line)
+
+        return GLib.SOURCE_CONTINUE
+
+    def _execute_command_lines(self, commands):
+        for line in commands.splitlines():
+            self._execute_command_line(line)
+
+    def _execute_command_line(self, line):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            return
+
+        parts = line.split()
+        command = parts[0]
+
+        if command == "page" and len(parts) >= 2:
+            self._stack.set_visible_child_name(parts[1])
+        elif command in ("click", "double-click") and len(parts) >= 3:
+            count = 2 if command == "double-click" else 1
+            for _index in range(count):
+                self._click(float(parts[1]), float(parts[2]))
+        elif command in ("mouse-down", "mouse-up") and len(parts) >= 3:
+            self._click(float(parts[1]), float(parts[2]))
+        elif command in ("type", "key"):
+            text = line[len(command):].lstrip()
+            self._type_text(text)
+        elif command == "focus" and len(parts) >= 2:
+            self._focus_text_audit_widget(parts[1], select_all=False)
+        elif command == "blur-to" and len(parts) >= 2:
+            self._focus_text_audit_widget(parts[1], select_all=False)
+        elif command == "select-all":
+            self._select_focused_text_audit_widget()
+        elif command == "open-dropdown" and len(parts) >= 2:
+            self._open_dropdown(parts[1])
+        elif command == "wait" and len(parts) >= 2:
+            end_time = GLib.get_monotonic_time() + int(float(parts[1]) * 1_000_000)
+            context = GLib.MainContext.default()
+            while GLib.get_monotonic_time() < end_time:
+                context.iteration(False)
+        elif command == "display":
+            self.queue_draw()
+        elif command == "screenshot" and len(parts) >= 2:
+            if not self._write_screenshot(parts[1]):
+                print(f"failed to write screenshot: {parts[1]}", file=sys.stderr)
+        elif command == "screenshot-screen" and len(parts) >= 2:
+            if not self._write_screen_screenshot(parts[1]):
+                print(f"failed to write screen screenshot: {parts[1]}", file=sys.stderr)
+        elif command == "quit":
+            self.get_application().quit()
+        else:
+            print(f"unknown AdwaitaDemo command: {line}", file=sys.stderr)
+
+    def _widget_at_pixel(self, x, y):
+        scale = self.get_scale_factor() or 1
+        return self.pick(x / scale, y / scale, Gtk.PickFlags.DEFAULT)
+
+    def _click(self, x, y):
+        widget = self._widget_at_pixel(x, y)
+        if widget is None:
+            return
+
+        if isinstance(widget, Gtk.Editable):
+            widget.grab_focus()
+            self._focused_text_audit_widget = widget
+            if hasattr(widget, "select_region"):
+                widget.select_region(0, -1)
+            return
+
+        focus = widget
+        while focus is not None and not focus.get_can_focus() and not isinstance(focus, Gtk.Button):
+            focus = focus.get_parent()
+
+        if isinstance(focus, Gtk.Button):
+            focus.activate()
+        elif focus is not None:
+            focus.grab_focus()
+
+    def _focus_text_audit_widget(self, name, select_all=False):
+        widget = self._text_audit_widgets.get(name)
+        if widget is None:
+            print(f"unknown AdwaitaDemo text audit target: {name}", file=sys.stderr)
+            return
+
+        if self._click_widget_center(widget):
+            self._focused_text_audit_widget = widget
+            if select_all:
+                self._select_focused_text_audit_widget()
+            return
+
+        widget.grab_focus()
+        self._focused_text_audit_widget = widget
+
+        editable = self._editable_delegate(widget)
+        if editable is not None:
+            self._queue_editable_selection(editable, select_all)
+
+    def _select_focused_text_audit_widget(self):
+        widget = self._focused_text_audit_widget or self.get_focus()
+        editable = self._editable_delegate(widget)
+        if editable is not None:
+            self._queue_editable_selection(editable, True)
+
+    def _editable_delegate(self, widget):
+        if hasattr(widget, "get_delegate"):
+            delegate = widget.get_delegate()
+            if isinstance(delegate, Gtk.Editable):
+                return delegate
+        if isinstance(widget, Gtk.Editable):
+            return widget
+        return None
+
+    def _click_widget_center(self, widget):
+        try:
+            success, bounds = widget.compute_bounds(self)
+        except TypeError:
+            return False
+
+        if not success:
+            return False
+
+        scale = self.get_scale_factor() or 1
+        self._click((bounds.get_x() + bounds.get_width() / 2.0) * scale,
+                    (bounds.get_y() + bounds.get_height() / 2.0) * scale)
+        return True
+
+    def _open_dropdown(self, name):
+        widget = self._text_audit_widgets.get(name)
+        if widget is None:
+            print(f"unknown AdwaitaDemo dropdown audit target: {name}", file=sys.stderr)
+            return
+
+        if hasattr(widget, "popup"):
+            widget.popup()
+        else:
+            self._click_widget_center(widget)
+
+    def _queue_editable_selection(self, widget, select_all):
+        def apply_selection():
+            text_length = len(widget.get_text())
+            if select_all:
+                widget.select_region(0, text_length)
+            else:
+                widget.select_region(text_length, text_length)
+            widget.queue_draw()
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(apply_selection, priority=GLib.PRIORITY_HIGH_IDLE)
+
+    def _type_text(self, text):
+        focus = self.get_focus()
+        if isinstance(focus, Gtk.Editable):
+            focus.delete_selection()
+            position = focus.get_position()
+            focus.insert_text(text, position)
+            focus.set_position(position + len(text))
+
+    def _write_screenshot(self, path):
+        width = self.get_width()
+        height = self.get_height()
+
+        if width <= 0 or height <= 0:
+            return False
+
+        snapshot = Gtk.Snapshot()
+        paintable = Gtk.WidgetPaintable.new(self)
+        paintable.snapshot(snapshot, width, height)
+        node = snapshot.to_node()
+        if node is None:
+            return False
+
+        renderer = Gsk.CairoRenderer.new()
+        surface = self.get_surface()
+        if surface is not None:
+            renderer.realize(surface)
+
+        viewport = Graphene.Rect()
+        viewport.init(0, 0, width, height)
+        texture = renderer.render_texture(node, viewport)
+        if surface is not None:
+            renderer.unrealize()
+        if texture is None:
+            return False
+
+        directory = os.path.dirname(path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+
+        return texture.save_to_png(path)
+
+    def _write_screen_screenshot(self, path):
+        try:
+            image = ImageGrab.grab()
+            directory = os.path.dirname(path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            image.save(path)
+            return True
+        except Exception:
+            pass
+
+        display_name = os.environ.get("DISPLAY")
+        library_name = ctypes.util.find_library("X11")
+        if not display_name or not library_name:
+            return False
+
+        x11 = ctypes.cdll.LoadLibrary(library_name)
+        x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x11.XOpenDisplay.restype = ctypes.c_void_p
+        x11.XDefaultScreen.argtypes = [ctypes.c_void_p]
+        x11.XDefaultScreen.restype = ctypes.c_int
+        x11.XRootWindow.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        x11.XRootWindow.restype = ctypes.c_ulong
+        x11.XDisplayWidth.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        x11.XDisplayWidth.restype = ctypes.c_int
+        x11.XDisplayHeight.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        x11.XDisplayHeight.restype = ctypes.c_int
+        x11.XTranslateCoordinates.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong,
+            ctypes.c_int, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_ulong),
+        ]
+        x11.XTranslateCoordinates.restype = ctypes.c_int
+        x11.XGetImage.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int,
+            ctypes.c_uint, ctypes.c_uint, ctypes.c_ulong, ctypes.c_int,
+        ]
+        x11.XGetImage.restype = ctypes.c_void_p
+        x11.XGetPixel.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        x11.XGetPixel.restype = ctypes.c_ulong
+        x11.XDestroyImage.argtypes = [ctypes.c_void_p]
+        x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+
+        display = x11.XOpenDisplay(display_name.encode("utf-8"))
+        if not display:
+            return False
+
+        image_ptr = None
+        try:
+            screen = x11.XDefaultScreen(display)
+            root = x11.XRootWindow(display, screen)
+            display_width = x11.XDisplayWidth(display, screen)
+            display_height = x11.XDisplayHeight(display, screen)
+            surface = self.get_surface()
+            if surface is None:
+                return False
+
+            xid = GdkX11.X11Surface.get_xid(surface)
+            root_x = ctypes.c_int(0)
+            root_y = ctypes.c_int(0)
+            child = ctypes.c_ulong(0)
+            if not x11.XTranslateCoordinates(display, xid, root, 0, 0,
+                                             ctypes.byref(root_x),
+                                             ctypes.byref(root_y),
+                                             ctypes.byref(child)):
+                return False
+
+            x = max(0, root_x.value - 40)
+            y = max(0, root_y.value - 40)
+            width = min(self.get_width() + 80, display_width - x)
+            height = min(self.get_height() + 420, display_height - y)
+            if width <= 0 or height <= 0:
+                return False
+            image_ptr = x11.XGetImage(display, root, x, y, width, height,
+                                      ctypes.c_ulong(-1).value, 2)
+            if not image_ptr:
+                return False
+
+            image = Image.new("RGB", (width, height))
+            pixels = image.load()
+            for y in range(height):
+                for x in range(width):
+                    pixel = x11.XGetPixel(image_ptr, x, y)
+                    pixels[x, y] = ((pixel >> 16) & 0xff,
+                                    (pixel >> 8) & 0xff,
+                                    pixel & 0xff)
+
+            directory = os.path.dirname(path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            image.save(path)
+            return True
+        finally:
+            if image_ptr:
+                x11.XDestroyImage(image_ptr)
+            x11.XCloseDisplay(display)
+
 
 class AdwaitaDemoApplication(Adw.Application):
     def __init__(self, options):
@@ -705,6 +1063,9 @@ def parse_args(argv):
     parser.add_argument("--dump-typography", action="store_true", help="Print live widget font descriptions from the current Adwaita environment and exit")
     parser.add_argument("--application-id", help="Override the application ID for parallel capture runs")
     parser.add_argument("--window-title", help="Override the window title for deterministic screenshot capture")
+    parser.add_argument("--command-script", help="Run ThemeDemo-compatible UI commands from a text file")
+    parser.add_argument("--command-fifo", help="Read ThemeDemo-compatible UI commands from a FIFO")
+    parser.add_argument("--screenshot", help="Write an internal PNG screenshot and exit")
     return parser.parse_args(argv)
 
 

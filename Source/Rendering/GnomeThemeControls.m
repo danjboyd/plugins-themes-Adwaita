@@ -31,15 +31,22 @@
 - (void) _didClickWithinButton: (id)sender;
 - (void) _performClickWithFrame: (NSRect)cellFrame
                          inView: (NSView *)controlView;
+- (id) _popUp;
 @end
 
 @interface NSPopUpButtonCell (GnomeThemePrivate)
 - (NSImage *) _currentArrowImage;
 @end
 
+@interface NSObject (GnomeThemeComboPopupPrivate)
+- (void) popUpForComboBoxCell: (NSComboBoxCell *)cell;
+@end
+
 @interface NSTextFieldCell (GnomeThemePrivateTextDrawing)
 - (BOOL) _inEditing;
 - (NSAttributedString *) _drawAttributedString;
+- (void) _drawBackgroundWithFrame: (NSRect)cellFrame
+                            inView: (NSView *)controlView;
 - (void) _drawEditorWithFrame: (NSRect)cellFrame
                        inView: (NSView *)controlView;
 - (BOOL) _shouldShortenStringForRect: (NSRect)titleRect
@@ -49,7 +56,18 @@
                                          forRect: (NSRect)titleRect;
 @end
 
+static NSView *GnomeThemeLastFocusedEntryView = nil;
+
+@interface NSSearchFieldCell (GnomeThemePrivateLayout)
+- (NSButtonCell *) cancelButtonCell;
+- (NSButtonCell *) searchButtonCell;
+- (NSRect) searchButtonRectForBounds: (NSRect)rect;
+- (NSRect) cancelButtonRectForBounds: (NSRect)rect;
+- (NSRect) searchTextRectForBounds: (NSRect)rect;
+@end
+
 static NSRect GnomeThemeCenteredRect(NSRect frame, CGFloat width, CGFloat height);
+static NSRect GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame);
 
 static inline GnomeTheme *
 GnomeThemeActiveTheme(void)
@@ -68,14 +86,6 @@ static inline BOOL
 GnomeThemeStateIsDisabled(GSThemeControlState state)
 {
   return (state == GSThemeDisabledState);
-}
-
-static inline BOOL
-GnomeThemeStateIsFocused(GSThemeControlState state)
-{
-  return (state == GSThemeFirstResponderState
-    || state == GSThemeHighlightedFirstResponderState
-    || state == GSThemeSelectedFirstResponderState);
 }
 
 static inline BOOL
@@ -226,10 +236,28 @@ GnomeThemeFillAndStrokeRoundedRect(NSRect rect,
     }
 }
 
+static void
+GnomeThemeStrokeEntryCaps(NSRect rect, CGFloat radius, NSColor *strokeColor)
+{
+  CGFloat inset = MAX (1.0, floor (radius * 0.72));
+
+  if (strokeColor == nil || rect.size.width <= 0.0 || rect.size.height <= 0.0)
+    {
+      return;
+    }
+
+  [strokeColor set];
+  [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMinX (rect), NSMinY (rect) + inset)
+                            toPoint: NSMakePoint (NSMinX (rect), NSMaxY (rect) - inset)];
+  [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMaxX (rect), NSMinY (rect) + inset)
+                            toPoint: NSMakePoint (NSMaxX (rect), NSMaxY (rect) - inset)];
+}
+
 static BOOL
 GnomeThemeViewHasFocus(NSView *view)
 {
   id firstResponder = nil;
+  id currentEditor = nil;
 
   if (view == nil || [view window] == nil)
     {
@@ -242,12 +270,63 @@ GnomeThemeViewHasFocus(NSView *view)
       return YES;
     }
 
+  if ([view respondsToSelector: @selector(currentEditor)])
+    {
+      currentEditor = [(id)view currentEditor];
+      if (currentEditor != nil && currentEditor == firstResponder)
+        {
+          if ([firstResponder respondsToSelector: @selector(delegate)])
+            {
+              return ([firstResponder delegate] == view);
+            }
+          return YES;
+        }
+    }
+
   if ([firstResponder respondsToSelector: @selector(delegate)])
     {
       return ([firstResponder delegate] == view);
     }
 
   return NO;
+}
+
+static void
+GnomeThemeTrackFocusedEntryView(NSView *view)
+{
+  if (view == nil)
+    {
+      return;
+    }
+
+  if (GnomeThemeLastFocusedEntryView != nil
+    && GnomeThemeLastFocusedEntryView != view)
+    {
+      NSView *previous = GnomeThemeLastFocusedEntryView;
+      [GnomeThemeLastFocusedEntryView setNeedsDisplay: YES];
+      if ([previous superview] != nil)
+        {
+          [[previous superview] setNeedsDisplayInRect: [previous frame]];
+        }
+      [previous displayIfNeeded];
+    }
+
+  if (GnomeThemeLastFocusedEntryView != view)
+    {
+      RETAIN (view);
+      RELEASE (GnomeThemeLastFocusedEntryView);
+      GnomeThemeLastFocusedEntryView = view;
+    }
+
+  [view setNeedsDisplay: YES];
+  if ([view superview] != nil)
+    {
+      [[view superview] setNeedsDisplayInRect: [view frame]];
+    }
+  if ([view window] != nil)
+    {
+      [[view window] setViewsNeedDisplay: YES];
+    }
 }
 
 static BOOL
@@ -267,8 +346,11 @@ GnomeThemeDrawFocusRing(GnomeTheme *theme, NSRect rect, CGFloat radius)
   NSColor *focusColor = GnomeThemeColor (theme,
                                          @"keyboardFocusIndicatorColor",
                                          [NSColor keyboardFocusIndicatorColor]);
+  NSColor *backgroundColor = GnomeThemeColor (theme,
+                                              @"windowBackgroundColor",
+                                              [NSColor windowBackgroundColor]);
 
-  focusColor = [focusColor colorWithAlphaComponent: 0.20];
+  focusColor = GnomeThemeBlend (focusColor, backgroundColor, 0.68);
   GnomeThemeFillAndStrokeRoundedRect (rect, radius, nil, focusColor, 2.5);
 }
 
@@ -337,28 +419,30 @@ GnomeThemeResolveEntryColors(GnomeTheme *theme,
   NSColor *shadowColor = GnomeThemeColor (theme,
                                           @"controlShadowColor",
                                           [NSColor controlShadowColor]);
-  NSColor *fillColor = GnomeThemeBlend (textFill, controlFill, 0.64);
-  NSColor *borderColor = GnomeThemeBlend (shadowColor, fillColor, 0.34);
-  CGFloat lineWidth = 1.0;
+  NSColor *accentColor = GnomeThemeColor (theme,
+                                          @"selectedControlColor",
+                                          [NSColor selectedControlColor]);
+  NSColor *fillColor = GnomeThemeBlend (controlFill, windowFill, 0.10);
+  NSColor *borderColor = nil;
+  CGFloat lineWidth = 0.0;
 
   (void)view;
+  (void)textFill;
+  (void)shadowColor;
 
   if (readonlyField)
     {
-      fillColor = GnomeThemeBlend (fillColor, windowFill, 0.24);
-      borderColor = GnomeThemeBlend (borderColor, fillColor, 0.30);
+      fillColor = GnomeThemeBlend (fillColor, windowFill, 0.14);
     }
 
   if (enabled == NO)
     {
-      fillColor = GnomeThemeBlend (fillColor, windowFill, 0.54);
-      borderColor = GnomeThemeBlend (fillColor, windowFill, 0.24);
+      fillColor = GnomeThemeBlend (fillColor, windowFill, 0.42);
     }
   else if (focused)
     {
-      fillColor = GnomeThemeBlend (fillColor, windowFill, 0.08);
-      borderColor = GnomeThemeBlend (shadowColor, [NSColor blackColor], 0.12);
-      lineWidth = 1.25;
+      borderColor = GnomeThemeBlend (accentColor, windowFill, 0.28);
+      lineWidth = 2.0;
     }
 
   if (fillOut != NULL)
@@ -372,6 +456,41 @@ GnomeThemeResolveEntryColors(GnomeTheme *theme,
   if (lineWidthOut != NULL)
     {
       *lineWidthOut = lineWidth;
+    }
+}
+
+static void
+GnomeThemeDrawEntryChrome(GnomeTheme *theme,
+                          NSView *view,
+                          NSRect frame,
+                          BOOL enabled,
+                          BOOL focused,
+                          BOOL readonlyField)
+{
+  NSColor *fillColor = nil;
+  NSColor *borderColor = nil;
+  CGFloat borderWidth = 0.0;
+  CGFloat radius = 10.0;
+  NSRect borderRect = NSInsetRect (frame, 0.5, 0.5);
+
+  GnomeThemeResolveEntryColors (theme,
+                                view,
+                                enabled,
+                                focused && enabled,
+                                readonlyField,
+                                &fillColor,
+                                &borderColor,
+                                &borderWidth);
+
+  GnomeThemeFillAndStrokeRoundedRect (borderRect,
+                                      radius,
+                                      fillColor,
+                                      borderColor,
+                                      borderWidth);
+
+  if (borderColor != nil && borderWidth > 0.0)
+    {
+      GnomeThemeStrokeEntryCaps (borderRect, radius, borderColor);
     }
 }
 
@@ -458,6 +577,182 @@ GnomeThemeComboBoxTextRect(NSComboBoxCell *cell, NSRect cellFrame)
   textRect.origin.x += leftInset;
   textRect.size.width = MAX (0.0, textRect.size.width - leftInset - rightInset);
   return textRect;
+}
+
+static NSButtonCell *
+GnomeThemeComboBoxButtonCell(NSComboBoxCell *cell)
+{
+  id buttonCell = nil;
+
+  if (cell == nil)
+    {
+      return nil;
+    }
+
+  NS_DURING
+    {
+      buttonCell = [cell valueForKey: @"_buttonCell"];
+    }
+  NS_HANDLER
+    {
+      buttonCell = nil;
+    }
+  NS_ENDHANDLER
+
+  if ([buttonCell isKindOfClass: [NSButtonCell class]] == NO)
+    {
+      return nil;
+    }
+
+  return (NSButtonCell *)buttonCell;
+}
+
+static void
+GnomeThemeNeutralizeComboBoxButtonCell(NSComboBoxCell *cell)
+{
+  NSButtonCell *buttonCell = GnomeThemeComboBoxButtonCell (cell);
+
+  if (buttonCell == nil)
+    {
+      return;
+    }
+
+  [buttonCell setHighlighted: NO];
+  [buttonCell setBordered: NO];
+  [buttonCell setHighlightsBy: 0];
+  [buttonCell setShowsStateBy: 0];
+  [buttonCell setImage: nil];
+  [buttonCell setAlternateImage: nil];
+  if ([buttonCell respondsToSelector: @selector(setTransparent:)])
+    {
+      [(id)buttonCell setTransparent: YES];
+    }
+}
+
+static void
+GnomeThemeConfigureComboBoxPopupMetrics(NSComboBoxCell *cell)
+{
+  NSInteger itemCount = 0;
+  NSInteger visibleItems = 0;
+
+  if (cell == nil)
+    {
+      return;
+    }
+
+  itemCount = [cell numberOfItems];
+  visibleItems = MIN (MAX (itemCount, 1), 6);
+
+  [cell setItemHeight: 28.0];
+  [cell setIntercellSpacing: NSMakeSize (0.0, 0.0)];
+  [cell setNumberOfVisibleItems: visibleItems];
+  [cell setHasVerticalScroller: (itemCount > visibleItems)];
+}
+
+static void
+GnomeThemeStyleComboBoxPopupView(NSView *view,
+                                 GnomeTheme *theme,
+                                 BOOL showScroller)
+{
+  NSArray *subviews = nil;
+  NSUInteger index = 0;
+
+  if (view == nil)
+    {
+      return;
+    }
+
+  if ([view isKindOfClass: [NSScrollView class]])
+    {
+      NSScrollView *scrollView = (NSScrollView *)view;
+      [scrollView setBorderType: NSNoBorder];
+      [scrollView setDrawsBackground: NO];
+      [scrollView setHasVerticalScroller: showScroller];
+      [scrollView setAutohidesScrollers: YES];
+      if (showScroller == NO)
+        {
+          [scrollView setVerticalScroller: nil];
+        }
+      if ([scrollView contentView] != nil)
+        {
+          [[scrollView contentView] setDrawsBackground: NO];
+        }
+    }
+  else if ([view isKindOfClass: [NSTableView class]])
+    {
+      NSTableView *tableView = (NSTableView *)view;
+      [tableView setRowHeight: 28.0];
+      [tableView setIntercellSpacing: NSMakeSize (0.0, 0.0)];
+      [tableView setGridStyleMask: NSTableViewGridNone];
+      [tableView setUsesAlternatingRowBackgroundColors: NO];
+      [tableView setBackgroundColor: GnomeThemeColor (theme,
+                                                       @"menuBackgroundColor",
+                                                       [NSColor controlBackgroundColor])];
+    }
+
+  subviews = [view subviews];
+  for (index = 0; index < [subviews count]; index++)
+    {
+      GnomeThemeStyleComboBoxPopupView ([subviews objectAtIndex: index],
+                                        theme,
+                                        showScroller);
+    }
+}
+
+static void
+GnomeThemeStyleComboBoxPopup(NSComboBoxCell *cell, GnomeTheme *theme)
+{
+  id popup = nil;
+  NSWindow *window = nil;
+  NSView *contentView = nil;
+  NSColor *backgroundColor = nil;
+  BOOL showScroller = NO;
+
+  if (cell == nil)
+    {
+      return;
+    }
+
+  NS_DURING
+    {
+      popup = [cell valueForKey: @"_popup"];
+    }
+  NS_HANDLER
+    {
+      popup = nil;
+    }
+  NS_ENDHANDLER
+
+  if (popup == nil)
+    {
+      return;
+    }
+
+  if ([popup isKindOfClass: [NSWindow class]])
+    {
+      window = (NSWindow *)popup;
+    }
+  else if ([popup respondsToSelector: @selector(window)])
+    {
+      window = [popup window];
+    }
+
+  if (window == nil)
+    {
+      return;
+    }
+
+  backgroundColor = GnomeThemeColor (theme,
+                                     @"menuBackgroundColor",
+                                     [NSColor controlBackgroundColor]);
+  showScroller = ([cell numberOfItems] > [cell numberOfVisibleItems]);
+  [window setBackgroundColor: backgroundColor];
+  contentView = [window contentView];
+  if (contentView != nil)
+    {
+      [contentView setNeedsDisplay: YES];
+      GnomeThemeStyleComboBoxPopupView (contentView, theme, showScroller);
+    }
 }
 
 static NSRect
@@ -709,6 +1004,59 @@ GnomeThemeUsesScreenFonts(void)
     && fabs (matrix.m22) == 1.0);
 }
 
+static BOOL
+GnomeThemeIsSecureTextFieldCell(NSTextFieldCell *cell)
+{
+  Class secureCellClass = NSClassFromString (@"NSSecureTextFieldCell");
+
+  return (secureCellClass != Nil && [cell isKindOfClass: secureCellClass]);
+}
+
+static NSFont *
+GnomeThemeControlFontForSecureTextFieldCell(NSTextFieldCell *cell)
+{
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  NSFont *font = (theme != nil) ? [[theme settings] interfaceFont] : nil;
+
+  if (font == nil)
+    {
+      font = [NSFont controlContentFontOfSize: 0.0];
+    }
+  if (font == nil)
+    {
+      font = [NSFont systemFontOfSize: 12.0];
+    }
+
+  (void)cell;
+  return font;
+}
+
+static NSAttributedString *
+GnomeThemeSecureTextDisplayString(NSTextFieldCell *cell,
+                                  NSAttributedString *string)
+{
+  NSMutableAttributedString *mutableString = nil;
+  NSFont *font = nil;
+  NSRange fullRange;
+
+  if (GnomeThemeIsSecureTextFieldCell (cell) == NO || [string length] == 0)
+    {
+      return string;
+    }
+
+  mutableString = AUTORELEASE ([string mutableCopy]);
+  fullRange = NSMakeRange (0, [mutableString length]);
+  font = GnomeThemeControlFontForSecureTextFieldCell (cell);
+  if (font != nil)
+    {
+      [mutableString addAttribute: NSFontAttributeName
+                            value: font
+                            range: fullRange];
+    }
+
+  return mutableString;
+}
+
 static void
 GnomeThemeDrawAttributedStringWithEditorLayout(NSTextFieldCell *cell,
                                                NSAttributedString *string,
@@ -727,6 +1075,8 @@ GnomeThemeDrawAttributedStringWithEditorLayout(NSTextFieldCell *cell,
     {
       return;
     }
+
+  string = GnomeThemeSecureTextDisplayString (cell, string);
 
   if (textStorage == nil)
     {
@@ -785,6 +1135,11 @@ GnomeThemeResolvedEditorFont(NSTextFieldCell *cell)
   NSFont *font = [cell font];
   GnomeTheme *theme = GnomeThemeActiveTheme ();
 
+  if (GnomeThemeIsSecureTextFieldCell (cell))
+    {
+      return GnomeThemeControlFontForSecureTextFieldCell (cell);
+    }
+
   if (font == nil && theme != nil)
     {
       font = [[theme settings] interfaceFont];
@@ -798,12 +1153,38 @@ GnomeThemeResolvedEditorFont(NSTextFieldCell *cell)
   return font;
 }
 
+static void
+GnomeThemeConfigureEditorLayout(NSTextView *textView)
+{
+  NSLayoutManager *layoutManager = nil;
+  NSTextContainer *textContainer = nil;
+
+  if (textView == nil)
+    {
+      return;
+    }
+
+  [textView setTextContainerInset: NSZeroSize];
+  textContainer = [textView textContainer];
+  if (textContainer != nil)
+    {
+      [textContainer setLineFragmentPadding: 0.0];
+    }
+
+  layoutManager = [textView layoutManager];
+  if ([layoutManager respondsToSelector: @selector(setUsesScreenFonts:)])
+    {
+      [(id)layoutManager setUsesScreenFonts: GnomeThemeUsesScreenFonts ()];
+    }
+}
+
 static NSDictionary *
 GnomeThemeEditorTypingAttributes(NSTextFieldCell *cell, NSTextView *textView, NSFont *font)
 {
   NSMutableDictionary *attributes = nil;
   NSDictionary *cellAttributes = [cell _nonAutoreleasedTypingAttributes];
   NSDictionary *editorAttributes = [textView typingAttributes];
+  NSMutableParagraphStyle *paragraphStyle = nil;
 
   if (editorAttributes != nil)
     {
@@ -839,6 +1220,10 @@ GnomeThemeEditorTypingAttributes(NSTextFieldCell *cell, NSTextView *textView, NS
     {
       [attributes setObject: font forKey: NSFontAttributeName];
     }
+
+  paragraphStyle = AUTORELEASE ([[NSMutableParagraphStyle alloc] init]);
+  [paragraphStyle setAlignment: [cell alignment]];
+  [attributes setObject: paragraphStyle forKey: NSParagraphStyleAttributeName];
 
   return AUTORELEASE (attributes);
 }
@@ -884,6 +1269,8 @@ GnomeThemeNormalizedEditorContent(NSTextFieldCell *cell, NSDictionary *attribute
   return mutableContent;
 }
 
+static void GnomeThemeSuppressEditorBackground(NSText *textObject);
+
 static void
 GnomeThemeApplyEditorFont(NSTextFieldCell *cell, NSText *textObject)
 {
@@ -912,11 +1299,8 @@ GnomeThemeApplyEditorFont(NSTextFieldCell *cell, NSText *textObject)
     }
 
   textView = (NSTextView *)textObject;
-  [textView setTextContainerInset: NSZeroSize];
-  if ([textView textContainer] != nil)
-    {
-      [[textView textContainer] setLineFragmentPadding: 0.0];
-    }
+  GnomeThemeSuppressEditorBackground (textObject);
+  GnomeThemeConfigureEditorLayout (textView);
   typingAttributes = GnomeThemeEditorTypingAttributes (cell, textView, font);
   if (typingAttributes != nil)
     {
@@ -933,6 +1317,32 @@ GnomeThemeApplyEditorFont(NSTextFieldCell *cell, NSText *textObject)
   if (textStorage != nil)
     {
       [textStorage setAttributedString: content];
+    }
+}
+
+static void
+GnomeThemeSuppressEditorBackground(NSText *textObject)
+{
+  NSView *clipView = nil;
+
+  if (textObject == nil)
+    {
+      return;
+    }
+
+  [textObject setDrawsBackground: NO];
+  [textObject setBackgroundColor: [NSColor clearColor]];
+
+  if ([textObject isKindOfClass: [NSView class]] == NO)
+    {
+      return;
+    }
+
+  clipView = [(NSView *)textObject superview];
+  if ([clipView isKindOfClass: [NSClipView class]])
+    {
+      [(NSClipView *)clipView setDrawsBackground: NO];
+      [(NSClipView *)clipView setBackgroundColor: [NSColor clearColor]];
     }
 }
 
@@ -1033,6 +1443,66 @@ GnomeThemeButtonTitleRect(NSButtonCell *cell, NSRect cellFrame)
   titleRect.size.width = MAX (0.0, titleRect.size.width - leftInset - rightInset);
 
   return titleRect;
+}
+
+static NSSize
+GnomeThemeButtonLabelSize(NSButtonCell *cell)
+{
+  NSAttributedString *title = [cell attributedTitle];
+  NSFont *font = [cell font];
+  NSMutableDictionary *attributes = nil;
+  NSSize size = NSZeroSize;
+
+  if ([title length] == 0)
+    {
+      return size;
+    }
+
+  if (font == nil)
+    {
+      font = [NSFont controlContentFontOfSize: 0.0];
+    }
+  font = GnomeThemeEmphasizedFont (font);
+
+  attributes = AUTORELEASE ([[NSMutableDictionary alloc] init]);
+  if (font != nil)
+    {
+      [attributes setObject: font forKey: NSFontAttributeName];
+    }
+
+  size = [[title string] sizeWithAttributes: attributes];
+  size.width = ceil (size.width);
+  size.height = ceil (size.height);
+  return size;
+}
+
+static NSRect
+GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame)
+{
+  NSRect contentRect = [cell drawingRectForBounds: cellFrame];
+  CGFloat indicatorSize = MAX (18.0, floor (contentRect.size.height * 0.58));
+  NSRect indicatorRect = NSMakeRect (contentRect.origin.x + 2.0,
+                                    NSMidY (contentRect) - (indicatorSize / 2.0),
+                                    indicatorSize,
+                                    indicatorSize);
+  NSSize labelSize = GnomeThemeButtonLabelSize (cell);
+  CGFloat labelWidth = MIN (labelSize.width,
+                            MAX (0.0, NSMaxX (contentRect)
+                              - (NSMaxX (indicatorRect) + 10.0)));
+  NSRect focusRect = indicatorRect;
+
+  if (labelWidth > 0.0)
+    {
+      focusRect.size.width = (NSMaxX (indicatorRect) - NSMinX (indicatorRect))
+        + 8.0 + labelWidth;
+    }
+
+  focusRect = NSInsetRect (focusRect, -3.0, -3.0);
+  focusRect.origin.x = floor (focusRect.origin.x);
+  focusRect.origin.y = floor (focusRect.origin.y);
+  focusRect.size.width = ceil (focusRect.size.width);
+  focusRect.size.height = ceil (focusRect.size.height);
+  return focusRect;
 }
 
 static NSRect
@@ -1147,6 +1617,17 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   CGFloat radius = MIN (9.0, floor (frame.size.height / 2.0));
 
+  if ([view isKindOfClass: [NSButton class]])
+    {
+      NSButtonCell *cell = (NSButtonCell *)[(NSButton *)view cell];
+
+      if (GnomeThemeButtonCellIsCheckbox (cell)
+        || GnomeThemeButtonCellIsRadio (cell))
+        {
+          return;
+        }
+    }
+
   GnomeThemeDrawFocusRing (self, NSInsetRect (frame, -1.0, -1.0), radius + 1.0);
 }
 
@@ -1161,7 +1642,7 @@ GnomeThemeDrawTabLabel(NSString *label,
   BOOL selected = GnomeThemeStateIsSelected (state);
   BOOL persistentAccentSelection = selected && GnomeThemeButtonCellUsesPersistentAccentSelection (cell);
   BOOL momentaryPressed = selected && (persistentAccentSelection == NO);
-  BOOL focused = GnomeThemeStateIsFocused (state) || GnomeThemeViewHasFocus (view);
+  BOOL focused = GnomeThemeViewHasFocus (view);
   BOOL popupButton = [cell isKindOfClass: [NSPopUpButtonCell class]];
   BOOL isDefaultButton = NO;
   NSColor *fillColor = nil;
@@ -1233,12 +1714,12 @@ GnomeThemeDrawTabLabel(NSString *label,
       strokeColor = GnomeThemeBlend (borderBase, fillColor, 0.62);
     }
 
+  GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, fillColor, strokeColor, 1.0);
+
   if (focused && disabled == NO)
     {
-      GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, -1.0, -1.0), radius + 1.0);
+      GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, -3.0, -3.0), radius + 3.0);
     }
-
-  GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, fillColor, strokeColor, 1.0);
 }
 
 - (void) drawSegmentedControlSegment: (NSCell *)cell
@@ -1331,6 +1812,16 @@ GnomeThemeDrawTabLabel(NSString *label,
     {
       backgroundFill = GnomeThemeBlend (backgroundFill, windowFill, 0.18);
     }
+  else if (textStyleControl)
+    {
+      GnomeThemeDrawEntryChrome (self,
+                                 view,
+                                 frame,
+                                 enabled,
+                                 focused,
+                                 readonlyField);
+      return;
+    }
   else
     {
       GnomeThemeResolveEntryColors (self,
@@ -1353,6 +1844,11 @@ GnomeThemeDrawTabLabel(NSString *label,
                                       backgroundFill,
                                       borderColor,
                                       borderWidth);
+
+  if (textStyleControl && borderColor != nil && borderWidth > 0.0)
+    {
+      GnomeThemeStrokeEntryCaps (borderRect, radius, borderColor);
+    }
 
   if (aType == NSGrooveBorder)
     {
@@ -2011,6 +2507,7 @@ GnomeThemeDrawTabLabel(NSString *label,
     = (SetUpFieldEditorAttributesIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
   NSTextFieldCell *cell = (NSTextFieldCell *)self;
   NSText *editor = textObject;
+  NSView *controlView = [cell controlView];
 
   if (originalIMP != NULL)
     {
@@ -2018,7 +2515,33 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 
   GnomeThemeApplyEditorFont (cell, editor);
+  GnomeThemeSuppressEditorBackground (editor);
+
+  if (controlView != nil)
+    {
+      GnomeThemeTrackFocusedEntryView (controlView);
+    }
+
   return editor;
+}
+
+- (void) _overrideNSTextFieldCellMethod__drawBackgroundWithFrame: (NSRect)cellFrame
+                                                          inView: (NSView *)controlView
+{
+  typedef void (*DrawBackgroundIMP)(id, SEL, NSRect, NSView *);
+  DrawBackgroundIMP originalIMP
+    = (DrawBackgroundIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  NSTextFieldCell *cell = (NSTextFieldCell *)self;
+
+  if ([cell isBezeled] || [cell isBordered])
+    {
+      return;
+    }
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, cellFrame, controlView);
+    }
 }
 
 - (void) _overrideNSTextFieldCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
@@ -2028,7 +2551,28 @@ GnomeThemeDrawTabLabel(NSString *label,
 
   if ([cell _inEditing])
     {
-      [cell _drawEditorWithFrame: cellFrame inView: controlView];
+      if ([cell isBezeled] || [cell isBordered])
+        {
+          GnomeTheme *theme = GnomeThemeActiveTheme ();
+          BOOL enabled = [cell isEnabled] && GnomeThemeViewEnabled (controlView);
+          BOOL focused = GnomeThemeViewHasFocus (controlView);
+          BOOL readonlyField = ([cell isEditable] == NO && [cell isSelectable] == NO);
+
+          GnomeThemeDrawEntryChrome (theme,
+                                     controlView,
+                                     cellFrame,
+                                     enabled,
+                                     focused,
+                                     readonlyField);
+        }
+
+      if ([controlView isKindOfClass: [NSControl class]])
+        {
+          GnomeThemeSuppressEditorBackground ([(NSControl *)controlView currentEditor]);
+        }
+
+      [cell _drawEditorWithFrame: cellFrame
+                           inView: controlView];
       return;
     }
 
@@ -2036,6 +2580,85 @@ GnomeThemeDrawTabLabel(NSString *label,
                                                   [cell _drawAttributedString],
                                                   [cell titleRectForBounds: cellFrame],
                                                   controlView);
+}
+
+- (NSRect) _overrideNSSearchFieldCellMethod_searchButtonRectForBounds: (NSRect)rect
+{
+  CGFloat iconSize = MIN (22.0, MAX (18.0, floor (rect.size.height * 0.58)));
+  CGFloat leftInset = 9.0;
+  NSRect iconRect = NSMakeRect (NSMinX (rect) + leftInset,
+                                NSMidY (rect) - (iconSize / 2.0),
+                                iconSize,
+                                iconSize);
+
+  return iconRect;
+}
+
+- (NSRect) _overrideNSSearchFieldCellMethod_cancelButtonRectForBounds: (NSRect)rect
+{
+  CGFloat iconSize = MIN (22.0, MAX (18.0, floor (rect.size.height * 0.58)));
+  CGFloat rightInset = 9.0;
+  NSRect iconRect = NSMakeRect (NSMaxX (rect) - rightInset - iconSize,
+                                NSMidY (rect) - (iconSize / 2.0),
+                                iconSize,
+                                iconSize);
+
+  return iconRect;
+}
+
+- (NSRect) _overrideNSSearchFieldCellMethod_searchTextRectForBounds: (NSRect)rect
+{
+  CGFloat leftInset = 38.0;
+  CGFloat rightInset = 36.0;
+  NSRect textRect = rect;
+
+  textRect.origin.x += leftInset;
+  textRect.size.width = MAX (0.0, textRect.size.width - leftInset - rightInset);
+  return textRect;
+}
+
+- (void) _overrideNSSearchFieldCellMethod_drawWithFrame: (NSRect)cellFrame
+                                                 inView: (NSView *)controlView
+{
+  NSSearchFieldCell *cell = (NSSearchFieldCell *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  BOOL enabled = [cell isEnabled];
+  BOOL focused = GnomeThemeViewHasFocus (controlView) && enabled;
+  NSRect textRect = [cell searchTextRectForBounds: cellFrame];
+
+  if (focused)
+    {
+      GnomeThemeTrackFocusedEntryView (controlView);
+    }
+
+  GnomeThemeDrawEntryChrome (theme, controlView, cellFrame, enabled, focused, NO);
+
+  [[cell searchButtonCell] drawWithFrame: [cell searchButtonRectForBounds: cellFrame]
+                                  inView: controlView];
+
+  if ([cell _inEditing])
+    {
+      if ([controlView isKindOfClass: [NSControl class]])
+        {
+          GnomeThemeSuppressEditorBackground ([(NSControl *)controlView currentEditor]);
+        }
+
+      [cell _drawEditorWithFrame: textRect
+                           inView: controlView];
+    }
+  else
+    {
+      GnomeThemeDrawAttributedStringWithEditorLayout (cell,
+                                                      [cell _drawAttributedString],
+                                                      [cell titleRectForBounds: textRect],
+                                                      controlView);
+    }
+
+  if ([[cell stringValue] length] > 0)
+    {
+      [[cell cancelButtonCell] drawWithFrame: [cell cancelButtonRectForBounds: cellFrame]
+                                      inView: controlView];
+    }
 }
 
 - (void) _overrideNSSegmentedCellMethod_drawSegment: (NSInteger)segmentIndex
@@ -2181,51 +2804,84 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
-- (void) _overrideNSComboBoxCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
-                                                      inView: (NSView *)controlView
+- (void) _overrideNSComboBoxCellMethod_drawWithFrame: (NSRect)cellFrame
+                                              inView: (NSView *)controlView
 {
-  typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
-  DrawInteriorIMP originalIMP = (DrawInteriorIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
-  GnomeTheme *theme = GnomeThemeActiveTheme ();
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  BOOL enabled = [(NSCell *)cell isEnabled] && GnomeThemeViewEnabled (controlView);
+  BOOL focused = (GnomeThemeViewHasFocus (controlView)
+    || [(NSCell *)cell isHighlighted]) && enabled;
   NSRect buttonRect = GnomeThemeComboBoxButtonRect (cellFrame);
-  NSRect textRect = GnomeThemeComboBoxTextRect (cell, cellFrame);
-  NSRect interiorRect = NSInsetRect (cellFrame, 1.0, 1.0);
-  BOOL enabled = [(NSCell *)self isEnabled];
-  BOOL focused = GnomeThemeViewHasFocus (controlView) && enabled;
-  BOOL editing = ([controlView isKindOfClass: [NSControl class]]
-    && [(NSControl *)controlView currentEditor] != nil);
-  NSColor *entryFill = nil;
+  NSColor *fillColor = nil;
   NSColor *arrowColor = GnomeThemeColor (theme,
                                          enabled ? @"controlTextColor" : @"disabledControlTextColor",
                                          enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]);
-  NSString *displayString = GnomeThemeComboBoxDisplayString (cell);
-  NSMutableDictionary *attributes = nil;
-  NSSize textSize = NSZeroSize;
-  NSFont *font = nil;
+
+  if (focused)
+    {
+      GnomeThemeTrackFocusedEntryView (controlView);
+    }
 
   GnomeThemeResolveEntryColors (theme,
                                 controlView,
                                 enabled,
                                 focused,
                                 NO,
-                                &entryFill,
+                                &fillColor,
                                 NULL,
                                 NULL);
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+  GnomeThemeDrawEntryChrome (theme, controlView, cellFrame, enabled, focused, NO);
+  [cell drawInteriorWithFrame: cellFrame inView: controlView];
 
+  if (fillColor != nil)
+    {
+      NSRect buttonFillRect = NSMakeRect (NSMinX (buttonRect) - 3.0,
+                                          NSMinY (cellFrame) + 3.0,
+                                          NSWidth (buttonRect) + 2.0,
+                                          NSHeight (cellFrame) - 6.0);
+
+      [fillColor set];
+      NSRectFillUsingOperation (buttonFillRect, NSCompositeSourceOver);
+    }
+
+  GnomeThemeDrawPopupChevron (NSInsetRect (buttonRect, 6.0, 6.0),
+                              arrowColor,
+                              [controlView isFlipped]);
+}
+
+- (void) _overrideNSComboBoxCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
+                                                      inView: (NSView *)controlView
+{
+  typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
+  DrawInteriorIMP originalIMP = (DrawInteriorIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  NSComboBoxCell *cell = (NSComboBoxCell *)self;
+  NSRect buttonRect = GnomeThemeComboBoxButtonRect (cellFrame);
+  NSRect textRect = GnomeThemeComboBoxTextRect (cell, cellFrame);
+  BOOL enabled = [(NSCell *)self isEnabled];
+  BOOL editing = ([controlView isKindOfClass: [NSControl class]]
+    && [(NSControl *)controlView currentEditor] != nil);
+  NSString *displayString = GnomeThemeComboBoxDisplayString (cell);
+  NSMutableDictionary *attributes = nil;
+  NSSize textSize = NSZeroSize;
+  NSFont *font = nil;
+
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+  GnomeThemeConfigureComboBoxPopupMetrics (cell);
   [cell setValue: [NSValue valueWithRect: cellFrame] forKey: @"_lastValidFrame"];
 
   if (editing)
     {
-      if (originalIMP != NULL)
+      if ([controlView isKindOfClass: [NSControl class]])
         {
-          originalIMP (self, _cmd, cellFrame, controlView);
+          GnomeThemeSuppressEditorBackground ([(NSControl *)controlView currentEditor]);
         }
+      [cell _drawEditorWithFrame: textRect
+                           inView: controlView];
+      (void)originalIMP;
       return;
     }
-
-  [entryFill set];
-  NSRectFillUsingOperation (interiorRect, NSCompositeSourceOver);
 
   if ([displayString length] > 0)
     {
@@ -2245,12 +2901,7 @@ GnomeThemeDrawTabLabel(NSString *label,
       RELEASE (attributes);
     }
 
-  [entryFill set];
-  NSRectFillUsingOperation (NSInsetRect (buttonRect, -1.0, 0.0), NSCompositeSourceOver);
-
-  GnomeThemeDrawPopupChevron (NSInsetRect (buttonRect, 6.0, 6.0),
-                              arrowColor,
-                              [controlView isFlipped]);
+  (void)buttonRect;
 }
 
 - (BOOL) _overrideNSComboBoxCellMethod_trackMouse: (NSEvent *)theEvent
@@ -2266,19 +2917,25 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSRect themedButtonRect = GnomeThemeComboBoxButtonRect (cellFrame);
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
 
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+
   if ((nonEditableCombo && NSMouseInRect (point, cellFrame, [controlView isFlipped]))
     || NSMouseInRect (point, themedButtonRect, [controlView isFlipped]))
     {
       if ([(NSCell *)self isEnabled])
         {
-          id buttonCell = [cell valueForKey: @"_buttonCell"];
+          NS_DURING
+            {
+              [cell setValue: controlView forKey: @"_control_view"];
+            }
+          NS_HANDLER
+            {
+            }
+          NS_ENDHANDLER
 
           [cell _didClickWithinButton: cell];
           [(NSCell *)cell setHighlighted: NO];
-          if ([buttonCell respondsToSelector: @selector(setHighlighted:)])
-            {
-              [buttonCell setHighlighted: NO];
-            }
+          GnomeThemeNeutralizeComboBoxButtonCell (cell);
           [controlView setNeedsDisplay: YES];
           [controlView displayIfNeededIgnoringOpacity];
           if ([controlView window] != nil)
@@ -2301,17 +2958,121 @@ GnomeThemeDrawTabLabel(NSString *label,
   return NO;
 }
 
+- (void) _overrideNSComboBoxCellMethod__performClickWithFrame: (NSRect)cellFrame
+                                                       inView: (NSView *)controlView
+{
+  NSComboBoxCell *cell = (NSComboBoxCell *)self;
+
+  if (controlView == nil || [(NSCell *)cell isEnabled] == NO)
+    {
+      return;
+    }
+
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+
+  NS_DURING
+    {
+      [cell setValue: controlView forKey: @"_control_view"];
+    }
+  NS_HANDLER
+    {
+    }
+  NS_ENDHANDLER
+
+  [cell _didClickWithinButton: cell];
+  [(NSCell *)cell setHighlighted: NO];
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+  [controlView setNeedsDisplay: YES];
+  [controlView displayIfNeededIgnoringOpacity];
+
+  (void)cellFrame;
+}
+
+- (void) _overrideNSComboBoxCellMethod__didClickWithinButton: (id)sender
+{
+  NSComboBoxCell *cell = (NSComboBoxCell *)self;
+  NSView *controlView = [cell controlView];
+  NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
+  id popup = nil;
+
+  (void)sender;
+
+  if ([(NSCell *)cell isEnabled] == NO || controlView == nil)
+    {
+      return;
+    }
+
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+  [(NSCell *)cell setHighlighted: YES];
+  [controlView setNeedsDisplay: YES];
+  [controlView displayIfNeededIgnoringOpacity];
+
+  [notificationCenter postNotificationName: NSComboBoxWillPopUpNotification
+                                    object: controlView
+                                  userInfo: nil];
+
+  popup = [cell _popUp];
+  [cell setValue: popup forKey: @"_popup"];
+  GnomeThemeStyleComboBoxPopup (cell, GnomeThemeActiveTheme ());
+  if ([popup respondsToSelector: @selector(popUpForComboBoxCell:)])
+    {
+      [popup popUpForComboBoxCell: cell];
+    }
+  [cell setValue: nil forKey: @"_popup"];
+
+  [notificationCenter postNotificationName: NSComboBoxWillDismissNotification
+                                    object: controlView
+                                  userInfo: nil];
+
+  [(NSCell *)cell setHighlighted: NO];
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+  [controlView setNeedsDisplay: YES];
+  [controlView displayIfNeededIgnoringOpacity];
+}
+
 - (void) _overrideNSComboBoxCellMethod_highlight: (BOOL)flag
                                         withFrame: (NSRect)cellFrame
                                            inView: (NSView *)controlView
 {
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
 
+  GnomeThemeNeutralizeComboBoxButtonCell (cell);
+
   if ([(NSCell *)cell isHighlighted] != flag)
     {
       [(NSCell *)cell setHighlighted: flag];
+      GnomeThemeNeutralizeComboBoxButtonCell (cell);
       [cell drawWithFrame: cellFrame inView: controlView];
     }
+}
+
+- (NSSize) _overrideNSButtonCellMethod_cellSize
+{
+  typedef NSSize (*CellSizeIMP)(id, SEL);
+  CellSizeIMP originalIMP = (CellSizeIMP)[[GSTheme theme] overriddenMethod: _cmd
+                                                                       for: self];
+  NSButtonCell *cell = (NSButtonCell *)self;
+  NSSize size = (originalIMP != NULL) ? originalIMP (self, _cmd) : NSMakeSize (0.0, 0.0);
+
+  if (GnomeThemeButtonCellIsCheckbox (cell) == NO
+    && GnomeThemeButtonCellIsRadio (cell) == NO
+    && [cell image] == nil)
+    {
+      NSSize labelSize = GnomeThemeButtonLabelSize (cell);
+      CGFloat horizontalPadding = ([cell isBordered] || [cell isBezeled]) ? 32.0 : 12.0;
+      CGFloat verticalPadding = ([cell isBordered] || [cell isBezeled]) ? 12.0 : 6.0;
+
+      size.width = MAX (size.width, ceil (labelSize.width + horizontalPadding));
+      size.height = MAX (size.height, ceil (labelSize.height + verticalPadding));
+
+      if ([cell isBordered] || [cell isBezeled])
+        {
+          size.width = MAX (size.width, 86.0);
+          size.height = MAX (size.height, 34.0);
+        }
+    }
+
+  return size;
 }
 
 - (BOOL) _overrideNSSegmentedCellMethod_trackMouse: (NSEvent *)theEvent
@@ -2519,7 +3280,12 @@ GnomeThemeDrawTabLabel(NSString *label,
 
     if (GnomeThemeViewHasFocus (controlView) && enabled)
       {
-        GnomeThemeDrawFocusRing (theme, NSInsetRect (indicatorRect, -1.0, -1.0), radio ? indicatorSize / 2.0 : 6.0);
+        NSRect focusRect = GnomeThemeIndicatorFocusRect (cell, cellFrame);
+        CGFloat focusRadius = radio
+          ? MIN (9.0, floor (focusRect.size.height / 2.0))
+          : 7.0;
+
+        GnomeThemeDrawFocusRing (theme, focusRect, focusRadius);
       }
 
     if (radio)

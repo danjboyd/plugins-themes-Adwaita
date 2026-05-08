@@ -34,6 +34,9 @@ static NSString *ThemeDemoCaptureMenuHighlightKey = @"ThemeDemoCaptureMenuHighli
 static NSString *ThemeDemoDumpMenuGeometryKey = @"ThemeDemoDumpMenuGeometry";
 static NSString *ThemeDemoDumpTabGeometryKey = @"ThemeDemoDumpTabGeometry";
 static NSString *ThemeDemoDumpTypographyKey = @"ThemeDemoDumpTypography";
+static NSString *ThemeDemoCommandScriptKey = @"ThemeDemoCommandScript";
+static NSString *ThemeDemoCommandFIFOKey = @"ThemeDemoCommandFIFO";
+static NSString *ThemeDemoScreenshotOutputKey = @"ThemeDemoScreenshotOutput";
 
 static void
 ThemeDemoApplyLaunchOptions(int argc, const char **argv)
@@ -104,6 +107,24 @@ ThemeDemoApplyLaunchOptions(int argc, const char **argv)
         {
           [options setObject: @"YES" forKey: ThemeDemoDumpTypographyKey];
           index += 1;
+        }
+      else if ([arg isEqualToString: @"--command-script"] && (index + 1) < argc)
+        {
+          [options setObject: [NSString stringWithUTF8String: argv[index + 1]]
+                      forKey: ThemeDemoCommandScriptKey];
+          index += 2;
+        }
+      else if ([arg isEqualToString: @"--command-fifo"] && (index + 1) < argc)
+        {
+          [options setObject: [NSString stringWithUTF8String: argv[index + 1]]
+                      forKey: ThemeDemoCommandFIFOKey];
+          index += 2;
+        }
+      else if ([arg isEqualToString: @"--screenshot"] && (index + 1) < argc)
+        {
+          [options setObject: [NSString stringWithUTF8String: argv[index + 1]]
+                      forKey: ThemeDemoScreenshotOutputKey];
+          index += 2;
         }
       else
         {

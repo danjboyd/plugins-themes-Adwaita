@@ -35,6 +35,19 @@
   NSSegmentedControl *_segmentedControl;
   NSButton *_demoMenuButton;
   NSButton *_stressMenuButton;
+  NSTextField *_primaryTextField;
+  NSSecureTextField *_passwordField;
+  NSSearchField *_searchField;
+  NSTextField *_disabledTextField;
+  NSTextView *_bodyTextView;
+  NSComboBox *_textComboBox;
+  NSView *_commandFocusedTextControl;
+  NSAlert *_activeAlert;
+  NSString *_pendingDropdownCaptureName;
+  NSString *_pendingDropdownCapturePath;
+  int _commandFIFODescriptor;
+  NSMutableData *_commandFIFOBuffer;
+  NSTimer *_commandFIFOTimer;
 }
 
 @end
