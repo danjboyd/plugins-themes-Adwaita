@@ -130,9 +130,17 @@ fi
 
 mkdir -p "$(dirname "$OUTPUT")"
 
+GNUSTEP_CLI_ROOT="${GNUSTEP_CLI_ROOT:-/home/danboyd/.local/share/gnustep-cli}"
+GNUSTEP_SH="$GNUSTEP_CLI_ROOT/System/Library/Makefiles/GNUstep.sh"
+if [ ! -f "$GNUSTEP_SH" ]; then
+  GNUSTEP_SH="/usr/GNUstep/System/Library/Makefiles/GNUstep.sh"
+fi
 set +u
-. /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
+export GNUSTEP_SH_EXPORT_ALL_VARIABLES=1
+. "$GNUSTEP_SH"
 set -u
+export PATH="$GNUSTEP_CLI_ROOT/bin:$GNUSTEP_CLI_ROOT/Local/Tools:$GNUSTEP_CLI_ROOT/System/Tools:$PATH"
+export LD_LIBRARY_PATH="$GNUSTEP_CLI_ROOT/lib:${LD_LIBRARY_PATH:-}"
 
 defaults write ThemeDemo GSTheme Adwaita
 if [ -n "$SCALE" ]; then

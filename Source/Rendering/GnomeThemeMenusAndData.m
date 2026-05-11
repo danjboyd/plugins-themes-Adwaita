@@ -557,6 +557,11 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
                                                                              @"menuBarBorderColor",
                                                                              [NSColor controlShadowColor]),
                                                      0.28);
+      if (NSHeight (cellFrame) > 44.0)
+        {
+          cellFrame.origin.y = NSMaxY (cellFrame) - 36.0;
+          cellFrame.size.height = 36.0;
+        }
       NSRect pillRect = NSInsetRect (cellFrame, 6.0, 4.0);
 
       GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (pillRect, 0.5, 0.5),
@@ -954,6 +959,65 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
 @end
 
 @implementation GnomeTheme (MenusAndDataOverrides)
+
+- (void) _overrideNSMenuItemCellMethod_drawTitleWithFrame: (NSRect)cellFrame
+                                                   inView: (NSView *)controlView
+{
+  typedef void (*DrawTitleIMP)(id, SEL, NSRect, NSView *);
+  DrawTitleIMP originalIMP = (DrawTitleIMP)[[GSTheme theme] overriddenMethod: _cmd
+                                                                          for: self];
+  NSMenuItemCell *cell = (NSMenuItemCell *)self;
+  NSMenuItem *item = [cell menuItem];
+  GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
+  BOOL highlighted = [cell isHighlighted];
+  BOOL isHorizontal = [[cell menuView] isHorizontal];
+  NSString *title = [item title];
+  NSFont *font = nil;
+  NSColor *foregroundColor = nil;
+  NSMutableParagraphStyle *paragraph = nil;
+  NSDictionary *attributes = nil;
+  NSRect titleRect;
+  NSSize titleSize;
+
+  if (theme == nil || [item isSeparatorItem] || [title length] == 0)
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, cellFrame, controlView);
+        }
+      return;
+    }
+
+  font = isHorizontal ? [[theme settings] menuBarFont] : [[theme settings] menuFont];
+  if (font == nil)
+    {
+      font = [NSFont systemFontOfSize: isHorizontal ? 12.0 : 13.0];
+    }
+
+  foregroundColor = GnomeThemePhase67MenuForegroundColor (theme, cell, highlighted);
+  paragraph = AUTORELEASE ([[NSMutableParagraphStyle alloc] init]);
+  [paragraph setAlignment: isHorizontal ? NSCenterTextAlignment : NSLeftTextAlignment];
+  attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                  font, NSFontAttributeName,
+                  foregroundColor, NSForegroundColorAttributeName,
+                  paragraph, NSParagraphStyleAttributeName,
+                  nil];
+
+  titleRect = [cell titleRectForBounds: cellFrame];
+  if (isHorizontal)
+    {
+      if (NSHeight (cellFrame) > 44.0)
+        {
+          cellFrame.origin.y = NSMaxY (cellFrame) - 36.0;
+          cellFrame.size.height = 36.0;
+        }
+      titleRect = NSInsetRect (cellFrame, 10.0, 0.0);
+    }
+  titleSize = [title sizeWithAttributes: attributes];
+  titleRect.origin.y = floor (NSMidY (cellFrame) - (titleSize.height / 2.0));
+  titleRect.size.height = ceil (titleSize.height);
+  [title drawInRect: titleRect withAttributes: attributes];
+}
 
 - (void) _overrideNSMenuItemCellMethod_drawKeyEquivalentWithFrame: (NSRect)cellFrame
                                                            inView: (NSView *)controlView
