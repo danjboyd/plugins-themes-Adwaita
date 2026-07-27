@@ -1035,6 +1035,27 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
   return MAX (originalWidth, GnomeThemePhase67MenuStateImageWidth (cell));
 }
 
+- (CGFloat) _overrideNSMenuItemCellMethod_titleWidth
+{
+  typedef CGFloat (*TitleWidthIMP)(id, SEL);
+  TitleWidthIMP originalIMP = (TitleWidthIMP)[[GSTheme theme] overriddenMethod: _cmd
+                                                                           for: self];
+  NSMenuItemCell *cell = (NSMenuItemCell *)self;
+  CGFloat originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+
+  if ([[cell menuView] isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return originalWidth;
+    }
+
+  /* titleRectForBounds insets the drawable area by 1pt on the left and caps
+     the right edge at the key-equivalent column, which leaves the widest
+     item of a vertical menu exactly 1pt short of its measured width and
+     makes drawInRect: word-wrap the final word out of view.  Reserve extra
+     room so the widest title always fits. */
+  return originalWidth + 6.0;
+}
+
 - (CGFloat) _overrideNSMenuItemCellMethod_keyEquivalentWidth
 {
   typedef CGFloat (*KeyEquivalentWidthIMP)(id, SEL);
