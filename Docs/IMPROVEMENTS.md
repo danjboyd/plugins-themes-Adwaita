@@ -26,6 +26,7 @@ it was found. Compare against the libadwaita reference with
 | Toolbar buttons had no hover or pressed look (pressed labels turned white) | libadwaita flat-button backgrounds: the text colour at 7% under the pointer, 16% pressed, 6pt corners; hover comes from tracking rects the theme adds in `-[GSToolbarButton layout]` |
 | The menu bar started with the app's name, greyed when its menu was empty ("OneDriveServiceManager") | an empty app menu is removed; a non-empty one is drawn as GNOME's main-menu icon (☰) |
 | `NSMenuItemCell` overrides used the exact-class lookup, and pop-up buttons' layout depended on it failing | they use `GnomeThemeOriginalMethod()`; pop-up button cells get their geometry explicitly, so an upstream fix to `-overriddenMethod:for:` can't move pop-up titles |
+| Under GNOME Wayland, tool tips and drag images showed only the first time (GNOME/mutter#5080, upstream items 5 and 6) | on Wayland the tool tip panel and the drag window are ordered out without first being shrunk to `NSZeroRect`; elsewhere GNUstep's shrink is kept |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -75,7 +76,9 @@ and in OneDriveServiceManager's main window.
   when `-overriddenMethod:for:` walks superclasses, `-windowNeedsMainMenu:`
   when libs-gui attaches the menu to late windows, and the toolbar button
   tracking rects if libs-gui starts tracking for
-  `showsBorderOnlyWhileMouseInside`.
+  `showsBorderOnlyWhileMouseInside`. Drop the `GSTTPanel` and
+  `GSDragView` overrides once Mutter thaws unmapped windows (GNOME/mutter#5080)
+  or libs-gui stops shrinking them (libs-gui#964).
 
 ## GNUstep issues to report upstream
 
@@ -102,6 +105,27 @@ a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
    exact class.** An override reached from a subclass gets 0 and can't call
    the original. This was the root cause of the invisible toolbar items; the
    theme works around it with `GnomeThemeOriginalMethod()`.
+
+Found on 2026-09-25 while tracking down tool tips that show only once under
+GNOME Wayland. Confirmed on master (gui ff49ac8, back 5db2ae7) and on the
+installed 0.32.0, using the default theme.
+
+5. **Mutter: an Xwayland window resized and then unmapped stays frozen.**
+   Filed as [GNOME/mutter#5080](https://gitlab.gnome.org/GNOME/mutter/-/issues/5080).
+   Mutter freezes commits on a resize and thaws them only after it next
+   paints the window, which never happens if the window is unmapped first.
+   `_XWAYLAND_ALLOW_COMMITS` stays 0 and the window is blank when mapped
+   again. Reproduced with plain Xlib (`xwayland_resize_unmap.c`); this is the
+   root cause.
+6. **libs-gui: tool tips shrink the visible panel before ordering it out.**
+   Filed as [gnustep/libs-gui#964](https://github.com/gnustep/libs-gui/issues/964).
+   `-[GSToolTips _endDisplay:]` sets `NSZeroRect` and then orders out, which
+   triggers item 5 on every hide. Without the shrink, tool tips showed every
+   time. `GSDragView` does the same, and drag images are affected too.
+7. **libs-gui: `_initBackendWindow` sets the level before the window is
+   registered.** Filed as
+   [gnustep/libs-gui#965](https://github.com/gnustep/libs-gui/issues/965). The backend can't identify the tool tip panel, so it types
+   it `_NET_WM_WINDOW_TYPE_DIALOG` instead of `_TOOLTIP`.
 
 ### Reported by OneDriveServiceManager: withdrawn
 
