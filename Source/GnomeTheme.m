@@ -31,6 +31,7 @@ static NSString *GnomeThemeRuntimeDefaultsDomain = @"GnomeThemeRuntimeDomain";
 @interface GnomeTheme ()
 - (void) applyRuntimeDefaults;
 - (void) removeRuntimeDefaults;
+- (void) windowNeedsMainMenu: (NSNotification *)notification;
 - (NSDictionary *) runtimeDefaultsDictionary;
 - (void) addFont: (NSFont *)font
           forKey: (NSString *)key
@@ -112,15 +113,55 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
 
 - (void) activate
 {
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
   [self reloadConfiguration];
   [self applyRuntimeDefaults];
   [super activate];
+  [center addObserver: self
+             selector: @selector(windowNeedsMainMenu:)
+                 name: NSWindowDidBecomeKeyNotification
+               object: nil];
+  [center addObserver: self
+             selector: @selector(windowNeedsMainMenu:)
+                 name: NSWindowDidBecomeMainNotification
+               object: nil];
 }
 
 - (void) deactivate
 {
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
+  [center removeObserver: self name: NSWindowDidBecomeKeyNotification object: nil];
+  [center removeObserver: self name: NSWindowDidBecomeMainNotification object: nil];
   [self removeRuntimeDefaults];
   [super deactivate];
+}
+
+/* With NSWindows95InterfaceStyle, GNUstep puts the main menu only into the
+   windows that exist when the menu is first updated (-[NSMenu update] calls
+   -updateAllWindowsWithMenu: once), so a window created after launch has no
+   menu bar. Attach it when such a window becomes key or main. Windows given a
+   menu of their own, and windows that can't become main (panels, menus), are
+   left alone. */
+- (void) windowNeedsMainMenu: (NSNotification *)notification
+{
+  NSWindow *window = [notification object];
+  NSMenu *mainMenu = [NSApp mainMenu];
+
+  if (mainMenu == nil || [window isKindOfClass: [NSWindow class]] == NO)
+    {
+      return;
+    }
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      return;
+    }
+  if ([window canBecomeMainWindow] == NO || [window menu] != nil)
+    {
+      return;
+    }
+  [self updateMenu: mainMenu forWindow: window];
 }
 
 - (NSColorList *) colors
