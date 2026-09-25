@@ -164,6 +164,14 @@ Useful helpers:
 - `bash Tests/Scripts/capture-theme-demo.sh --page controls --output /tmp/theme-controls.png`
 - `bash Tests/Scripts/capture-adwaita-demo.sh --page controls --output /tmp/adwaita-controls.png`
 - `python3 Reference/AdwaitaDemo/adwaita_demo.py --dump-metrics`
+- `python3 Tests/Scripts/import-adwaita-cursors.py`
+
+`import-adwaita-cursors.py` imports the stock Adwaita diagonal resize Xcursor
+assets from `/usr/share/icons/Adwaita/cursors` and writes GNUstep-loadable TIFF
+resources into `Resources/ThemeImages`. These resources provide
+`GSFrameResizeNWSECursor` and `GSFrameResizeNESWCursor` for Cocoa-style apps
+that need frame/corner resize cursors before GNUstep exposes AppKit's
+`NSCursor` frame-resize API directly.
 
 ThemeDemo also accepts command automation for focused visual checks:
 
