@@ -16,6 +16,11 @@ it was found. Compare against the libadwaita reference with
 | Password field text sat 10pt left of other fields' text | same subclass fix (`NSSecureTextFieldCell`) |
 | ThemeDemo stuck at 2× after a `capture-theme-demo.sh --scale 2` run | the script passes `-GSScaleFactor`/`-GSTheme` as launch arguments |
 | Bold text (`boldSystemFontOfSize:`, title bar, table headers) drew in DejaVu Sans Bold | the theme sets `NSBoldFont` to the interface font's bold face (`Cantarell_700wght`) |
+| With `NSWindows95InterfaceStyle`, windows created after launch had no menu bar (GNUstep bug, upstream issue 2) | the theme attaches the main menu when a window that can become main, and has no menu, becomes key or main |
+| Demo and capture scripts tested the installed theme (`-GSTheme Adwaita`), which was from Jul 27 | they pass the built bundle by absolute path (`--theme`/`ADWAITA_THEME` to override) and no longer save `GSTheme` in ThemeDemo's defaults |
+
+Regression checks for these live in `Examples/QuirkProbe`; run
+`make check-quirks` (see the README).
 
 ## GNOME-native polish (suggested)
 
@@ -52,28 +57,21 @@ and in OneDriveServiceManager's main window.
 
 ## Theme follow-ups
 
-- **Menu bar in windows created after launch.** With
-  `NSWindows95InterfaceStyle`, GNUstep attaches the main menu only to windows
-  that exist when the menu is first updated (upstream issue 2 below). The theme
-  places in-window menus, so it can work around this: when a window that can
-  become main becomes key without the main menu, call
-  `-updateMenu:forWindow:`.
 - **`NSMenuItemCell` overrides still use the exact-class lookup.** Their only
   subclass is `NSPopUpButtonCell`, whose layout (`GnomeThemePhase67…`) was tuned
   to the original method being unreachable. Switching them to
   `GnomeThemeOriginalMethod()` moved long pop-up titles about 50pt right (stress
   page). Revisit together with the pop-up layout.
-- **A regression harness.** The quirk probe used to check OneDriveServiceManager's
-  notes (image-only and view toolbar items, sized buttons and checkboxes,
-  wrapping and long-path labels, a multi-line alert, fonts, a late window's
-  menu) could live in `Examples/` and run under Xvfb against the built theme
-  bundle, by absolute path.
-- **Test the build, not the install.** `-GSTheme Adwaita` loads
-  `~/GNUstep/Library/Themes/Adwaita.theme`. On 2026-09-24 that copy was from
-  Jul 27, and OneDriveServiceManager's quirks (clipped titles, invisible
-  toolbar items, one-line labels and alerts) all came from it. Pass the built
-  bundle's absolute path (`-GSTheme $PWD/Adwaita.theme`) when checking changes,
-  and `make install` after merging.
+- **Install after merging.** Apps load `~/GNUstep/Library/Themes/Adwaita.theme`.
+  On 2026-09-24 that copy was from Jul 27, and all of OneDriveServiceManager's
+  quirks (clipped titles, invisible toolbar items, one-line labels and alerts)
+  came from it. Run `make install GNUSTEP_INSTALLATION_DOMAIN=USER` after each
+  merge.
+- **Remove workarounds when upstream fixes land.** The probe's
+  `toolbar-view-item-image` check reports PASS instead of KNOWN once libs-gui
+  stops clearing view images. Also drop `GnomeThemeOriginalMethod()`'s fallback
+  when `-overriddenMethod:for:` walks superclasses, and `-windowNeedsMainMenu:`
+  when libs-gui attaches the menu to late windows.
 
 ## GNUstep issues to report upstream
 
@@ -89,7 +87,8 @@ a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
 2. **libs-gui: `NSWindows95InterfaceStyle` windows created after launch get
    no menu bar.** The menu reaches windows only through
    `-updateAllWindowsWithMenu:`, which runs when the main menu changes. Seen
-   under GNOME/Mutter and under Xvfb. Workaround:
+   under GNOME/Mutter and under Xvfb. This theme works around it
+   (`-[GnomeTheme windowNeedsMainMenu:]`); elsewhere, apps call
    `[window setMenu: [NSApp mainMenu]]`.
 3. **libs-base: the main dispatch queue is drained only in
    `NSDefaultRunLoopMode`.** Main-queue blocks stall in the modal-panel and

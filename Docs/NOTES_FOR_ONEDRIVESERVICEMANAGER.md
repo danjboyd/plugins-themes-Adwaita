@@ -65,9 +65,11 @@ reported upstream.
    `[item setView: button]; [item setImage: [button image]];`.
 2. **With `NSWindows95InterfaceStyle`, the menu bar appears only in windows
    that existed when the menu was set up.** Windows created later (detail
-   window, wizards) get none. **Workaround:** keep calling
-   `[window setMenu: [NSApp mainMenu]]` for every window that should show
-   the menu. The theme may take this over later; the call stays harmless.
+   window, wizards) get none. **The theme now handles this** (since
+   2026-09-24, sprint 1): when a window that can become main becomes key or
+   main without a menu, the theme gives it the main menu. Your
+   `[window setMenu: [NSApp mainMenu]]` calls are no longer needed with this
+   theme. They're harmless, and still needed under other themes.
 3. **`beginSheet:` blocks main-queue work.** GNUstep services the main
    dispatch queue only in `NSDefaultRunLoopMode`. A sheet or modal panel
    (`NSModalPanelRunLoopMode`), or menu and scroller tracking
