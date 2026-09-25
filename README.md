@@ -128,6 +128,21 @@ python3 Reference/AdwaitaDemo/adwaita_demo.py --page data
 python3 Reference/AdwaitaDemo/adwaita_demo.py --page text
 ```
 
+## Settings
+
+The theme reads these from an app's defaults (`defaults write APP KEY VALUE`,
+or `-KEY VALUE` on the command line):
+
+- `GnomeThemeMetrics`: `gnome` or `compact`. Apps whose windows are built in
+  code get GNOME's metrics: the interface font at GNOME's size (11pt at
+  96dpi, about 14.7px), bold button titles, libadwaita's button padding and
+  tab height. Apps with a main Gorm or nib file (`NSMainNibFile`,
+  `NSMainStoryboardFile` or `GSMainMarkupFile` in their Info.plist) get
+  `compact` metrics instead: GNUstep's 12pt, regular-weight button titles,
+  GNUstep's button margins and tab height, so layouts made at those metrics
+  fit. Set it to override that choice.
+- `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
+
 ## Development Notes
 
 The fastest practical review loop is:

@@ -42,6 +42,8 @@ it was found. Compare against the libadwaita reference with
 | Grooved and bezelled boxes (Gorm's inspectors) had blue edges | `controlHighlightColor`/`controlLightHighlightColor` are the light edges of GNUstep's 3D bevels, not selection colours: white in the light palette, a light grey in the dark one |
 | Box titles drawn by an `NSTextFieldCell` (Gorm's "Type", "Options", "Alignment") came out upside down | text in a cell drawn by a non-flipped view (an NSBox) is drawn with string drawing; flipping the context by hand mirrored the glyphs |
 | `NSForm` entries (Gorm's "Title:" fields) were white boxes | the entry is drawn as an Adwaita entry; NSFormCell filled it with `textBackgroundColor` after the border |
+| Gorm and nib layouts clipped at GNOME's font size ("Miniaturize" as "Miniatur") | compact metrics for apps with a main Gorm or nib file: GNUstep's 12pt, regular button titles, GNUstep's button margins and tab height, 14pt indicators; `GnomeThemeMetrics` (`gnome`/`compact`) overrides the choice per app (see the README) |
+| Menu bar titles were about 37px apart; GTK's are about 20px | about 22px, so narrow windows (Gorm's document window) fit their menus |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -62,19 +64,13 @@ spacing) are in the Fixed table. Still different from GNOME:
 ## Gorm and other nib-based apps
 
 Found putting Gorm through its paces (its palettes, inspectors and document
-window, compared with the GNUstep theme). What's left comes from metrics, not
-drawing:
+window, compared with the GNUstep theme). Still open:
 
-- **Fixed layouts designed at GNUstep's metrics.** Gorm files (and nibs)
-  place controls in fixed frames sized for GNUstep's 12pt font. At GNOME's
-  interface size (11pt at 96dpi, about 14.7px) and with bold button titles,
-  labels and titles clip: "Miniaturize" shows as "Miniatur", the palette's
-  "Button" as "Butt". Every app whose windows come from Gorm or nib files is
-  affected, not only Gorm.
-- **Menu bars in narrow windows.** At this font and item padding, Gorm's
-  document window can't show Tools and Windows: they run past the window's
-  edge and can't be reached from there. ☰ stays first so the application
-  menu is always reachable.
+- **Compact metrics are per app.** A code-built app that also loads Gorm
+  or nib windows gets GNOME's metrics for all of them; it can set
+  `GnomeThemeMetrics` to `compact`.
+- **Menu bars in very narrow windows** can still run past the edge; ☰ stays
+  first so the application menu is always reachable.
 - **Gorm's CustomView palette item** draws as a pale disabled button instead
   of a dark tile.
 
