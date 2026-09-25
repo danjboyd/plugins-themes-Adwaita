@@ -1409,6 +1409,28 @@ objectValueForTableColumn: (NSTableColumn *)column
   [switcher setDelegate: nil];
 }
 
+/* An app built in code (no main nib) gets GNOME's metrics: the interface
+   font at GNOME's size, not GNUstep's 12pt, and bold button titles. Apps
+   with a main Gorm or nib file get GNUstep's metrics instead (compact),
+   and -GnomeThemeMetrics compact|gnome overrides either way. */
+- (void) checkMetricsMode
+{
+  NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"];
+  CGFloat size = [[NSFont systemFontOfSize: 0] pointSize];
+  BOOL compact = [choice isEqualToString: @"compact"];
+  NSString *detail = [NSString stringWithFormat: @"system font %gpt (%@)",
+    size, choice != nil ? choice : @"automatic, no main nib"];
+
+  if ((compact && fabs (size - 12.0) < 0.5) || (compact == NO && size > 13.0))
+    {
+      [self pass: @"metrics-mode" detail: detail];
+    }
+  else
+    {
+      [self fail: @"metrics-mode" detail: detail];
+    }
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -1509,6 +1531,7 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkApplicationMenuPosition];
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
+  [self checkMetricsMode];
   [self checkFonts];
   [self checkHiddenWindows];
 
