@@ -2415,7 +2415,7 @@ GnomeThemeDrawTabLabel(NSString *label,
 - (void) _overrideNSScrollerMethod_drawRect: (NSRect)rect
 {
   typedef void (*DrawRectIMP)(id, SEL, NSRect);
-  DrawRectIMP originalIMP = (DrawRectIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  DrawRectIMP originalIMP = (DrawRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
   NSScroller *scroller = (NSScroller *)self;
   GnomeTheme *theme = GnomeThemeActiveTheme ();
 
@@ -2475,15 +2475,38 @@ GnomeThemeDrawTabLabel(NSString *label,
 - (NSRect) _overrideNSTextFieldCellMethod_titleRectForBounds: (NSRect)aRect
 {
   typedef NSRect (*TitleRectIMP)(id, SEL, NSRect);
-  TitleRectIMP originalIMP = (TitleRectIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  TitleRectIMP originalIMP = (TitleRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextFieldCell class]);
   NSTextFieldCell *cell = (NSTextFieldCell *)self;
-  NSRect titleRect = (originalIMP != NULL) ? originalIMP (self, _cmd, aRect) : aRect;
+  /* Header cells already get the theme's header insets from
+     -tableHeaderCellDrawingRectForBounds:; the original method would apply them a
+     second time (the header layout was tuned when it wasn't reachable for them). */
+  BOOL headerCell = [cell isKindOfClass: [NSTableHeaderCell class]];
+  NSRect titleRect = (originalIMP != NULL && headerCell == NO) ? originalIMP (self, _cmd, aRect) : aRect;
   NSFont *font = GnomeThemeResolvedEditorFont (cell);
   NSDictionary *attributes = nil;
   NSSize titleSize;
 
   attributes = [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName];
   titleSize = [@"Ag" sizeWithAttributes: attributes];
+
+  /* Labels (text fields without a bezel) whose text needs more than one line
+     (line breaks, or a wrapping cell too narrow for it) keep the full rect;
+     centring them on one line showed only their first line, e.g. an NSAlert's
+     informative text. Cells drawn by table and header views stay single-line. */
+  if ([cell isBezeled] == NO && [cell isBordered] == NO
+    && [[cell controlView] isKindOfClass: [NSTextField class]])
+    {
+      NSString *string = [cell stringValue];
+      BOOL hasBreaks = [string rangeOfCharacterFromSet: [NSCharacterSet newlineCharacterSet]].location != NSNotFound;
+      BOOL overflows = [cell wraps] && [[cell attributedStringValue] size].width > NSWidth (titleRect);
+
+      /* Only when the frame has room for a second line; a one-line label that's
+         too long keeps being centred (and clipped) as before. */
+      if ((hasBreaks || overflows) && NSHeight (aRect) >= 2.0 * titleSize.height)
+        {
+          return titleRect;
+        }
+    }
 
   if ([cell isBezeled] || [cell isBordered])
     {
@@ -2504,7 +2527,7 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   typedef NSText *(*SetUpFieldEditorAttributesIMP)(id, SEL, NSText *);
   SetUpFieldEditorAttributesIMP originalIMP
-    = (SetUpFieldEditorAttributesIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+    = (SetUpFieldEditorAttributesIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextFieldCell class]);
   NSTextFieldCell *cell = (NSTextFieldCell *)self;
   NSText *editor = textObject;
   NSView *controlView = [cell controlView];
@@ -2530,7 +2553,7 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   typedef void (*DrawBackgroundIMP)(id, SEL, NSRect, NSView *);
   DrawBackgroundIMP originalIMP
-    = (DrawBackgroundIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+    = (DrawBackgroundIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextFieldCell class]);
   NSTextFieldCell *cell = (NSTextFieldCell *)self;
 
   if ([cell isBezeled] || [cell isBordered])
@@ -2666,7 +2689,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                            withView: (NSView *)view
 {
   typedef void (*DrawSegmentIMP)(id, SEL, NSInteger, NSRect, NSView *);
-  DrawSegmentIMP originalIMP = (DrawSegmentIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  DrawSegmentIMP originalIMP = (DrawSegmentIMP)GnomeThemeOriginalMethod (_cmd, self, [NSSegmentedCell class]);
   GnomeTheme *theme = GnomeThemeActiveTheme ();
   NSSegmentedCell *cell = (NSSegmentedCell *)self;
   NSString *label = [cell labelForSegment: segmentIndex];
@@ -2762,7 +2785,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                                          inView: (NSView *)controlView
 {
   typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
-  DrawInteriorIMP originalIMP = (DrawInteriorIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  DrawInteriorIMP originalIMP = (DrawInteriorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSPopUpButtonCell class]);
   NSPopUpButtonCell *cell = (NSPopUpButtonCell *)self;
   NSPopUpArrowPosition originalArrowPosition = [cell arrowPosition];
   NSMenuItem *item = [cell menuItem];
@@ -2855,7 +2878,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                                       inView: (NSView *)controlView
 {
   typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
-  DrawInteriorIMP originalIMP = (DrawInteriorIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  DrawInteriorIMP originalIMP = (DrawInteriorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBoxCell class]);
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
   NSRect buttonRect = GnomeThemeComboBoxButtonRect (cellFrame);
   NSRect textRect = GnomeThemeComboBoxTextRect (cell, cellFrame);
@@ -2910,7 +2933,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                      untilMouseUp: (BOOL)flag
 {
   typedef BOOL (*TrackMouseIMP)(id, SEL, NSEvent *, NSRect, NSView *, BOOL);
-  TrackMouseIMP originalIMP = (TrackMouseIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  TrackMouseIMP originalIMP = (TrackMouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBoxCell class]);
   NSPoint point = [controlView convertPoint: [theEvent locationInWindow] fromView: nil];
   BOOL nonEditableCombo = ([controlView isKindOfClass: [NSComboBox class]]
     && [(NSComboBox *)controlView isEditable] == NO);
@@ -3049,20 +3072,42 @@ GnomeThemeDrawTabLabel(NSString *label,
 - (NSSize) _overrideNSButtonCellMethod_cellSize
 {
   typedef NSSize (*CellSizeIMP)(id, SEL);
-  CellSizeIMP originalIMP = (CellSizeIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                       for: self];
+  CellSizeIMP originalIMP = (CellSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSButtonCell class]);
   NSButtonCell *cell = (NSButtonCell *)self;
   NSSize size = (originalIMP != NULL) ? originalIMP (self, _cmd) : NSMakeSize (0.0, 0.0);
+  BOOL checkbox = GnomeThemeButtonCellIsCheckbox (cell);
+  BOOL radio = GnomeThemeButtonCellIsRadio (cell);
+  /* Measure with the geometry the drawing code uses, on a generous probe frame:
+     what the bezel takes (drawingRectForBounds:) plus the theme's own insets. A
+     title even a pixel short of its width wraps its last word onto a clipped
+     second line, so "Sign In" would draw as "Sign". */
+  NSRect probe = NSMakeRect (0.0, 0.0, 600.0, MAX (size.height, 34.0));
+  NSRect drawing = [cell drawingRectForBounds: probe];
+  CGFloat bezel = probe.size.width - drawing.size.width;
+  static const CGFloat slack = 4.0;
 
-  if (GnomeThemeButtonCellIsCheckbox (cell) == NO
-    && GnomeThemeButtonCellIsRadio (cell) == NO
-    && [cell image] == nil)
+  if (checkbox || radio)
+    {
+      /* Mirrors drawInteriorWithFrame: an indicator of at least 18pt at +2,
+         a 10pt gap, then the title in the cell's own font. */
+      NSAttributedString *title = [cell attributedTitle];
+      CGFloat indicatorSize = MAX (18.0, floor (drawing.size.height * 0.58));
+      CGFloat labelWidth = [title length] > 0 ? ceil ([title size].width) : 0.0;
+      CGFloat width = bezel + 2.0 + indicatorSize + (labelWidth > 0.0 ? 10.0 + labelWidth + slack : 2.0);
+
+      size.width = MAX (size.width, ceil (width));
+      size.height = MAX (size.height, indicatorSize + 4.0);
+      return size;
+    }
+
+  if ([cell image] == nil)
     {
       NSSize labelSize = GnomeThemeButtonLabelSize (cell);
-      CGFloat horizontalPadding = ([cell isBordered] || [cell isBezeled]) ? 32.0 : 12.0;
+      NSRect titleRect = GnomeThemeButtonTitleRect (cell, probe);
+      CGFloat insets = drawing.size.width - titleRect.size.width;
       CGFloat verticalPadding = ([cell isBordered] || [cell isBezeled]) ? 12.0 : 6.0;
 
-      size.width = MAX (size.width, ceil (labelSize.width + horizontalPadding));
+      size.width = MAX (size.width, ceil (labelSize.width + bezel + insets + slack));
       size.height = MAX (size.height, ceil (labelSize.height + verticalPadding));
 
       if ([cell isBordered] || [cell isBezeled])
@@ -3081,7 +3126,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                       untilMouseUp: (BOOL)flag
 {
   typedef BOOL (*TrackMouseIMP)(id, SEL, NSEvent *, NSRect, NSView *, BOOL);
-  TrackMouseIMP originalIMP = (TrackMouseIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  TrackMouseIMP originalIMP = (TrackMouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSSegmentedCell class]);
   GnomeTheme *theme = GnomeThemeActiveTheme ();
   NSSegmentedCell *cell = (NSSegmentedCell *)self;
   NSPoint point = [controlView convertPoint: [theEvent locationInWindow] fromView: nil];
@@ -3133,7 +3178,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                                     inView: (NSView *)controlView
 {
   typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
-  DrawInteriorIMP originalIMP = (DrawInteriorIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  DrawInteriorIMP originalIMP = (DrawInteriorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSButtonCell class]);
   NSButtonCell *cell = (NSButtonCell *)self;
   BOOL checkbox = GnomeThemeButtonCellIsCheckbox ((NSButtonCell *)self);
   BOOL radio = GnomeThemeButtonCellIsRadio ((NSButtonCell *)self);

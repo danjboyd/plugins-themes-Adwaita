@@ -23,6 +23,13 @@
 @class GnomeThemeSettings;
 @class GnomeThemeMetrics;
 
+/* The implementation a theme override replaced. GSTheme's -overriddenMethod:for:
+   only matches the receiver's exact class, so when a subclass (for example
+   GSToolbarButtonCell or NSMenuItemCell) reaches an override through `super`,
+   it answers NULL and the override has nothing to fall back on. This looks the
+   method up for `baseClass`, the class the override was installed on, instead. */
+IMP GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass);
+
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;
