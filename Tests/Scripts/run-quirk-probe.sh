@@ -25,7 +25,8 @@
 #                                         [--display :N] [--no-build]
 #
 # QUIRK_PROBE_ARGS passes extra defaults to the probe, for example
-# QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".
+# QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary", or
+# QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO" for the header bar.
 #
 # --output DIR  also writes a PNG of each probe window to DIR.
 # --display :N  uses an existing X display instead of starting Xvfb.
@@ -118,7 +119,8 @@ else
 fi
 
 # The checks assume GNOME's default look (light, Cantarell 11), whatever this
-# desktop uses: give the probe its own GSettings with those values.
+# desktop uses: give the probe its own GSettings with those values. The
+# header bar checks want every window button.
 mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
 cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<'KEYFILE'
 [org/gnome/desktop/interface]
@@ -126,6 +128,10 @@ color-scheme='default'
 gtk-theme='Adwaita'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'
+
+[org/gnome/desktop/wm/preferences]
+button-layout='appmenu:minimize,maximize,close'
+action-double-click-titlebar='toggle-maximize'
 KEYFILE
 
 PROBE_ARGS=(-GSTheme "$THEME" -NSMenuInterfaceStyle NSWindows95InterfaceStyle)

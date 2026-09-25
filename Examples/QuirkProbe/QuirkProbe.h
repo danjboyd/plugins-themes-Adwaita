@@ -33,6 +33,7 @@
   NSWindow *_toolbarWindow;
   NSWindow *_lateWindow;
   NSWindow *_tableWindow;
+  NSWindow *_headerWindow;
   NSTableView *_defaultGridTable;
   NSTableView *_explicitGridTable;
   NSPopUpButton *_popUpButton;

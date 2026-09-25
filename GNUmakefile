@@ -70,9 +70,13 @@ demo:
 probe:
 	$(MAKE) -C Examples/QuirkProbe
 
+# Menu bar and primary menu, each with the window manager's title bar and
+# with the theme's header bar.
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install

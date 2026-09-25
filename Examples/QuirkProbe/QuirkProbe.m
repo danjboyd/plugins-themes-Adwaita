@@ -21,6 +21,7 @@
 #import "QuirkProbe.h"
 #import <GNUstepGUI/GSTheme.h>
 #import <GNUstepGUI/GSDragView.h>
+#import <GNUstepGUI/GSDisplayServer.h>
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,6 +42,7 @@ typedef struct
   NSInteger height;
   NSUInteger count;
   NSUInteger darkest;   /* lowest red + green + blue among accepted pixels */
+  NSInteger minY;
 } QuirkProbeInk;
 
 typedef BOOL (*QuirkProbePixelTest)(NSUInteger red, NSUInteger green, NSUInteger blue);
@@ -104,7 +106,7 @@ QuirkProbeRender (NSView *view)
 static QuirkProbeInk
 QuirkProbeMeasureIn (NSBitmapImageRep *rep, QuirkProbePixelTest test, NSRect area)
 {
-  QuirkProbeInk ink = { 0, 0, 0, 0, NSUIntegerMax };
+  QuirkProbeInk ink = { 0, 0, 0, 0, NSUIntegerMax, 0 };
   NSInteger samples = [rep samplesPerPixel];
   NSInteger bits = [rep bitsPerSample];
   NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
@@ -160,6 +162,7 @@ QuirkProbeMeasureIn (NSBitmapImageRep *rep, QuirkProbePixelTest test, NSRect are
       ink.minX = minX;
       ink.width = maxX - minX + 1;
       ink.height = maxY - minY + 1;
+      ink.minY = minY;
     }
   return ink;
 }
@@ -255,6 +258,65 @@ QuirkProbeSendApplicationEvent (NSWindow *window, NSEventType type)
                                clickCount: 1
                                  pressure: 1.0];
     }
+  [NSApp sendEvent: event];
+  [window displayIfNeeded];
+}
+
+/* YES when GNUstep draws the window decorations (-GSX11HandlesWindowDecorations
+   NO), so the theme draws its header bar. */
+static BOOL
+QuirkProbeDrawsDecorations (void)
+{
+  return [GSCurrentServer () handlesWindowDecorations] == NO;
+}
+
+/* How far below the top of `view` a subview's `frame` starts. */
+static CGFloat
+QuirkProbeTopGap (NSView *view, NSRect frame)
+{
+  return [view isFlipped] ? NSMinY (frame) : NSMaxY ([view bounds]) - NSMaxY (frame);
+}
+
+/* The header bar's window buttons, left to right. */
+static NSArray *
+QuirkProbeWindowButtons (NSView *frameView)
+{
+  NSMutableArray *buttons = [NSMutableArray array];
+  NSEnumerator *enumerator = [[frameView subviews] objectEnumerator];
+  NSView *subview;
+  NSUInteger i, j;
+
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if ([subview isKindOfClass: NSClassFromString (@"GnomeThemeWindowButton")] && [subview isHidden] == NO)
+        {
+          [buttons addObject: subview];
+        }
+    }
+  for (i = 1; i < [buttons count]; i++)
+    {
+      for (j = i; j > 0 && NSMinX ([[buttons objectAtIndex: j] frame]) < NSMinX ([[buttons objectAtIndex: j - 1] frame]); j--)
+        {
+          [buttons exchangeObjectAtIndex: j withObjectAtIndex: j - 1];
+        }
+    }
+  return buttons;
+}
+
+/* A click in `window` at `point` (window coordinates), sent through NSApp. */
+static void
+QuirkProbeClick (NSWindow *window, NSPoint point, NSInteger clickCount)
+{
+  NSEvent *event = [NSEvent mouseEventWithType: NSLeftMouseDown
+                                      location: point
+                                 modifierFlags: 0
+                                     timestamp: 0
+                                  windowNumber: [window windowNumber]
+                                       context: nil
+                                   eventNumber: 0
+                                    clickCount: clickCount
+                                      pressure: 1.0];
+
   [NSApp sendEvent: event];
   [window displayIfNeeded];
 }
@@ -371,6 +433,8 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 - (NSWindow *) windowWithFrame: (NSRect)frame title: (NSString *)title;
 - (NSTextField *) labelWithText: (NSString *)text frame: (NSRect)frame;
 - (NSImage *) magentaImage;
+- (void) checkPrimaryMenuInMenuBar;
+- (void) checkPrimaryMenuInHeaderBar;
 @end
 
 @implementation QuirkProbe
@@ -686,6 +750,21 @@ objectValueForTableColumn: (NSTableColumn *)column
   _explicitGridTable = [self addTableAt: NSMakeRect (20, 10, 260, 140) inView: view];
   [_explicitGridTable setGridStyleMask: NSTableViewSolidHorizontalGridLineMask];
   [_tableWindow orderFront: nil];
+
+  /* A window with every window button, for the header bar checks. */
+  if (QuirkProbeDrawsDecorations ())
+    {
+      _headerWindow = [[NSWindow alloc] initWithContentRect: NSMakeRect (480, 200, 420, 160)
+                                                  styleMask: (NSTitledWindowMask | NSClosableWindowMask
+                                                              | NSMiniaturizableWindowMask | NSResizableWindowMask)
+                                                    backing: NSBackingStoreBuffered
+                                                      defer: NO];
+      [_headerWindow setTitle: @"QuirkProbe Header Bar"];
+      [_headerWindow setReleasedWhenClosed: NO];
+      [_windows addObject: _headerWindow];
+      RELEASE (_headerWindow);
+      [_headerWindow orderFront: nil];
+    }
 }
 
 #pragma mark Checks
@@ -1480,13 +1559,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
    menu bar; clicking ☰ shows the main menu vertically under it. */
 - (void) checkPrimaryMenu
 {
-  NSView *controlsFrame = [[_controlsWindow contentView] superview];
-  NSView *toolbarFrame = [[_toolbarWindow contentView] superview];
-  NSMenuView *controlsBar = (NSMenuView *)QuirkProbeFindViewOfClass (controlsFrame, [NSMenuView class]);
-  NSMenuView *toolbarBar = (NSMenuView *)QuirkProbeFindViewOfClass (toolbarFrame, [NSMenuView class]);
-  NSView *barButton = QuirkProbePrimaryButtonIn (controlsBar);
-  NSView *toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
-  NSView *toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
+  NSView *barButton;
   NSString *detail;
   NSRect buttonInWindow;
   NSEvent *click;
@@ -1496,6 +1569,96 @@ QuirkProbePrimaryButtonIn (NSView *view)
       [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary"];
       return;
     }
+
+  if (QuirkProbeDrawsDecorations ())
+    {
+      [self checkPrimaryMenuInHeaderBar];
+    }
+  else
+    {
+      [self checkPrimaryMenuInMenuBar];
+    }
+
+  /* Open it, with an application menu and an Edit menu added: the click's
+     tracking loop runs until -inspectPrimaryMenu: closes the menu. */
+  {
+    NSMenu *mainMenu = [NSApp mainMenu];
+    NSString *name = [[NSProcessInfo processInfo] processName];
+    NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: name]);
+    NSMenu *editMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Edit"]);
+    NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: name action: NULL keyEquivalent: @""]);
+    NSMenuItem *editItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: @"Edit" action: NULL keyEquivalent: @""]);
+
+    [appMenu addItemWithTitle: @"Preferences…" action: NULL keyEquivalent: @","];
+    [appMenu addItemWithTitle: @"About QuirkProbe" action: @selector(orderFrontStandardAboutPanel:) keyEquivalent: @""];
+    [editMenu addItemWithTitle: @"Copy" action: @selector(copy:) keyEquivalent: @"c"];
+    [appItem setSubmenu: appMenu];
+    [editItem setSubmenu: editMenu];
+    [mainMenu insertItem: appItem atIndex: 0];
+    [mainMenu addItem: editItem];
+    _primaryExtraItems = [[NSArray alloc] initWithObjects: appItem, editItem, nil];
+  }
+  ASSIGN (QuirkProbePrimaryTitles, [NSMutableArray array]);
+  /* Changing the main menu gives the window a new menu view and ☰. */
+  barButton = QuirkProbePrimaryButtonIn ([[_controlsWindow contentView] superview]);
+  buttonInWindow = [barButton convertRect: [barButton bounds] toView: nil];
+  click = [NSEvent mouseEventWithType: NSLeftMouseDown
+                             location: NSMakePoint (NSMaxX (buttonInWindow) - 23, NSMidY (buttonInWindow))
+                        modifierFlags: 0
+                            timestamp: 0
+                         windowNumber: [_controlsWindow windowNumber]
+                              context: nil
+                          eventNumber: 0
+                           clickCount: 1
+                             pressure: 1.0];
+  /* A click: the menu opens on the release and stays open. */
+  [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseUp
+                                       location: [click locationInWindow]
+                                  modifierFlags: 0
+                                      timestamp: 0
+                                   windowNumber: [_controlsWindow windowNumber]
+                                        context: nil
+                                    eventNumber: 0
+                                     clickCount: 1
+                                       pressure: 0.0]
+           atStart: NO];
+  [self after: 0.3 perform: @selector(inspectPrimaryMenu:) mode: NSEventTrackingRunLoopMode];
+  [barButton mouseDown: click];
+  {
+    NSEnumerator *extras = [_primaryExtraItems objectEnumerator];
+    NSMenuItem *extra;
+
+    while ((extra = [extras nextObject]) != nil)
+      {
+        [[NSApp mainMenu] removeItem: extra];
+      }
+    DESTROY (_primaryExtraItems);
+  }
+
+  detail = [NSString stringWithFormat: @"menu %@ at %@, the button's right edge at %g",
+    [QuirkProbePrimaryTitles componentsJoinedByString: @" | "], NSStringFromRect (QuirkProbePrimaryFrame),
+    [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x];
+  /* The app's menus in order, then its application menu's items. */
+  if ([[QuirkProbePrimaryTitles componentsJoinedByString: @" | "]
+        isEqualToString: @"File | Edit | -- | Preferences… | About QuirkProbe"]
+    && fabs (NSMaxX (QuirkProbePrimaryFrame) - [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x) < 1.0)
+    [self pass: @"primary-menu-opens" detail: detail];
+  else
+    [self fail: @"primary-menu-opens" detail: detail];
+}
+
+/* Without the header bar, the ☰ is in a slim bar, or at the toolbar's end
+   when the window shows one. */
+- (void) checkPrimaryMenuInMenuBar
+{
+  NSView *controlsFrame = [[_controlsWindow contentView] superview];
+  NSView *toolbarFrame = [[_toolbarWindow contentView] superview];
+  NSMenuView *controlsBar = (NSMenuView *)QuirkProbeFindViewOfClass (controlsFrame, [NSMenuView class]);
+  NSMenuView *toolbarBar = (NSMenuView *)QuirkProbeFindViewOfClass (toolbarFrame, [NSMenuView class]);
+  NSView *barButton = QuirkProbePrimaryButtonIn (controlsBar);
+  NSView *toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
+  NSView *toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
+  NSString *detail;
 
   detail = [NSString stringWithFormat: @"bar %gpt high with %@; toolbar window: bar %gpt, ☰ %@ beside a toolbar ending at %g",
     NSHeight ([controlsBar frame]), barButton != nil ? @"☰" : @"no ☰",
@@ -1531,62 +1694,231 @@ QuirkProbePrimaryButtonIn (NSView *view)
     else
       [self fail: @"primary-menu-toolbar-toggle" detail: detail];
   }
+}
 
-  /* Open it, with an application menu and an Edit menu added: the click's
-     tracking loop runs until -inspectPrimaryMenu: closes the menu. */
-  {
-    NSMenu *mainMenu = [NSApp mainMenu];
-    NSString *name = [[NSProcessInfo processInfo] processName];
-    NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: name]);
-    NSMenu *editMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Edit"]);
-    NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: name action: NULL keyEquivalent: @""]);
-    NSMenuItem *editItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: @"Edit" action: NULL keyEquivalent: @""]);
+/* With the header bar, the ☰ is in it: at the bar's end, or 6pt before the
+   window buttons (the ☰ view keeps that margin at its right). There's no
+   menu bar row, and the toolbar isn't narrowed for it. */
+- (void) checkPrimaryMenuInHeaderBar
+{
+  NSView *controlsFrame = [[_controlsWindow contentView] superview];
+  NSView *headerFrame = [[_headerWindow contentView] superview];
+  NSView *toolbarFrame = [[_toolbarWindow contentView] superview];
+  NSView *controlsButton = QuirkProbePrimaryButtonIn (controlsFrame);
+  NSView *headerButton = QuirkProbePrimaryButtonIn (headerFrame);
+  NSView *toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
+  NSArray *windowButtons = QuirkProbeWindowButtons (headerFrame);
+  NSMenuView *bar = (NSMenuView *)QuirkProbeFindViewOfClass (controlsFrame, [NSMenuView class]);
+  NSView *toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
+  NSView *content = [_toolbarWindow contentView];
+  NSToolbar *toolbar = [_toolbarWindow toolbar];
+  CGFloat hiddenGap, shownGap;
+  NSString *detail;
 
-    [appMenu addItemWithTitle: @"Preferences…" action: NULL keyEquivalent: @","];
-    [appMenu addItemWithTitle: @"About QuirkProbe" action: @selector(orderFrontStandardAboutPanel:) keyEquivalent: @""];
-    [editMenu addItemWithTitle: @"Copy" action: @selector(copy:) keyEquivalent: @"c"];
-    [appItem setSubmenu: appMenu];
-    [editItem setSubmenu: editMenu];
-    [mainMenu insertItem: appItem atIndex: 0];
-    [mainMenu addItem: editItem];
-    _primaryExtraItems = [[NSArray alloc] initWithObjects: appItem, editItem, nil];
-  }
-  ASSIGN (QuirkProbePrimaryTitles, [NSMutableArray array]);
-  /* Changing the main menu gives the window a new menu view and ☰. */
-  barButton = QuirkProbePrimaryButtonIn ([[_controlsWindow contentView] superview]);
-  buttonInWindow = [barButton convertRect: [barButton bounds] toView: nil];
-  click = [NSEvent mouseEventWithType: NSLeftMouseDown
-                             location: NSMakePoint (NSMaxX (buttonInWindow) - 23, NSMidY (buttonInWindow))
-                        modifierFlags: 0
-                            timestamp: 0
-                         windowNumber: [_controlsWindow windowNumber]
-                              context: nil
-                          eventNumber: 0
-                           clickCount: 1
-                             pressure: 1.0];
-  [self after: 0.3 perform: @selector(inspectPrimaryMenu:) mode: NSEventTrackingRunLoopMode];
-  [barButton mouseDown: click];
-  {
-    NSEnumerator *extras = [_primaryExtraItems objectEnumerator];
-    NSMenuItem *extra;
-
-    while ((extra = [extras nextObject]) != nil)
-      {
-        [[NSApp mainMenu] removeItem: extra];
-      }
-    DESTROY (_primaryExtraItems);
-  }
-
-  detail = [NSString stringWithFormat: @"menu %@ at %@, the button's right edge at %g",
-    [QuirkProbePrimaryTitles componentsJoinedByString: @" | "], NSStringFromRect (QuirkProbePrimaryFrame),
-    [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x];
-  /* The app's menus in order, then its application menu's items. */
-  if ([[QuirkProbePrimaryTitles componentsJoinedByString: @" | "]
-        isEqualToString: @"File | Edit | -- | Preferences… | About QuirkProbe"]
-    && fabs (NSMaxX (QuirkProbePrimaryFrame) - [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x) < 1.0)
-    [self pass: @"primary-menu-opens" detail: detail];
+  detail = [NSString stringWithFormat: @"☰ %@ in a %gpt-wide frame, %gpt from the top; ☰ %@ before buttons from %g; menu bar %gpt; toolbar to %g, content to %g",
+    NSStringFromRect ([controlsButton frame]), NSWidth ([controlsFrame bounds]),
+    QuirkProbeTopGap (controlsFrame, [controlsButton frame]), NSStringFromRect ([headerButton frame]),
+    [windowButtons count] > 0 ? NSMinX ([[windowButtons objectAtIndex: 0] frame]) : -1.0,
+    NSHeight ([bar frame]), NSMaxX ([toolbarView frame]), NSMaxX ([content frame])];
+  if ([controlsButton superview] == controlsFrame && NSMaxX ([controlsButton frame]) == NSMaxX ([controlsFrame bounds])
+    && QuirkProbeTopGap (controlsFrame, [controlsButton frame]) == 0 && NSHeight ([controlsButton frame]) == 46
+    && [headerButton superview] == headerFrame && [windowButtons count] > 0
+    && NSMaxX ([headerButton frame]) == NSMinX ([[windowButtons objectAtIndex: 0] frame])
+    && (bar == nil || [bar superview] == nil || NSHeight ([bar frame]) == 0)
+    && [toolbarButton superview] == toolbarFrame && NSMaxX ([toolbarView frame]) == NSMaxX ([content frame]))
+    [self pass: @"primary-menu-placement" detail: detail];
   else
-    [self fail: @"primary-menu-opens" detail: detail];
+    [self fail: @"primary-menu-placement" detail: detail];
+
+  /* Hiding the toolbar leaves no bar: the content meets the header bar. */
+  [toolbar setVisible: NO];
+  hiddenGap = QuirkProbeTopGap (toolbarFrame, [content frame]);
+  [toolbar setVisible: YES];
+  toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
+  shownGap = QuirkProbeTopGap (toolbarFrame, [toolbarView frame]);
+  detail = [NSString stringWithFormat: @"toolbar hidden: content %gpt from the top; shown: toolbar %gpt from the top, %gpt above the content",
+    hiddenGap, shownGap, NSMinY ([toolbarView frame]) - NSMaxY ([content frame])];
+  if (hiddenGap == 46 && shownGap == 46 && fabs (NSMinY ([toolbarView frame]) - NSMaxY ([content frame])) <= 1
+    && [QuirkProbePrimaryButtonIn (toolbarFrame) superview] == toolbarFrame)
+    [self pass: @"primary-menu-toolbar-toggle" detail: detail];
+  else
+    [self fail: @"primary-menu-toolbar-toggle" detail: detail];
+}
+
+/* The header bar the theme draws when GNUstep draws the decorations,
+   measured against libadwaita 1.7 (Reference/HeaderBar). */
+- (void) checkHeaderBar
+{
+  NSView *frameView = [[_headerWindow contentView] superview];
+  NSRect bounds = [frameView bounds];
+  NSArray *buttons = QuirkProbeWindowButtons (frameView);
+  NSButton *closeButton = [buttons lastObject];
+  NSString *detail;
+  NSRect titleInk = NSZeroRect;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"header-bar" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+
+  /* A 46pt bar; 34pt buttons 6pt from the top and the end, 3pt apart, in
+     button-layout's order (appmenu:minimize,maximize,close here). */
+  {
+    NSMutableArray *parts = [NSMutableArray array];
+    NSEnumerator *enumerator = [[frameView subviews] objectEnumerator];
+    NSView *subview;
+    CGFloat below = NSHeight (bounds);
+    BOOL ok = [frameView isKindOfClass: NSClassFromString (@"GnomeThemeHeaderBarDecorationView")] && [buttons count] == 3;
+    NSUInteger i;
+
+    while ((subview = [enumerator nextObject]) != nil)
+      {
+        if ([buttons containsObject: subview] == NO && subview != QuirkProbePrimaryButtonIn (frameView))
+          {
+            below = MIN (below, QuirkProbeTopGap (frameView, [subview frame]));
+          }
+      }
+    for (i = 0; i < [buttons count]; i++)
+      {
+        NSButton *button = [buttons objectAtIndex: i];
+        NSRect frame = [button frame];
+        NSInteger expected[] = { NSWindowMiniaturizeButton, NSWindowZoomButton, NSWindowCloseButton };
+
+        [parts addObject: [NSString stringWithFormat: @"%ld at %@", (long)[button tag], NSStringFromRect (frame)]];
+        ok = ok && i < 3 && [button tag] == expected[i] && NSWidth (frame) == 34 && NSHeight (frame) == 34
+          && QuirkProbeTopGap (frameView, frame) == 6
+          && (i == 0 || NSMinX (frame) - NSMaxX ([[buttons objectAtIndex: i - 1] frame]) == 3);
+      }
+    ok = ok && NSMaxX ([closeButton frame]) == NSMaxX (bounds) - 6 && below == 46;
+    detail = [NSString stringWithFormat: @"%@ in %@; content %gpt from the top; buttons %@",
+      NSStringFromClass ([frameView class]), NSStringFromRect (bounds), below,
+      [parts componentsJoinedByString: @", "]];
+    if (ok)
+      [self pass: @"header-bar-layout" detail: detail];
+    else
+      [self fail: @"header-bar-layout" detail: detail];
+  }
+
+  /* Rendered: the bold title centred on the window (or, when that would
+     reach them, 6pt clear of the controls at the end, as GTK's centre box
+     shifts it) with its ink 17px from the top (as libadwaita's), and a
+     circle 10% of the text colour behind the buttons. */
+  {
+    NSBitmapImageRep *rep;
+    QuirkProbeInk title, circle, background;
+    NSRect closeFrame = [closeButton frame];
+    NSView *menuButton = QuirkProbePrimaryButtonIn (frameView);
+    CGFloat circleY = QuirkProbeTopGap (frameView, closeFrame) + 17;
+    CGFloat centre, expected, end;
+
+    /* Renders come from the backing store: draw the focus change first. */
+    [_headerWindow makeKeyWindow];
+    [_headerWindow displayIfNeeded];
+    rep = QuirkProbeRender (frameView);
+    /* Up to the buttons, or the ☰ before them in the primary menu's
+       run. */
+    title = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk,
+                                 NSMakeRect (0, 1, NSMinX (menuButton != nil ? [menuButton frame]
+                                                           : [[buttons objectAtIndex: 0] frame]), 44));
+    titleInk = NSMakeRect (title.minX, title.minY, title.width, title.height);
+    centre = title.minX + title.width / 2.0;
+    end = NSMinX (menuButton != nil ? [menuButton frame] : [[buttons objectAtIndex: 0] frame]) - 6;
+    expected = MIN (NSWidth (bounds) / 2.0, end - title.width / 2.0);
+    circle = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (NSMinX (closeFrame) + 6, circleY - 1, 2, 3));
+    background = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (NSMinX (closeFrame) - 2, circleY - 1, 1, 3));
+    detail = [NSString stringWithFormat: @"title ink %ldx%ld at (%ld, %ld), centre %g (expected %g); circle %lu on %lu",
+      (long)title.width, (long)title.height, (long)title.minX, (long)title.minY, centre, expected,
+      (unsigned long)circle.darkest, (unsigned long)background.darkest];
+    if (title.count > 0 && fabs (centre - expected) <= 3 && title.minY >= 16 && title.minY <= 18
+      && title.height >= 10 && title.height <= 14
+      && background.darkest > circle.darkest + 30 && background.darkest < circle.darkest + 110)
+      [self pass: @"header-bar-render" detail: detail];
+    else
+      [self fail: @"header-bar-render" detail: detail];
+  }
+
+  /* Another window key: the title dims, as GTK's backdrop state. */
+  {
+    NSUInteger focused = QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk).darkest;
+    NSUInteger dimmed;
+
+    [_controlsWindow makeKeyWindow];
+    [_headerWindow displayIfNeeded];
+    dimmed = QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk).darkest;
+    detail = [NSString stringWithFormat: @"title's darkest pixel %lu focused, %lu not", (unsigned long)focused, (unsigned long)dimmed];
+    if (focused < 306 && dimmed >= focused + 150)
+      [self pass: @"header-bar-backdrop" detail: detail];
+    else
+      [self fail: @"header-bar-backdrop" detail: detail];
+  }
+
+  /* Edges resize: the frame view takes clicks there, over the content.
+     A window that can't be resized leaves them to the content. */
+  {
+    NSView *controlsFrame = [[_controlsWindow contentView] superview];
+    CGFloat midY = NSMidY (bounds) - 20;
+    BOOL edges = [frameView hitTest: NSMakePoint (2, midY)] == frameView
+      && [frameView hitTest: NSMakePoint (NSMaxX (bounds) - 2, midY)] == frameView
+      && [frameView hitTest: NSMakePoint (NSMidX (bounds), 2)] == frameView
+      && [frameView hitTest: NSMakePoint (3, 3)] == frameView;
+    NSView *inside = [frameView hitTest: NSMakePoint (12, midY)];
+    NSView *fixed = [controlsFrame hitTest: NSMakePoint (2, 100)];
+
+    detail = [NSString stringWithFormat: @"edges %@; 12pt in: %@; unresizable window's edge: %@",
+      edges ? @"taken" : @"not taken", NSStringFromClass ([inside class]), NSStringFromClass ([fixed class])];
+    if (edges && inside != frameView && fixed != controlsFrame)
+      [self pass: @"header-bar-resize-edges" detail: detail];
+    else
+      [self fail: @"header-bar-resize-edges" detail: detail];
+  }
+
+  /* Double-clicking the bar maximises (GNOME's default action); again
+     goes back to the frame before. */
+  {
+    NSRect before = [_headerWindow frame];
+    NSRect maximised;
+    BOOL zoomed;
+
+    QuirkProbeClick (_headerWindow, NSMakePoint (40, NSHeight ([frameView bounds]) - 20), 2);
+    maximised = [_headerWindow frame];
+    zoomed = [_headerWindow isZoomed];
+    QuirkProbeClick (_headerWindow, NSMakePoint (40, NSHeight ([frameView bounds]) - 20), 2);
+    detail = [NSString stringWithFormat: @"%@, then %@ (%@), then %@", NSStringFromRect (before),
+      NSStringFromRect (maximised), zoomed ? @"zoomed" : @"not zoomed", NSStringFromRect ([_headerWindow frame])];
+    if (zoomed && NSEqualRects (maximised, before) == NO && NSEqualRects ([_headerWindow frame], before))
+      [self pass: @"header-bar-double-click" detail: detail];
+    else
+      [self fail: @"header-bar-double-click" detail: detail];
+  }
+
+  /* A window that can only be closed: one button, at the end, which
+     closes it. */
+  {
+    NSWindow *closable = [[NSWindow alloc] initWithContentRect: NSMakeRect (500, 420, 240, 80)
+                                                     styleMask: NSTitledWindowMask | NSClosableWindowMask
+                                                       backing: NSBackingStoreBuffered
+                                                         defer: NO];
+    NSView *closableFrame;
+    NSArray *closableButtons;
+    NSButton *button;
+
+    [closable setReleasedWhenClosed: NO];
+    [closable setTitle: @"Closable"];
+    [closable orderFront: nil];
+    closableFrame = [[closable contentView] superview];
+    closableButtons = QuirkProbeWindowButtons (closableFrame);
+    button = [closableButtons lastObject];
+    detail = [NSString stringWithFormat: @"%lu button(s), the last at %@ in %@",
+      (unsigned long)[closableButtons count], NSStringFromRect ([button frame]), NSStringFromRect ([closableFrame bounds])];
+    [button performClick: nil];
+    if ([closableButtons count] == 1 && [button tag] == NSWindowCloseButton
+      && NSMaxX ([button frame]) == NSMaxX ([closableFrame bounds]) - 6 && [closable isVisible] == NO)
+      [self pass: @"header-bar-close" detail: detail];
+    else
+      [self fail: @"header-bar-close" detail: [detail stringByAppendingString: [closable isVisible] ? @"; still open" : @""]];
+    RELEASE (closable);
+  }
 }
 
 - (void) checkFonts
@@ -1691,6 +2023,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self checkGormControls];
   [self checkMetricsMode];
   [self checkPrimaryMenu];
+  [self checkHeaderBar];
   [self checkFonts];
   [self checkHiddenWindows];
 
