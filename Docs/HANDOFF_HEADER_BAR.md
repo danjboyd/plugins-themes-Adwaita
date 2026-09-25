@@ -188,12 +188,12 @@ mark the split. Opt-in per app (see Decisions).
 
 ## Progress (2026-09-25)
 
-Phase 1, steps 1 and 2 are built (not yet committed at the time of
-writing): `Source/Rendering/GnomeThemeHeaderBar.m`, the ☰ hand-over in
-`GnomeThemePrimaryMenu.m`, `button-layout` and
-`action-double-click-titlebar` in `GnomeThemeSettings`, six `header-bar-*`
-QuirkProbe checks, and `make check-quirks` runs four configurations (38, 41,
-44 and 47 checks, all passing).
+Phase 1 is built: `Source/Rendering/GnomeThemeHeaderBar.m`, the ☰ hand-over
+in `GnomeThemePrimaryMenu.m`, `button-layout` and
+`action-double-click-titlebar` in `GnomeThemeSettings`, nine `header-bar-*`
+QuirkProbe checks plus `primary-menu-escape`. `make check-quirks` runs four
+configurations (38, 42, 46 and 50 checks, all passing). Dan tried the demo
+by hand on GNOME Wayland (menu bar and primary menu) and was happy with it.
 
 Measured and settled (from `Reference/HeaderBar/headerbar_reference.py`,
 libadwaita 1.7.6):
@@ -211,6 +211,14 @@ libadwaita 1.7.6):
 - Not focused (GTK's backdrop state follows keyboard focus, not main-window
   status): text at 60% of the text colour over the background.
 
+Window kinds: panels and utility panels get the bar with a close button; a
+window with buttons and no title gets the bar without one; resizable-only
+windows keep a border; borderless and `NSFullScreenWindowMask` windows get
+neither. Alerts (GSAlertPanel, alone or as a sheet) have no bar, as
+AdwAlertDialog: in header bar mode they are created with
+`NSDocModalWindowMask` instead of `NSTitledWindowMask` (NSPanel can become
+key without a title bar).
+
 GNUstep facts found on the way:
 
 - `-[NSWindow zoom:]` maximises but only goes back through an autosave
@@ -218,17 +226,17 @@ GNUstep facts found on the way:
 - `GSWindowDecorationView -layout` puts a menu bar 1pt above the content
   area; the header bar trims it so the bar keeps its 46px.
 - NSButton is flipped (the icons turn over for it).
+- GNUstep has no `-setStyleMask:` and no `-toggleFullScreen:`.
+- In gui 0.32.0 any mouse up ends menu tracking, so a click closed ☰
+  straight away; fixed on master (upstream item 8). ☰ opens on the release
+  and tracks from a fresh press; Escape closes it.
 - QuirkProbe renders come from the window's backing store: call
-  `displayIfNeeded` after a state change before rendering.
+  `displayIfNeeded` after a state change before rendering. Cursor rects
+  post `NSCursorUpdate` events: deliver them before reading
+  `[NSCursor currentCursor]`.
 
-Still to do in phase 1:
-
-- Try it by hand: dragging the bar, resizing from each edge and corner (the
-  loop uses the real pointer, so the probe can't drag), the resize cursors
-  (added with `addCursorRect:` on the decoration view; not checked yet), and
-  hover on the window buttons.
-- Step 3: panels, sheets, alerts, utility windows, untitled and borderless
-  windows, fullscreen.
+Next: phase 2 (libs-back). The proposal to send to libs-back's maintainers
+is `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
 
 ## Testing
 

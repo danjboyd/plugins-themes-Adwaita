@@ -47,7 +47,8 @@ it was found. Compare against the libadwaita reference with
 | GNOME apps have no menu bar | `GnomeThemeMenuStyle = primary` (a user default, or the app's Info.plist) turns it into GNOME's main menu button: at the end of the toolbar when the window shows one (the toolbar is narrowed for it), otherwise alone in a slim bar; it shows a copy of the main menu (the menus, then the application menu's items) right-aligned under the button, rebuilt each time it opens |
 | An app laid out in Gorm for GNOME's metrics would get compact metrics (it has a main nib) | apps can declare `GnomeThemeMetrics` in their Info.plist; the user's default still wins |
 | Gorm's palettes make controls at GNUstep's sizes (22pt buttons) | `Palettes/Adwaita`: a Gorm palette of controls at GNOME's sizes, with fonts left at the system font's default size so they follow the app's metrics (checked: archived at 12pt in a compact process, read back at 14.7pt in a GNOME one) |
-| With `GSX11HandlesWindowDecorations NO`, GNUstep drew a NeXT title bar (black, round miniaturise and close buttons, resizable only from a bottom bar) | libadwaita's header bar, measured against libadwaita 1.7 renders (`Reference/HeaderBar`): 46pt including a 1px window border, bold centred title (shifted clear of the buttons when they're in the way, shortened with an ellipsis), round 34pt window buttons with Adwaita's icons in `button-layout` order, ☰ before them with the primary menu, title and icons dimmed when the window isn't key; moving by the bar, resizing from every edge and corner (5pt strips inside the border), and the `action-double-click-titlebar` action, with maximise going back to the frame before. The theme can't turn this on itself: the backend reads the flag before the theme loads |
+| Clicking ☰ opened its menu and the release closed it again (libs-gui 0.32, upstream item 8) | the menu opens on the click's release and stays open until a click picks an item or lands outside it; Escape closes it |
+| With `GSX11HandlesWindowDecorations NO`, GNUstep drew a NeXT title bar (black, round miniaturise and close buttons, resizable only from a bottom bar) | libadwaita's header bar, measured against libadwaita 1.7 renders (`Reference/HeaderBar`): 46pt including a 1px window border, bold centred title (shifted clear of the buttons when they're in the way, shortened with an ellipsis), round 34pt window buttons with Adwaita's icons in `button-layout` order, ☰ before them with the primary menu, title and icons dimmed when the window isn't key; moving by the bar, resizing from every edge and corner (5pt strips inside the border), and the `action-double-click-titlebar` action, with maximise going back to the frame before. The theme can't turn this on itself: the backend reads the flag before the theme loads. Alerts (alone or as sheets) have no bar, as AdwAlertDialog: a border only. Panels get the bar with a close button; windows with buttons and no title get the bar without one; borderless windows and `NSFullScreenWindowMask` get neither bar nor border |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -106,7 +107,13 @@ window, compared with the GNUstep theme). Still open:
   tracking rects if libs-gui starts tracking for
   `showsBorderOnlyWhileMouseInside`. Drop the `GSTTPanel` and
   `GSDragView` overrides once Mutter thaws unmapped windows (GNOME/mutter#5080)
-  or libs-gui stops shrinking them (libs-gui#964).
+  or libs-gui stops shrinking them (libs-gui#964). When a libs-gui release
+  has a84b42471 (upstream item 8), ☰ can open on the press again and track
+  with GNUstep's own first-release rule.
+- **Check libs-gui master before its next release.** On 2026-09-25 the
+  probe's `table-header` check failed against master (gui ff49ac8): header
+  text starts about 110pt in and isn't dimmed. Everything else, including
+  the header bar and ☰ checks, passed.
 
 ## GNUstep issues to report upstream
 
@@ -154,6 +161,14 @@ installed 0.32.0, using the default theme.
    registered.** Filed as
    [gnustep/libs-gui#965](https://github.com/gnustep/libs-gui/issues/965). The backend can't identify the tool tip panel, so it types
    it `_NET_WM_WINDOW_TYPE_DIALOG` instead of `_TOOLTIP`.
+
+Found on 2026-09-25 while building the header bar; already fixed on master.
+
+8. **libs-gui: a click on a menu title closes the menu on the release.** In
+   gui 0.32.0 every mouse up ends menu tracking (commit 82717eefe), so
+   menu bar menus and ☰ closed as soon as the click that opened them was
+   released. Fixed on master by a84b42471; not in a release yet. The theme
+   works around it for ☰ (see `8-libs-gui-menu-click-closes-fixed-on-master.md`).
 
 ### Reported by OneDriveServiceManager: withdrawn
 
