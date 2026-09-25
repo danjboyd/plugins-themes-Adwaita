@@ -74,6 +74,13 @@ QuirkProbeIsMagenta (NSUInteger red, NSUInteger green, NSUInteger blue)
   return red > 200 && green < 80 && blue > 200;
 }
 
+/* The focus ring: the accent blue blended toward the window background. */
+static BOOL
+QuirkProbeIsFocusBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return blue > 200 && blue > red + 30;
+}
+
 static NSBitmapImageRep *
 QuirkProbeRender (NSView *view)
 {
@@ -202,6 +209,45 @@ QuirkProbeMoveMouse (NSWindow *window, NSPoint point)
   [window sendEvent: event];
   /* Renders come from the window's backing store: draw what the event
      invalidated first. */
+  [window displayIfNeeded];
+}
+
+/* Sends an event through NSApp, as a real key or pointer press arrives. */
+static void
+QuirkProbeSendApplicationEvent (NSWindow *window, NSEventType type)
+{
+  NSEvent *event;
+
+  if (type == NSKeyDown)
+    {
+      /* F13: no control or key binding uses it. */
+      NSString *key = [NSString stringWithFormat: @"%C", (unichar)NSF13FunctionKey];
+
+      event = [NSEvent keyEventWithType: NSKeyDown
+                               location: NSZeroPoint
+                          modifierFlags: 0
+                              timestamp: 0
+                           windowNumber: [window windowNumber]
+                                context: nil
+                             characters: key
+            charactersIgnoringModifiers: key
+                              isARepeat: NO
+                                keyCode: 0];
+    }
+  else
+    {
+      /* On the window background, clear of any control. */
+      event = [NSEvent mouseEventWithType: type
+                                 location: NSMakePoint (5, 5)
+                            modifierFlags: 0
+                                timestamp: 0
+                             windowNumber: [window windowNumber]
+                                  context: nil
+                              eventNumber: 0
+                               clickCount: 1
+                                 pressure: 1.0];
+    }
+  [NSApp sendEvent: event];
   [window displayIfNeeded];
 }
 
@@ -874,6 +920,60 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* A focused push button, as in OneDriveServiceManager's Resync panel, where
+   Cancel is the first key view. As in GTK, the ring shows only after a key
+   press. It runs along the button's edge: not around the title (where NSCell
+   put a second ring) and not in the corners outside the rounded fill (all
+   that showed of a ring drawn outside the frame). */
+- (void) checkButtonFocusRing
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (480, 700, 200, 60) title: @"QuirkProbe Focus"];
+  NSButton *button = [[NSButton alloc] initWithFrame: NSMakeRect (40, 15, 120, 30)];
+  NSRect bounds;
+  NSRect inner;
+  QuirkProbeInk afterClick, afterKey, title, corner;
+  NSString *detail;
+
+  [button setTitle: @"Cancel"];
+  [button setBezelStyle: NSRoundedBezelStyle];
+  [button setKeyEquivalent: @"\e"];
+  [[window contentView] addSubview: button];
+  RELEASE (button);
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: button];
+  bounds = [button bounds];
+  inner = NSInsetRect (bounds, 5, 5);
+
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseUp);
+  afterClick = QuirkProbeMeasure (QuirkProbeRender (button), QuirkProbeIsFocusBlue);
+  QuirkProbeSendApplicationEvent (window, NSKeyDown);
+  afterKey = QuirkProbeMeasure (QuirkProbeRender (button), QuirkProbeIsFocusBlue);
+  title = QuirkProbeMeasureIn (QuirkProbeRender (button), QuirkProbeIsFocusBlue, inner);
+  corner = QuirkProbeMeasureIn (QuirkProbeRender (button), QuirkProbeIsFocusBlue, NSMakeRect (0, 0, 2, 2));
+  [self saveWindow: window named: @"button-focus"];
+  /* Leave focus-visible off for later checks. */
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseUp);
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"ring pixels: %lu after a click, %lu after a key "
+    @"(%ldx%ld of %gx%g), %lu around the title, %lu in the corner",
+    (unsigned long)afterClick.count, (unsigned long)afterKey.count,
+    (long)afterKey.width, (long)afterKey.height, NSWidth (bounds), NSHeight (bounds),
+    (unsigned long)title.count, (unsigned long)corner.count];
+  if (afterClick.count == 0 && afterKey.count > 0
+    && afterKey.width + 4 >= NSWidth (bounds) && afterKey.height + 4 >= NSHeight (bounds)
+    && title.count == 0 && corner.count == 0)
+    {
+      [self pass: @"button-focus-ring" detail: detail];
+    }
+  else
+    {
+      [self fail: @"button-focus-ring" detail: detail];
+    }
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -966,6 +1066,7 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkToolbarEdges];
   [self checkToolbarHover];
   [self checkPopUpButton];
+  [self checkButtonFocusRing];
   [self checkFonts];
   [self checkHiddenWindows];
 
