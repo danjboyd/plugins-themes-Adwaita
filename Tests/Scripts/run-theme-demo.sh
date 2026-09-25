@@ -20,6 +20,9 @@
 set -eu
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# The theme bundle built in this checkout, by absolute path. `-GSTheme Adwaita`
+# would load the installed copy (~/GNUstep/Library/Themes), which can be older.
+THEME="${ADWAITA_THEME:-$REPO_DIR/Adwaita.theme}"
 GNUSTEP_SH="/usr/GNUstep/System/Library/Makefiles/GNUstep.sh"
 
 if [ -f "$GNUSTEP_SH" ]; then
@@ -34,7 +37,7 @@ cd "$REPO_DIR"
 make
 make demo
 
-defaults write ThemeDemo GSTheme Adwaita
+defaults delete ThemeDemo GSTheme >/dev/null 2>&1 || true
 defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
 defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
-openapp Examples/ThemeDemo/ThemeDemo.app "$@"
+openapp Examples/ThemeDemo/ThemeDemo.app -GSTheme "$THEME" "$@"

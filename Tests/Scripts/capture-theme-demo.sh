@@ -20,6 +20,9 @@
 set -eu
 
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+# The theme bundle built in this checkout, by absolute path. `-GSTheme Adwaita`
+# would load the installed copy (~/GNUstep/Library/Themes), which can be older.
+THEME="${ADWAITA_THEME:-$REPO_DIR/Adwaita.theme}"
 OUTPUT=""
 PAGE="controls"
 OPEN_MENU=""
@@ -116,6 +119,10 @@ while [ "$#" -gt 0 ]; do
       SCALE="$2"
       shift 2
       ;;
+    --theme)
+      THEME="$2"
+      shift 2
+      ;;
     *)
       echo "unknown argument: $1" >&2
       exit 2
@@ -139,7 +146,12 @@ set -u
 # at double size for every later launch after a `--scale 2` capture.
 defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
 defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
-DEFAULT_ARGS=(-GSTheme Adwaita)
+if [ ! -d "$THEME" ]; then
+  echo "theme bundle not found: $THEME (run make first)" >&2
+  exit 1
+fi
+defaults delete ThemeDemo GSTheme >/dev/null 2>&1 || true
+DEFAULT_ARGS=(-GSTheme "$THEME")
 if [ -n "$SCALE" ]; then
   DEFAULT_ARGS+=(-GSScaleFactor "$SCALE")
 fi
