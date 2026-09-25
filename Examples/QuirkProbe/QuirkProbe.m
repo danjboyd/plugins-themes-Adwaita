@@ -974,6 +974,196 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* The label starts about 5px after a checkbox's indicator, as in GTK. */
+- (void) checkCheckboxGap
+{
+  NSEnumerator *enumerator = [_sizedButtons objectEnumerator];
+  NSArray *pair;
+
+  while ((pair = [enumerator nextObject]) != nil)
+    {
+      NSButton *button = [pair objectAtIndex: 0];
+      NSBitmapImageRep *rep;
+      QuirkProbeInk text, indicator;
+      NSInteger gap;
+      NSString *detail;
+
+      if ([[button title] isEqualToString: @"Errors only"] == NO)
+        {
+          continue;
+        }
+      rep = QuirkProbeRender (button);
+      text = QuirkProbeMeasure (rep, QuirkProbeIsTextInk);
+      indicator = QuirkProbeMeasureIn (rep, QuirkProbeIsNotWhite,
+                                       NSMakeRect (0, 0, text.minX - 1, [rep pixelsHigh]));
+      gap = text.minX - (indicator.minX + indicator.width);
+      detail = [NSString stringWithFormat: @"indicator %ldpx wide, label %ldpx after it",
+        (long)indicator.width, (long)gap];
+      if (text.count > 0 && indicator.count > 0 && gap >= 3 && gap <= 7)
+        {
+          [self pass: @"checkbox-label-gap" detail: detail];
+        }
+      else
+        {
+          [self fail: @"checkbox-label-gap" detail: detail];
+        }
+      return;
+    }
+  [self fail: @"checkbox-label-gap" detail: @"checkbox not found"];
+}
+
+/* A table built in code gets GTK's list density; one the app sized keeps
+   its rows. */
+- (void) checkTableDensity
+{
+  NSTableView *plain = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 100, 100)]);
+  NSTableView *sized = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 100, 100)]);
+  NSString *detail;
+
+  [sized setRowHeight: 22.0];
+  detail = [NSString stringWithFormat: @"default rows %gpt, spacing %@; app-sized rows %gpt",
+    [plain rowHeight], NSStringFromSize ([plain intercellSpacing]), [sized rowHeight]];
+  if ([plain rowHeight] >= 34.0 && NSEqualSizes ([plain intercellSpacing], NSZeroSize)
+    && [sized rowHeight] == 22.0)
+    {
+      [self pass: @"table-row-density" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-row-density" detail: detail];
+    }
+}
+
+/* Top tabs are flat, GtkNotebook style: only the selected tab is marked, by
+   a 4px accent underline at the bottom of the tab strip. */
+- (void) checkTabView
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (700, 700, 360, 120) title: @"QuirkProbe Tabs"];
+  NSTabView *tabView = [[NSTabView alloc] initWithFrame: NSMakeRect (10, 10, 340, 100)];
+  NSArray *labels = [NSArray arrayWithObjects: @"Overview", @"Activity", @"Settings", nil];
+  NSEnumerator *enumerator = [labels objectEnumerator];
+  NSString *label;
+  NSBitmapImageRep *rep;
+  CGFloat tabHeight = [[GSTheme theme] tabHeightForType: NSTopTabsBezelBorder];
+  QuirkProbeInk accent, text;
+  NSString *detail;
+
+  while ((label = [enumerator nextObject]) != nil)
+    {
+      NSTabViewItem *item = [[NSTabViewItem alloc] initWithIdentifier: label];
+
+      [item setLabel: label];
+      [tabView addTabViewItem: item];
+      RELEASE (item);
+    }
+  [[window contentView] addSubview: tabView];
+  RELEASE (tabView);
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (tabView);
+  [self saveWindow: window named: @"tabs"];
+  [window orderOut: nil];
+
+  accent = QuirkProbeMeasureIn (rep, QuirkProbeIsFocusBlue, NSMakeRect (0, 0, [rep pixelsWide], tabHeight));
+  text = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk, NSMakeRect (0, 0, [rep pixelsWide], tabHeight));
+  detail = [NSString stringWithFormat: @"accent %ldx%ld at x %ld in a %gpt strip; labels from x %ld",
+    (long)accent.width, (long)accent.height, (long)accent.minX, tabHeight, (long)text.minX];
+  /* One underline, 4px high, under the first tab only (it starts left of
+     the first label and is far narrower than the strip). */
+  if (accent.count > 0 && accent.height == 4 && accent.minX < text.minX
+    && accent.width < [rep pixelsWide] / 2 && accent.count == (NSUInteger)(accent.width * accent.height))
+    {
+      [self pass: @"tab-view-flat" detail: detail];
+    }
+  else
+    {
+      [self fail: @"tab-view-flat" detail: detail];
+    }
+}
+
+/* A toolbar the app gives no display mode starts icon-only, as GNOME header
+   bars are; one the app sets keeps its mode, and a toolbar with the same
+   identifier copies it. */
+- (void) checkToolbarDisplayMode
+{
+  NSToolbar *fresh = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeFresh"]);
+  NSToolbar *chosen = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeChosen"]);
+  NSToolbar *sibling;
+  NSString *detail;
+
+  [chosen setDisplayMode: NSToolbarDisplayModeIconAndLabel];
+  sibling = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeChosen"]);
+  detail = [NSString stringWithFormat: @"default %d, app's choice %d, same identifier %d (icon-only %d, icon and label %d)",
+    (int)[fresh displayMode], (int)[chosen displayMode], (int)[sibling displayMode],
+    (int)NSToolbarDisplayModeIconOnly, (int)NSToolbarDisplayModeIconAndLabel];
+  if ([fresh displayMode] == NSToolbarDisplayModeIconOnly
+    && [chosen displayMode] == NSToolbarDisplayModeIconAndLabel
+    && [sibling displayMode] == NSToolbarDisplayModeIconAndLabel)
+    {
+      [self pass: @"toolbar-default-icon-only" detail: detail];
+    }
+  else
+    {
+      [self fail: @"toolbar-default-icon-only" detail: detail];
+    }
+}
+
+/* With an application menu (the app has loose items such as Info), its ☰
+   sits at the right end of the menu bar, and clicks there reach it. */
+- (void) checkApplicationMenuPosition
+{
+  NSMenu *mainMenu = [NSApp mainMenu];
+  NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: [[NSProcessInfo processInfo] processName]]);
+  NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: [[NSProcessInfo processInfo] processName]
+                                                                  action: NULL
+                                                           keyEquivalent: @""]);
+  NSMenuView *menuView;
+  NSRect appRect, fileRect;
+  NSInteger hit;
+  CGFloat submenuRight, itemRight;
+  NSString *detail;
+
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      [self skip: @"menubar-app-menu-at-end" detail: @"needs -NSMenuInterfaceStyle NSWindows95InterfaceStyle"];
+      return;
+    }
+  [appMenu addItemWithTitle: @"Info" action: NULL keyEquivalent: @""];
+  [appItem setSubmenu: appMenu];
+  [mainMenu insertItem: appItem atIndex: 0];
+  menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([[_controlsWindow contentView] superview],
+                                                      [NSMenuView class]);
+  [menuView sizeToFit];
+  appRect = [menuView rectOfItemAtIndex: 0];
+  fileRect = [menuView rectOfItemAtIndex: 1];
+  hit = [menuView indexOfItemAtPoint: NSMakePoint (NSMidX (appRect), NSMidY (appRect))];
+  /* Its menu opens with right edges aligned. */
+  submenuRight = [menuView locationForSubmenu: appMenu].x
+    + NSWidth ([[[appMenu menuRepresentation] window] frame]);
+  itemRight = [_controlsWindow convertBaseToScreen:
+                 [menuView convertPoint: NSMakePoint (NSMaxX (appRect), 0) toView: nil]].x;
+  [mainMenu removeItem: appItem];
+  [menuView sizeToFit];
+
+  detail = [NSString stringWithFormat: @"app menu at x %g-%g of %g, File at x %g, a click on the app menu hits item %ld, "
+    @"its menu ends at screen x %g (the item at %g)",
+    NSMinX (appRect), NSMaxX (appRect), NSWidth ([menuView bounds]), NSMinX (fileRect), (long)hit,
+    submenuRight, itemRight];
+  if (menuView == nil)
+    {
+      [self fail: @"menubar-app-menu-at-end" detail: @"no menu view in the window"];
+    }
+  else if (NSMaxX (appRect) > NSWidth ([menuView bounds]) - 20 && NSMinX (fileRect) < 20 && hit == 0
+    && fabs (submenuRight - itemRight) < 1.0)
+    {
+      [self pass: @"menubar-app-menu-at-end" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menubar-app-menu-at-end" detail: detail];
+    }
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -1067,6 +1257,11 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkToolbarHover];
   [self checkPopUpButton];
   [self checkButtonFocusRing];
+  [self checkCheckboxGap];
+  [self checkTableDensity];
+  [self checkTabView];
+  [self checkToolbarDisplayMode];
+  [self checkApplicationMenuPosition];
   [self checkFonts];
   [self checkHiddenWindows];
 
@@ -1128,6 +1323,7 @@ objectValueForTableColumn: (NSTableColumn *)column
     {
       [self checkLabel: text ident: @"alert-informative-text-wraps" lineHeight: [self lineHeight]];
     }
+  [self checkAlertLayout: panel];
   /* -stopModal takes effect when the modal loop next handles an event. */
   [NSApp stopModal];
   [NSApp postEvent: [NSEvent otherEventWithType: NSApplicationDefined
@@ -1141,6 +1337,57 @@ objectValueForTableColumn: (NSTableColumn *)column
                                           data2: 0]
            atStart: NO];
   [self after: 1.0 perform: @selector(forceEndAlert:) mode: NSModalPanelRunLoopMode];
+}
+
+/* Laid out like AdwAlertDialog: no icon or line, the heading centred, the
+   buttons one row of equal widths with the default (Remove) at the right. */
+- (void) checkAlertLayout: (NSWindow *)panel
+{
+  NSEnumerator *enumerator = [[[panel contentView] subviews] objectEnumerator];
+  NSView *view;
+  NSButton *remove = nil, *cancel = nil;
+  NSUInteger visibleIcons = 0, visibleLines = 0;
+  NSTextField *heading = (NSTextField *)QuirkProbeFindText ([panel contentView], @"Remove this library?");
+  NSString *detail;
+
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isHidden])
+        {
+          continue;
+        }
+      if ([view isKindOfClass: [NSBox class]])
+        {
+          visibleLines++;
+        }
+      else if ([view isKindOfClass: [NSButton class]])
+        {
+          NSString *title = [(NSButton *)view title];
+
+          if ([title isEqualToString: @"Remove"])
+            remove = (NSButton *)view;
+          else if ([title isEqualToString: @"Cancel"])
+            cancel = (NSButton *)view;
+          else if ([(NSButton *)view isBordered] == NO)
+            visibleIcons++;
+        }
+    }
+  detail = [NSString stringWithFormat: @"%lu icons, %lu lines; Remove %@, Cancel %@; heading %@",
+    (unsigned long)visibleIcons, (unsigned long)visibleLines,
+    NSStringFromRect ([remove frame]), NSStringFromRect ([cancel frame]),
+    [heading alignment] == NSCenterTextAlignment ? @"centred" : @"not centred"];
+  if (remove != nil && cancel != nil && visibleIcons == 0 && visibleLines == 0
+    && NSWidth ([remove frame]) == NSWidth ([cancel frame])
+    && NSMinY ([remove frame]) == NSMinY ([cancel frame])
+    && NSMinX ([remove frame]) > NSMaxX ([cancel frame])
+    && [heading alignment] == NSCenterTextAlignment)
+    {
+      [self pass: @"alert-adwaita-layout" detail: detail];
+    }
+  else
+    {
+      [self fail: @"alert-adwaita-layout" detail: detail];
+    }
 }
 
 /* Fallback when -stopModal hasn't ended the alert (seen with the default
