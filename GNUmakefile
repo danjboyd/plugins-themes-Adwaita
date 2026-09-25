@@ -28,10 +28,14 @@ include $(GNUSTEP_MAKEFILES)/common.make
 GIO_PACKAGES = gio-2.0 glib-2.0 gobject-2.0
 GIO_CFLAGS = $(shell pkg-config --cflags $(GIO_PACKAGES))
 GIO_LIBS = $(shell pkg-config --libs $(GIO_PACKAGES))
+# Xlib, for asking the window manager to move, resize and maximise windows
+# with the header bar (Source/Adapters/GnomeThemeWindowManager.m).
+X11_CFLAGS = $(shell pkg-config --cflags x11)
+X11_LIBS = $(shell pkg-config --libs x11)
 
-ADDITIONAL_OBJCFLAGS += -Wno-import $(GIO_CFLAGS)
+ADDITIONAL_OBJCFLAGS += -Wno-import $(GIO_CFLAGS) $(X11_CFLAGS)
 ADDITIONAL_CFLAGS += $(GIO_CFLAGS)
-ADDITIONAL_LDFLAGS += $(GIO_LIBS)
+ADDITIONAL_LDFLAGS += $(GIO_LIBS) $(X11_LIBS)
 
 PACKAGE_NAME = Adwaita
 BUNDLE_NAME = Adwaita
@@ -54,6 +58,7 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeAlerts.m \
 	Source/Rendering/GnomeThemePrimaryMenu.m \
 	Source/Rendering/GnomeThemeHeaderBar.m \
+	Source/Adapters/GnomeThemeWindowManager.m \
 	Source/Rendering/GnomeThemeMenusAndData.m
 
 -include GNUmakefile.preamble

@@ -30,6 +30,7 @@
 
 #import "../GnomeTheme.h"
 #import "../Settings/GnomeThemeSettings.h"
+#import "../Adapters/GnomeThemeWindowManager.h"
 
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -55,6 +56,9 @@ static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
    outside the window to put it in), and corners this long. */
 static const CGFloat GnomeThemeResizeEdge = 5.0;
 static const CGFloat GnomeThemeResizeCorner = 16.0;
+/* How far the pointer moves before a press on the bar becomes a move
+   (GTK's gtk-dnd-drag-threshold). */
+static const CGFloat GnomeThemeDragThreshold = 8.0;
 
 /* The text colour's share of the circle behind a window button: normal,
    under the pointer, pressed. */
@@ -81,6 +85,11 @@ enum
 @interface GSStandardWindowDecorationView (GnomeThemeHeaderBarPrivate)
 - (NSPoint) mouseLocationOnScreenOutsideOfEventStream;
 - (void) moveWindowStartingWithEvent: (NSEvent *)event;
+@end
+
+/* The header bar's, for its maximise button's icon. */
+@interface NSView (GnomeThemeHeaderBarState)
+- (BOOL) isMaximized;
 @end
 
 @interface NSWindow (GnomeThemeHeaderBarPrivate)
@@ -174,6 +183,26 @@ GnomeThemeParseButtonLayout(NSString *layout, NSArray **startOut, NSArray **endO
     }
   *startOut = result[0];
   *endOut = result[1];
+}
+
+static GnomeThemeMoveResizeDirection
+GnomeThemeMoveResizeDirectionForEdges(NSUInteger edges)
+{
+  BOOL left = (edges & GnomeThemeResizeLeft) != 0;
+  BOOL right = (edges & GnomeThemeResizeRight) != 0;
+  BOOL top = (edges & GnomeThemeResizeTop) != 0;
+  BOOL bottom = (edges & GnomeThemeResizeBottom) != 0;
+
+  if (top)
+    {
+      return left ? GnomeThemeMoveResizeTopLeft : (right ? GnomeThemeMoveResizeTopRight : GnomeThemeMoveResizeTop);
+    }
+  if (bottom)
+    {
+      return left ? GnomeThemeMoveResizeBottomLeft
+        : (right ? GnomeThemeMoveResizeBottomRight : GnomeThemeMoveResizeBottom);
+    }
+  return left ? GnomeThemeMoveResizeLeft : GnomeThemeMoveResizeRight;
 }
 
 static NSCursor *
@@ -347,7 +376,8 @@ GnomeThemeResizeCursor(NSUInteger edges)
           break;
         }
       case NSWindowZoomButton:
-        if ([[self window] isZoomed])
+        if ([[self superview] respondsToSelector: @selector(isMaximized)]
+            ? [[self superview] isMaximized] : [[self window] isZoomed])
           {
             [self fillSquareOutline: icon at: 5.0 size: 6.0 stroke: 2.0];
           }
@@ -781,6 +811,17 @@ GnomeThemeResizeCursor(NSUInteger edges)
     }
 }
 
+/* The backend window exists now: let the window manager move, maximise,
+   minimise and close it. */
+- (void) setWindowNumber: (int)number
+{
+  [super setWindowNumber: number];
+  if (number > 0)
+    {
+      GnomeThemeWindowManagerAllowFunctions (window);
+    }
+}
+
 - (void) setInputState: (int)state
 {
   [super setInputState: state];
@@ -791,12 +832,23 @@ GnomeThemeResizeCursor(NSUInteger edges)
   [_menuButton setNeedsDisplay: YES];
 }
 
+/* Maximised, as the window manager has it when it can tell (it maximises
+   and tiles on its own: a drag to the top, Super+Up), otherwise as
+   GNUstep's -isZoomed has it. */
+- (BOOL) isMaximized
+{
+  BOOL known;
+  BOOL maximized = GnomeThemeWindowManagerIsMaximized (window, &known);
+
+  return known ? maximized : [window isZoomed];
+}
+
 /* Resizable from the edges: not while maximised or fullscreen. */
 - (BOOL) resizable
 {
   NSUInteger style = [window styleMask];
 
-  return (style & NSResizableWindowMask) && (style & NSFullScreenWindowMask) == 0 && [window isZoomed] == NO;
+  return (style & NSResizableWindowMask) && (style & NSFullScreenWindowMask) == 0 && [self isMaximized] == NO;
 }
 
 /* The edges a point is on, for resizing. */
@@ -963,6 +1015,12 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 /* Maximise, or go back to the frame the window had before. */
 - (void) toggleMaximized: (id)sender
 {
+  /* The window manager maximises and restores, and knows the window is
+     maximised (restore on drag, tiling). */
+  if (GnomeThemeWindowManagerToggleMaximized (window))
+    {
+      return;
+    }
   if ([window isZoomed] && _hasRestoreFrame)
     {
       _hasRestoreFrame = NO;
@@ -1000,7 +1058,7 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
     }
   if (style & NSResizableWindowMask)
     {
-      item = [menu addItemWithTitle: [window isZoomed] ? @"Restore" : @"Maximize"
+      item = [menu addItemWithTitle: [self isMaximized] ? @"Restore" : @"Maximize"
                              action: @selector(toggleMaximized:)
                       keyEquivalent: @""];
       [item setTarget: self];
@@ -1041,6 +1099,10 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
   else if ([action isEqualToString: @"lower"])
     {
       [window orderBack: self];
+    }
+  else if ([action isEqualToString: @"menu"] && GnomeThemeWindowManagerShowWindowMenu (window))
+    {
+      /* Mutter's window menu, shown on the press as GTK shows it. */
     }
   else if ([action isEqualToString: @"menu"])
     {
@@ -1089,6 +1151,32 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
   [super otherMouseDown: event];
 }
 
+/* Waits until the pointer moves past GTK's drag threshold (YES: a move)
+   or the button is released (NO: a click, which leaves a double-click
+   to come). */
+- (BOOL) pointerDraggedFrom: (NSEvent *)event
+{
+  NSPoint start = [event locationInWindow];
+  NSEvent *current;
+
+  while (YES)
+    {
+      current = [window nextEventMatchingMask: NSLeftMouseDraggedMask | NSLeftMouseUpMask
+                                    untilDate: [NSDate distantFuture]
+                                       inMode: NSEventTrackingRunLoopMode
+                                      dequeue: YES];
+      if ([current type] == NSLeftMouseUp)
+        {
+          return NO;
+        }
+      if (fabs ([current locationInWindow].x - start.x) > GnomeThemeDragThreshold
+        || fabs ([current locationInWindow].y - start.y) > GnomeThemeDragThreshold)
+        {
+          return YES;
+        }
+    }
+}
+
 - (void) mouseDown: (NSEvent *)event
 {
   NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
@@ -1096,7 +1184,10 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 
   if (edges != 0)
     {
-      [self resizeWindowFromEdges: edges event: event];
+      if (GnomeThemeWindowManagerMoveResize (window, GnomeThemeMoveResizeDirectionForEdges (edges)) == NO)
+        {
+          [self resizeWindowFromEdges: edges event: event];
+        }
       return;
     }
   if (hasTitleBar && NSPointInRect (p, titleBarRect))
@@ -1106,9 +1197,14 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
           [self performTitleBarAction: [GnomeThemeCurrentSettings () titlebarDoubleClickAction] ?: @"toggle-maximize"
                               release: NSLeftMouseUp];
         }
-      else
+      else if ([self pointerDraggedFrom: event])
         {
-          [self moveWindowStartingWithEvent: event];
+          /* The window manager moves the window: snapping, tiling, off
+             the screen's edge, a drag to the top to maximise. */
+          if (GnomeThemeWindowManagerMoveResize (window, GnomeThemeMoveResizeMove) == NO)
+            {
+              [self moveWindowStartingWithEvent: event];
+            }
         }
       return;
     }
