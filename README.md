@@ -130,8 +130,10 @@ python3 Reference/AdwaitaDemo/adwaita_demo.py --page text
 
 ## Settings
 
-The theme reads these from an app's defaults (`defaults write APP KEY VALUE`,
-or `-KEY VALUE` on the command line):
+The theme reads these from the user's defaults for an app
+(`defaults write APP KEY VALUE`, or `-KEY VALUE` on the command line), then
+from the app's own Info.plist (`GnomeThemeMetrics` and `GnomeThemeMenuStyle`,
+so an app can declare how it was designed):
 
 - `GnomeThemeMetrics`: `gnome` or `compact`. Apps whose windows are built in
   code get GNOME's metrics: the interface font at GNOME's size (11pt at
@@ -141,7 +143,43 @@ or `-KEY VALUE` on the command line):
   `compact` metrics instead: GNUstep's 12pt, regular-weight button titles,
   GNUstep's button margins and tab height, so layouts made at those metrics
   fit. Set it to override that choice.
+- `GnomeThemeMenuStyle`: `menubar` (the default) or `primary`. With
+  `primary` the menu bar becomes GNOME's main menu button (☰): at the end of
+  the window's toolbar when it shows one, otherwise alone in a slim bar.
+  Clicking it shows the app's menus, then its application menu's items
+  (Preferences, About, Quit), as GNOME's primary menu lists them. The menu
+  itself is unchanged, so key equivalents and validation work as before.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
+
+### Designing a GNOME-style app in Gorm
+
+Gorm itself runs with compact metrics (its own windows come from Gorm files
+laid out at GNUstep's). An app meant to look like a GNOME app needs its
+windows laid out at GNOME's metrics instead:
+
+1. Declare it in the app's Info.plist, so it runs with GNOME's metrics even
+   though it has a main Gorm file (and, if you like, the primary menu):
+
+   ```
+   GnomeThemeMetrics = gnome;
+   GnomeThemeMenuStyle = primary;
+   ```
+
+   With GNUstep Make, put these in `APPNAMEInfo.plist` next to the makefile.
+2. Lay its windows out in Gorm running with GNOME's metrics, so what you see
+   is what the app will show:
+
+   ```sh
+   openapp Gorm -GnomeThemeMetrics gnome
+   ```
+
+   Gorm's own inspectors are cramped at this size (some labels clip), but the
+   document's windows show the app's real text and control sizes. Size push
+   buttons and text fields 34pt high, and leave GNOME's spacing: 6pt between
+   related controls, 12pt between groups, 18pt from the window's edge.
+3. Leave control fonts at the system font's default size (Gorm's default).
+   Those are archived as "the system font" and follow the metrics the app
+   runs with; a font given an explicit size keeps it.
 
 ## Development Notes
 
@@ -169,7 +207,9 @@ frames and headers, the menu bar's app item, toolbar edges and hover,
 pop-up titles, and the size of hidden tool tip and drag windows), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
-Add `--output DIR` to save a PNG of each probe window.
+Add `--output DIR` to save a PNG of each probe window. `make check-quirks`
+runs the probe twice, the second time with the primary menu
+(`QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary"`).
 
 Useful helpers:
 
