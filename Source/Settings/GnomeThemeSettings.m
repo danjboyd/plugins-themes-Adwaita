@@ -34,11 +34,19 @@ static CGFloat GnomeThemeCompactInterfaceFontSize = 12.0;
 static BOOL
 GnomeThemeWantsCompactMetrics(void)
 {
-  NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"];
   NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
+  NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"];
+  id declared = [info objectForKey: @"GnomeThemeMetrics"];
   NSEnumerator *enumerator;
   NSString *key;
 
+  /* The user's default, then the app's own choice in its Info.plist (an
+     app laid out in Gorm for GNOME's metrics declares "gnome"), then the
+     main nib test. */
+  if (choice == nil && [declared isKindOfClass: [NSString class]])
+    {
+      choice = declared;
+    }
   if (choice != nil && [choice caseInsensitiveCompare: @"compact"] == NSOrderedSame)
     {
       return YES;

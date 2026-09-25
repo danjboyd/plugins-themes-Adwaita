@@ -192,7 +192,7 @@ GnomeThemeIsApplicationMenuItem(NSMenuItem *item)
 }
 
 /* Three short lines: GNOME's open-menu-symbolic. */
-static void
+void
 GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 {
   CGFloat width = GnomeThemeApplicationMenuIconWidth - 2.0;

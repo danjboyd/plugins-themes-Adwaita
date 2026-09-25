@@ -38,6 +38,13 @@ BOOL GnomeThemeIsApplicationMenuItem(NSMenuItem *item);
 /* Width of that icon. */
 extern const CGFloat GnomeThemeApplicationMenuIconWidth;
 
+/* Draws that icon (GNOME's open-menu-symbolic) centred in `rect`. */
+void GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color);
+
+/* YES when the app asked for GNOME's primary menu instead of a menu bar
+   (the GnomeThemeMenuStyle default set to "primary"). */
+BOOL GnomeThemeUsesPrimaryMenu(void);
+
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;

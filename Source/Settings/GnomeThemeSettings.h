@@ -51,8 +51,9 @@ typedef enum
 /* GNUstep's metrics (12pt text, GNUstep's button margins and tab height)
    instead of GNOME's, for apps whose windows come from Gorm or nib files and
    were laid out at those metrics. The GnomeThemeMetrics default chooses
-   ("compact" or "gnome"); otherwise apps with a main nib, storyboard or
-   markup file get compact metrics. */
+   ("compact" or "gnome"), then the same key in the app's Info.plist;
+   otherwise apps with a main nib, storyboard or markup file get compact
+   metrics. */
 - (BOOL) compactMetrics;
 
 - (NSFont *) interfaceFont;

@@ -52,6 +52,7 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemePalette.m \
 	Source/Rendering/GnomeThemeControls.m \
 	Source/Rendering/GnomeThemeAlerts.m \
+	Source/Rendering/GnomeThemePrimaryMenu.m \
 	Source/Rendering/GnomeThemeMenusAndData.m
 
 -include GNUmakefile.preamble
@@ -70,6 +71,7 @@ probe:
 
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install
