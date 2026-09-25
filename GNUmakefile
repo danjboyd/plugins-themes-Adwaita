@@ -67,7 +67,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-mutter palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -85,6 +85,11 @@ check-quirks:
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# The header bar with Mutter as the window manager (GNOME Shell on a private
+# Xvfb display; see the script).
+check-mutter:
+	bash Tests/Scripts/run-mutter-check.sh
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install
