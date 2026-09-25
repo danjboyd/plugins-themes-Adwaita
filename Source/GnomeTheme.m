@@ -79,6 +79,105 @@ GnomeThemeApplicationMenuTitle(void)
   return (title != nil) ? title : [[NSProcessInfo processInfo] processName];
 }
 
+/* The menu the app passed to -[NSApplication setAppleMenu:], which GNUstep
+   itself ignores. */
+static NSMenu *GnomeThemeAppleMenu = nil;
+
+/* Whether `menu` holds items only a Cocoa application menu has: About,
+   Hide, Hide Others, Show All. */
+static BOOL
+GnomeThemeMenuHasCocoaApplicationItems(NSMenu *menu)
+{
+  NSEnumerator *enumerator = [[menu itemArray] objectEnumerator];
+  NSMenuItem *item;
+
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      SEL action = [item action];
+
+      if (sel_isEqual (action, @selector(orderFrontStandardAboutPanel:))
+        || sel_isEqual (action, @selector(hide:))
+        || sel_isEqual (action, @selector(hideOtherApplications:))
+        || sel_isEqual (action, @selector(unhideAllApplications:)))
+        {
+          return YES;
+        }
+    }
+  return NO;
+}
+
+/* Cocoa treats the first item of the main menu as the application menu,
+   whatever its title: menus built in code usually leave it untitled, and nibs
+   often say "NewApplication". GSTheme only recognises an item titled with the
+   app's name, so it adds an empty one and leaves the real one in the bar, as
+   a blank or wrongly named item. Recognise it the way Cocoa apps mark it
+   (untitled, passed to -setAppleMenu:, a nib's _NSAppleMenu, or holding
+   About or Hide) and give it the app's name; macOS never shows that title.
+   A GNUstep-style first menu (Info, File, ...) has none of these marks. */
+static void
+GnomeThemeAdoptCocoaApplicationMenu(NSMenu *menu)
+{
+  NSString *appTitle = GnomeThemeApplicationMenuTitle ();
+  NSMenuItem *first;
+  NSMenu *submenu;
+  BOOL cocoa;
+
+  if ([menu numberOfItems] == 0 || [menu itemWithTitle: appTitle] != nil)
+    {
+      return;
+    }
+  first = (NSMenuItem *)[menu itemAtIndex: 0];
+  submenu = [first submenu];
+  if (submenu == nil)
+    {
+      return;
+    }
+  cocoa = [[first title] length] == 0
+    || submenu == GnomeThemeAppleMenu
+    || ([submenu respondsToSelector: @selector(_name)]
+        && [[submenu performSelector: @selector(_name)] isEqualToString: @"_NSAppleMenu"])
+    || GnomeThemeMenuHasCocoaApplicationItems (submenu);
+  if (cocoa)
+    {
+      [first setTitle: appTitle];
+      [submenu setTitle: appTitle];
+    }
+}
+
+/* GNOME has no Hide, Hide Others or Show All. GNUstep's -hide: orders the
+   windows out and relies on its app icon to bring them back, which GNOME
+   doesn't show (or, with GSSuppressAppIcon, leaves the windows up and puts a
+   stray icon tile on the desktop). Leave them, and any separators they
+   leave doubled, out of the main menu. */
+static void
+GnomeThemeRemoveHideItems(NSMenu *appMenu)
+{
+  NSInteger index;
+
+  for (index = [appMenu numberOfItems] - 1; index >= 0; index--)
+    {
+      SEL action = [(NSMenuItem *)[appMenu itemAtIndex: index] action];
+
+      if (sel_isEqual (action, @selector(hide:))
+        || sel_isEqual (action, @selector(hideOtherApplications:))
+        || sel_isEqual (action, @selector(unhideAllApplications:)))
+        {
+          [appMenu removeItemAtIndex: index];
+        }
+    }
+  for (index = [appMenu numberOfItems] - 1; index >= 0; index--)
+    {
+      BOOL separator = [(NSMenuItem *)[appMenu itemAtIndex: index] isSeparatorItem];
+      BOOL edge = (index == 0 || index == [appMenu numberOfItems] - 1);
+      BOOL doubled = (index > 0 && [(NSMenuItem *)[appMenu itemAtIndex: index - 1] isSeparatorItem]);
+
+      if (separator && (edge || doubled))
+        {
+          [appMenu removeItemAtIndex: index];
+        }
+    }
+}
+
 BOOL
 GnomeThemeIsApplicationMenuItem(NSMenuItem *item)
 {
@@ -454,16 +553,39 @@ GnomeThemeKeepsHiddenWindowSize(void)
 - (void) organizeMenu: (NSMenu *)menu
          isHorizontal: (BOOL)horizontal
 {
+  BOOL mainMenu = (menu == [NSApp mainMenu]);
+
+  if (horizontal && mainMenu)
+    {
+      GnomeThemeAdoptCocoaApplicationMenu (menu);
+    }
+
   [super organizeMenu: menu isHorizontal: horizontal];
 
   if (horizontal && [menu numberOfItems] > 0)
     {
       NSMenuItem *first = (NSMenuItem *)[menu itemAtIndex: 0];
 
-      if (GnomeThemeIsApplicationMenuItem (first) && [[first submenu] numberOfItems] == 0)
+      if (GnomeThemeIsApplicationMenuItem (first))
         {
-          [menu removeItemAtIndex: 0];
+          GnomeThemeRemoveHideItems ([first submenu]);
+          if ([[first submenu] numberOfItems] == 0)
+            {
+              [menu removeItemAtIndex: 0];
+            }
         }
+    }
+}
+
+- (void) _overrideNSApplicationMethod_setAppleMenu: (NSMenu *)aMenu
+{
+  typedef void (*SetMenuIMP)(id, SEL, NSMenu *);
+  SetMenuIMP originalIMP = (SetMenuIMP)GnomeThemeOriginalMethod (_cmd, self, [NSApplication class]);
+
+  ASSIGN (GnomeThemeAppleMenu, aMenu);
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, aMenu);
     }
 }
 

@@ -1011,7 +1011,8 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
    the application item first in the menu (see -organizeMenu:isHorizontal:),
    so move its rect instead: to the right end of the bar, with the other
    items shifted into its place. Drawing, hit testing, highlighting and
-   submenu placement all use these rects. */
+   submenu placement all use these rects. When the items don't all fit (a
+   narrow window), it stays first, where it can't cover them. */
 - (NSRect) _overrideNSMenuViewMethod_rectOfItemAtIndex: (NSInteger)index
 {
   typedef NSRect (*RectIMP)(id, SEL, NSInteger);
@@ -1020,6 +1021,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSMenu *menu = [menuView menu];
   NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, index) : NSZeroRect;
   NSRect appRect;
+  NSRect lastRect;
 
   if ([menuView isHorizontal] == NO || [menu numberOfItems] < 2
     || GnomeThemeIsApplicationMenuItem ((NSMenuItem *)[menu itemAtIndex: 0]) == NO)
@@ -1027,6 +1029,11 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
       return rect;
     }
   appRect = (index == 0) ? rect : originalIMP (self, _cmd, 0);
+  lastRect = originalIMP (self, _cmd, [menu numberOfItems] - 1);
+  if (NSMaxX (lastRect) + NSMinX (appRect) > NSMaxX ([menuView bounds]))
+    {
+      return rect;
+    }
   if (index == 0)
     {
       /* Mirrors the bar's left padding (the first item's x). */
@@ -1054,7 +1061,8 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSRect submenuFrame;
 
   if ([menuView isHorizontal] && aSubmenu != nil && [first submenu] == aSubmenu
-    && GnomeThemeIsApplicationMenuItem (first))
+    && GnomeThemeIsApplicationMenuItem (first)
+    && NSMinX ([menuView rectOfItemAtIndex: 0]) > NSMinX ([menuView rectOfItemAtIndex: 1]))
     {
       itemRect = [menuView convertRect: [menuView rectOfItemAtIndex: 0] toView: nil];
       submenuFrame = [[[aSubmenu menuRepresentation] window] frame];

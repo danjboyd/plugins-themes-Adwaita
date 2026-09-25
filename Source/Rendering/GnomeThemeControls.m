@@ -37,6 +37,8 @@
    and whether the pointer is over it. */
 static char GnomeThemeToolbarButtonTrackingKey;
 static char GnomeThemeToolbarButtonHoverKey;
+/* On a toolbar whose display mode is the theme's default, not the app's. */
+static char GnomeThemeToolbarDefaultModeKey;
 
 /* Owns toolbar buttons' tracking rects and records hover from their
    enter/exit events. (The window's -mouseLocationOutsideOfEventStream can't
@@ -97,6 +99,10 @@ static char GnomeThemeToolbarButtonHoverKey;
 
 @interface NSObject (GnomeThemeComboPopupPrivate)
 - (void) popUpForComboBoxCell: (NSComboBoxCell *)cell;
+@end
+
+@interface NSCell (GnomeThemePrivateEditing)
+- (BOOL) _inEditing;
 @end
 
 @interface NSTextFieldCell (GnomeThemePrivateTextDrawing)
@@ -1200,12 +1206,10 @@ GnomeThemeDrawAttributedStringWithEditorLayout(NSTextFieldCell *cell,
     }
   else
     {
-      DPStranslate (context, rect.origin.x, NSMaxY (rect));
-      DPSscale (context, 1.0, -1.0);
-      GSWSetViewIsFlipped (context, YES);
-      [layoutManager drawBackgroundForGlyphRange: glyphRange atPoint: NSZeroPoint];
-      [layoutManager drawGlyphsForGlyphRange: glyphRange atPoint: NSZeroPoint];
-      GSWSetViewIsFlipped (context, NO);
+      /* Text fields are flipped; this is a cell drawn in some other view,
+         such as an NSBox's title (Gorm's inspectors). Flipping the context
+         here drew the glyphs mirrored, so let string drawing handle it. */
+      [string drawInRect: rect];
     }
 
   DPSgrestore (context);
@@ -1558,25 +1562,61 @@ GnomeThemeButtonLabelSize(NSButtonCell *cell)
   return size;
 }
 
+/* A checkbox or radio indicator: at the start of the content, or at its end
+   for a cell whose image goes to the right of its title (Gorm's inspectors
+   use these: "Command [x]"). */
+static BOOL
+GnomeThemeIndicatorTrails(NSButtonCell *cell)
+{
+  return [cell imagePosition] == NSImageRight;
+}
+
+static NSRect
+GnomeThemeIndicatorRectInContent(NSButtonCell *cell, NSRect contentRect, CGFloat indicatorSize)
+{
+  CGFloat x = GnomeThemeIndicatorTrails (cell)
+    ? NSMaxX (contentRect) - 2.0 - indicatorSize
+    : contentRect.origin.x + 2.0;
+
+  return NSMakeRect (x, NSMidY (contentRect) - (indicatorSize / 2.0), indicatorSize, indicatorSize);
+}
+
+/* The title's rect beside the indicator. */
+static NSRect
+GnomeThemeIndicatorTitleRect(NSButtonCell *cell, NSRect contentRect, NSRect indicatorRect)
+{
+  NSRect titleRect = contentRect;
+
+  if (GnomeThemeIndicatorTrails (cell))
+    {
+      titleRect.size.width = MAX (0.0, NSMinX (indicatorRect) - GnomeThemeIndicatorLabelGap - NSMinX (contentRect));
+    }
+  else
+    {
+      titleRect.origin.x = NSMaxX (indicatorRect) + GnomeThemeIndicatorLabelGap;
+      titleRect.size.width = MAX (0.0, NSMaxX (contentRect) - titleRect.origin.x);
+    }
+  return titleRect;
+}
+
 static NSRect
 GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame)
 {
   NSRect contentRect = [cell drawingRectForBounds: cellFrame];
   CGFloat indicatorSize = MAX (18.0, floor (contentRect.size.height * 0.58));
-  NSRect indicatorRect = NSMakeRect (contentRect.origin.x + 2.0,
-                                    NSMidY (contentRect) - (indicatorSize / 2.0),
-                                    indicatorSize,
-                                    indicatorSize);
+  NSRect indicatorRect = GnomeThemeIndicatorRectInContent (cell, contentRect, indicatorSize);
   NSSize labelSize = GnomeThemeButtonLabelSize (cell);
   CGFloat labelWidth = MIN (labelSize.width,
-                            MAX (0.0, NSMaxX (contentRect)
-                              - (NSMaxX (indicatorRect) + GnomeThemeIndicatorLabelGap)));
+                            NSWidth (GnomeThemeIndicatorTitleRect (cell, contentRect, indicatorRect)));
   NSRect focusRect = indicatorRect;
 
   if (labelWidth > 0.0)
     {
-      focusRect.size.width = (NSMaxX (indicatorRect) - NSMinX (indicatorRect))
-        + GnomeThemeIndicatorLabelGap + labelWidth;
+      focusRect.size.width = NSWidth (indicatorRect) + GnomeThemeIndicatorLabelGap + labelWidth;
+      if (GnomeThemeIndicatorTrails (cell))
+        {
+          focusRect.origin.x = NSMaxX (indicatorRect) - NSWidth (focusRect);
+        }
     }
 
   focusRect = NSInsetRect (focusRect, -3.0, -3.0);
@@ -2635,6 +2675,31 @@ GnomeThemeDrawTabLabel(NSString *label,
   return editor;
 }
 
+/* A form cell's text area (Gorm's "Title:" fields): the Adwaita entry
+   beside the title. NSFormCell draws the border and then fills the area with
+   plain textBackgroundColor, which covered the entry in white. */
+- (void) _overrideNSFormCellMethod__drawBorderAndBackgroundWithFrame: (NSRect)cellFrame
+                                                              inView: (NSView *)controlView
+{
+  NSFormCell *cell = (NSFormCell *)self;
+  Ivar titleWidthIvar = class_getInstanceVariable ([NSFormCell class], "_displayedTitleWidth");
+  CGFloat titleWidth = (titleWidthIvar != NULL)
+    ? *(float *)((char *)cell + ivar_getOffset (titleWidthIvar))
+    : [cell titleWidth];
+  NSRect entryRect = cellFrame;
+  BOOL enabled = [cell isEnabled] && GnomeThemeViewEnabled (controlView);
+  BOOL focused = [cell _inEditing] && GnomeThemeViewHasFocus (controlView);
+
+  if ([cell isBezeled] == NO && [cell isBordered] == NO)
+    {
+      return;
+    }
+  entryRect.origin.x += titleWidth + 3.0;
+  entryRect.size.width -= titleWidth + 3.0;
+  GnomeThemeDrawEntryChrome (GnomeThemeActiveTheme (), controlView, entryRect, enabled, focused,
+                             [cell isEditable] == NO && [cell isSelectable] == NO);
+}
+
 - (void) _overrideNSTextFieldCellMethod__drawBackgroundWithFrame: (NSRect)cellFrame
                                                           inView: (NSView *)controlView
 {
@@ -2890,8 +2955,8 @@ GnomeThemeDrawTabLabel(NSString *label,
    toolbars with icon and label. The first toolbar with an identifier starts
    icon-only; later ones copy it, as they copy any mode the app sets.
    -setDisplayMode: (the app, or the customisation palette) still switches
-   modes, and toolbars decoded from a nib or Gorm file keep their archived
-   mode. */
+   modes, toolbars decoded from a nib or Gorm file keep their archived mode,
+   and view switchers keep their labels (see -setDelegate:). */
 - (id) _overrideNSToolbarMethod_initWithIdentifier: (NSString *)identifier
 {
   typedef id (*InitIMP)(id, SEL, NSString *);
@@ -2911,8 +2976,49 @@ GnomeThemeDrawTabLabel(NSString *label,
     && [toolbar performSelector: @selector(_toolbarModel)] == nil)
     {
       *(NSToolbarDisplayMode *)((char *)toolbar + ivar_getOffset (displayMode)) = NSToolbarDisplayModeIconOnly;
+      objc_setAssociatedObject (toolbar, &GnomeThemeToolbarDefaultModeKey, [NSNumber numberWithBool: YES],
+                                OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
   return toolbar;
+}
+
+/* The app chose a mode: it's no longer the theme's default. */
+- (void) _overrideNSToolbarMethod_setDisplayMode: (NSToolbarDisplayMode)displayMode
+{
+  typedef void (*SetModeIMP)(id, SEL, NSToolbarDisplayMode);
+  SetModeIMP originalIMP = (SetModeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSToolbar class]);
+
+  objc_setAssociatedObject (self, &GnomeThemeToolbarDefaultModeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, displayMode);
+    }
+}
+
+/* A toolbar whose items select a view (its delegate lists selectable items,
+   like Gorm's Objects/Images/Classes) is a view switcher; GNOME's
+   AdwViewSwitcher shows icon and label, so it gets its labels back. The
+   delegate arrives after -initWithIdentifier:, and the items are built from
+   here on. */
+- (void) _overrideNSToolbarMethod_setDelegate: (id)delegate
+{
+  typedef void (*SetDelegateIMP)(id, SEL, id);
+  SetDelegateIMP originalIMP = (SetDelegateIMP)GnomeThemeOriginalMethod (_cmd, self, [NSToolbar class]);
+  NSToolbar *toolbar = (NSToolbar *)self;
+  Ivar displayMode = class_getInstanceVariable ([NSToolbar class], "_displayMode");
+
+  if (displayMode != NULL
+    && [objc_getAssociatedObject (toolbar, &GnomeThemeToolbarDefaultModeKey) boolValue]
+    && [toolbar displayMode] == NSToolbarDisplayModeIconOnly
+    && [delegate respondsToSelector: @selector(toolbarSelectableItemIdentifiers:)]
+    && [[delegate toolbarSelectableItemIdentifiers: toolbar] count] > 0)
+    {
+      *(NSToolbarDisplayMode *)((char *)toolbar + ivar_getOffset (displayMode)) = NSToolbarDisplayModeIconAndLabel;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, delegate);
+    }
 }
 
 /* Toolbar buttons get a flat hover highlight, like GNOME header bar buttons.
@@ -3497,18 +3603,13 @@ GnomeThemeDrawTabLabel(NSString *label,
     NSInteger state = [(NSButtonCell *)self state];
     NSRect contentRect = [(NSButtonCell *)self drawingRectForBounds: cellFrame];
     CGFloat indicatorSize = MAX (18.0, floor (contentRect.size.height * 0.58));
-    NSRect indicatorRect = NSMakeRect (contentRect.origin.x + 2.0,
-                                       NSMidY (contentRect) - (indicatorSize / 2.0),
-                                       indicatorSize,
-                                       indicatorSize);
-    NSRect titleRect = contentRect;
+    NSRect indicatorRect = GnomeThemeIndicatorRectInContent ((NSButtonCell *)self, contentRect, indicatorSize);
+    NSRect titleRect = GnomeThemeIndicatorTitleRect ((NSButtonCell *)self, contentRect, indicatorRect);
     NSColor *fillColor = nil;
     NSColor *borderColor = nil;
     NSColor *markColor = nil;
     NSBezierPath *path = nil;
 
-    titleRect.origin.x = NSMaxX (indicatorRect) + GnomeThemeIndicatorLabelGap;
-    titleRect.size.width = NSMaxX (contentRect) - titleRect.origin.x;
 
     if (state == NSOnState || state == NSMixedState)
       {

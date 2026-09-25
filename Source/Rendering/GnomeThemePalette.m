@@ -52,8 +52,10 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#fafafa") forKey: @"windowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"controlBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ebebeb") forKey: @"controlColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"controlHighlightColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#99c1f1") forKey: @"controlLightHighlightColor"];
+  /* The light edges of 3D bevels (GNUstep's grooves and bezels, as in Gorm's
+     boxes), not selection colours: GNUstep's own are white. */
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"controlHighlightColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"controlLightHighlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#c7c7c7") forKey: @"controlShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#8c8c8c") forKey: @"controlDarkShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"controlTextColor"];
@@ -102,8 +104,8 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"windowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#303030") forKey: @"controlBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3a3a3a") forKey: @"controlColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"controlHighlightColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#8ec0ff") forKey: @"controlLightHighlightColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#484848") forKey: @"controlHighlightColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#555555") forKey: @"controlLightHighlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"controlShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"controlDarkShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"controlTextColor"];
