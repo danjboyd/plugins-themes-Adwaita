@@ -25,7 +25,59 @@
 #import <AppKit/AppKit.h>
 #import <AppKit/NSGraphics.h>
 #import <GNUstepGUI/GSTheme.h>
+#import <objc/runtime.h>
 #import <math.h>
+
+/* Associated-object keys on a toolbar button: its hover tracking-rect tag,
+   and whether the pointer is over it. */
+static char GnomeThemeToolbarButtonTrackingKey;
+static char GnomeThemeToolbarButtonHoverKey;
+
+/* Owns toolbar buttons' tracking rects and records hover from their
+   enter/exit events. (The window's -mouseLocationOutsideOfEventStream can't
+   be used at draw time: it goes stale.) */
+@interface GnomeThemeToolbarHoverTracker : NSObject
++ (GnomeThemeToolbarHoverTracker *) sharedTracker;
+@end
+
+@implementation GnomeThemeToolbarHoverTracker
+
++ (GnomeThemeToolbarHoverTracker *) sharedTracker
+{
+  static GnomeThemeToolbarHoverTracker *tracker = nil;
+
+  if (tracker == nil)
+    {
+      tracker = [GnomeThemeToolbarHoverTracker new];
+    }
+  return tracker;
+}
+
+- (void) setHover: (BOOL)hover forEvent: (NSEvent *)event
+{
+  NSView *button = (NSView *)[event userData];
+
+  if (button == nil)
+    {
+      return;
+    }
+  objc_setAssociatedObject (button, &GnomeThemeToolbarButtonHoverKey,
+                            hover ? [NSNumber numberWithBool: YES] : nil,
+                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  [button setNeedsDisplay: YES];
+}
+
+- (void) mouseEntered: (NSEvent *)event
+{
+  [self setHover: YES forEvent: event];
+}
+
+- (void) mouseExited: (NSEvent *)event
+{
+  [self setHover: NO forEvent: event];
+}
+
+@end
 
 @interface NSComboBoxCell (GnomeThemePrivate)
 - (void) _didClickWithinButton: (id)sender;
@@ -2807,6 +2859,71 @@ GnomeThemeDrawTabLabel(NSString *label,
                       fromRect: NSZeroRect
                      operation: NSCompositeSourceOver
                       fraction: 1.0];
+    }
+}
+
+/* Toolbar buttons get a flat hover highlight, like GNOME header bar buttons.
+   GNUstep registers no tracking rects for them (-[NSButtonCell
+   setShowsBorderOnlyWhileMouseInside:] is a FIXME), so add one whenever the
+   button is laid out; the rect is in view coordinates, so only size changes
+   need a new one. */
+- (void) _overrideGSToolbarButtonMethod_layout
+{
+  typedef void (*LayoutIMP)(id, SEL);
+  LayoutIMP originalIMP = (LayoutIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarButton"));
+  NSButton *button = (NSButton *)self;
+  NSNumber *tag = objc_getAssociatedObject (button, &GnomeThemeToolbarButtonTrackingKey);
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  /* The pressed state is the darker background drawn below; GNUstep's own
+     highlight (NSChangeGrayCellMask) turned the label white on it. */
+  [[button cell] setHighlightsBy: NSNoCellMask];
+  if (tag != nil)
+    {
+      [button removeTrackingRect: [tag integerValue]];
+    }
+  tag = [NSNumber numberWithInteger: [button addTrackingRect: [button bounds]
+                                                      owner: [GnomeThemeToolbarHoverTracker sharedTracker]
+                                                   userData: button
+                                               assumeInside: NO]];
+  objc_setAssociatedObject (button, &GnomeThemeToolbarButtonTrackingKey, tag,
+                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+/* The hover and pressed backgrounds: libadwaita's flat buttons, the text
+   colour at 7% (hover) and 16% (pressed) over the toolbar, 6pt corners. */
+- (void) _overrideGSToolbarButtonCellMethod_drawWithFrame: (NSRect)cellFrame
+                                                   inView: (NSView *)controlView
+{
+  typedef void (*DrawIMP)(id, SEL, NSRect, NSView *);
+  DrawIMP originalIMP = (DrawIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarButtonCell"));
+  NSButtonCell *cell = (NSButtonCell *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  NSWindow *window = [controlView window];
+
+  if (theme != nil && window != nil && [cell isEnabled])
+    {
+      BOOL pressed = [cell isHighlighted];
+      BOOL hover = (objc_getAssociatedObject (controlView, &GnomeThemeToolbarButtonHoverKey) != nil);
+
+      if (pressed || hover)
+        {
+          NSColor *background = [theme toolbarBackgroundColor];
+          NSColor *textColor = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
+
+          GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (cellFrame, 1.0, 1.0),
+                                              6.0,
+                                              GnomeThemeBlend (background, textColor, pressed ? 0.16 : 0.07),
+                                              nil,
+                                              0.0);
+        }
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, cellFrame, controlView);
     }
 }
 

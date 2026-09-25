@@ -67,6 +67,47 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
   return [theme overriddenMethod: selector for: prototype];
 }
 
+const CGFloat GnomeThemeApplicationMenuIconWidth = 16.0;
+
+/* The title GSTheme gives the application item (-organizeMenu:isHorizontal:). */
+static NSString *
+GnomeThemeApplicationMenuTitle(void)
+{
+  NSString *title = [[[NSBundle mainBundle] localizedInfoDictionary]
+                      objectForKey: @"ApplicationName"];
+
+  return (title != nil) ? title : [[NSProcessInfo processInfo] processName];
+}
+
+BOOL
+GnomeThemeIsApplicationMenuItem(NSMenuItem *item)
+{
+  NSMenu *mainMenu = [NSApp mainMenu];
+
+  if (item == nil || mainMenu == nil || [item menu] != mainMenu
+    || [item hasSubmenu] == NO || [mainMenu indexOfItem: item] != 0)
+    {
+      return NO;
+    }
+  return [[item title] isEqualToString: GnomeThemeApplicationMenuTitle ()];
+}
+
+/* Three short lines: GNOME's open-menu-symbolic. */
+static void
+GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
+{
+  CGFloat width = GnomeThemeApplicationMenuIconWidth - 2.0;
+  CGFloat x = floor (NSMidX (rect) - width / 2.0);
+  CGFloat y = floor (NSMidY (rect)) - 6.0;
+  NSInteger line;
+
+  [color set];
+  for (line = 0; line < 3; line++)
+    {
+      NSRectFill (NSMakeRect (x, y + 5.0 * line, width, 2.0));
+    }
+}
+
 @implementation GnomeTheme
 
 + (NSString *)themeName
@@ -171,6 +212,22 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
       _palette = RETAIN ([GnomeThemePalette colorListForSettings: _settings]);
     }
   return _palette;
+}
+
+/* GSTheme reads these from a ThemeExtra colour list; the theme's colours are
+   in its palette. */
+- (NSColor *) toolbarBackgroundColor
+{
+  NSColor *color = [[self colors] colorWithKey: @"toolbarBackgroundColor"];
+
+  return (color != nil) ? color : [super toolbarBackgroundColor];
+}
+
+- (NSColor *) toolbarBorderColor
+{
+  NSColor *color = [[self colors] colorWithKey: @"toolbarBorderColor"];
+
+  return (color != nil) ? color : [super toolbarBorderColor];
 }
 
 - (BOOL) menuShouldShowIcon
@@ -313,6 +370,12 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
       [attributes setObject: textColor forKey: NSForegroundColorAttributeName];
     }
 
+  if (isHorizontal && GnomeThemeIsApplicationMenuItem ([cell menuItem]))
+    {
+      GnomeThemeDrawApplicationMenuIcon (cellFrame, textColor);
+      return;
+    }
+
   if ([title length] == 0)
     {
       return;
@@ -331,6 +394,29 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
   titleRect.size.height = ceil (titleSize.height);
 
   [title drawInRect: titleRect withAttributes: attributes];
+}
+
+/* GNOME apps have no menu named after the app. GSTheme puts one first in a
+   horizontal main menu, collecting the menu's loose items (Info, Quit, ...);
+   when there were none it is empty and drawn disabled, so remove it. A
+   non-empty one is drawn as the GNOME main-menu icon (see
+   -drawTitleForMenuItemCell:...). GNUstep can't hide menu items, and moving
+   the item to the end (where GNOME puts the main menu) doesn't last: GSTheme
+   moves it back to the front. */
+- (void) organizeMenu: (NSMenu *)menu
+         isHorizontal: (BOOL)horizontal
+{
+  [super organizeMenu: menu isHorizontal: horizontal];
+
+  if (horizontal && [menu numberOfItems] > 0)
+    {
+      NSMenuItem *first = (NSMenuItem *)[menu itemAtIndex: 0];
+
+      if (GnomeThemeIsApplicationMenuItem (first) && [[first submenu] numberOfItems] == 0)
+        {
+          [menu removeItemAtIndex: 0];
+        }
+    }
 }
 
 - (void) addFont: (NSFont *)font

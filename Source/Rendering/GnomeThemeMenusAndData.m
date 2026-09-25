@@ -146,6 +146,14 @@ GnomeThemePhase67ViewIsActive(NSView *view)
   return ([window isKeyWindow] || [window isMainWindow]);
 }
 
+/* NSPopUpButtonCell (an NSMenuItemCell) draws the selected item's title in
+   the button through the NSMenuItemCell methods overridden below. The theme's
+   pop-up layout (-_overrideNSPopUpButtonCellMethod_drawInteriorWithFrame:)
+   expects them to give the whole frame to the title, no state image or key
+   equivalent column, and to draw neither. Until the overrides used
+   GnomeThemeOriginalMethod() that came from -overriddenMethod:for: finding no
+   original for the subclass; now it is explicit, so an upstream fix to that
+   lookup can't move pop-up titles (the originals put them about 50pt right). */
 static inline BOOL
 GnomeThemePhase67UsesPopupButtonCellLayout(NSMenuItemCell *cell)
 {
@@ -1037,8 +1045,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                                            inView: (NSView *)controlView
 {
   typedef void (*DrawKeyEquivalentIMP)(id, SEL, NSRect, NSView *);
-  DrawKeyEquivalentIMP originalIMP = (DrawKeyEquivalentIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                                           for: self];
+  DrawKeyEquivalentIMP originalIMP = (DrawKeyEquivalentIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   NSMenuView *menuView = [cell menuView];
   GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
@@ -1051,7 +1058,11 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSMutableParagraphStyle *paragraph = nil;
   NSSize keySize;
 
-  if (theme == nil || isHorizontal || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return;
+    }
+  if (theme == nil || isHorizontal)
     {
       if (originalIMP != NULL)
         {
@@ -1100,12 +1111,16 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (CGFloat) _overrideNSMenuItemCellMethod_stateImageWidth
 {
   typedef CGFloat (*StateImageWidthIMP)(id, SEL);
-  StateImageWidthIMP originalIMP = (StateImageWidthIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                                      for: self];
+  StateImageWidthIMP originalIMP = (StateImageWidthIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
-  CGFloat originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  CGFloat originalWidth = 0.0;
 
-  if ([[cell menuView] isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return 0.0;
+    }
+  originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  if ([[cell menuView] isHorizontal])
     {
       return originalWidth;
     }
@@ -1116,12 +1131,20 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (CGFloat) _overrideNSMenuItemCellMethod_titleWidth
 {
   typedef CGFloat (*TitleWidthIMP)(id, SEL);
-  TitleWidthIMP originalIMP = (TitleWidthIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                           for: self];
+  TitleWidthIMP originalIMP = (TitleWidthIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
-  CGFloat originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  CGFloat originalWidth = 0.0;
 
-  if ([[cell menuView] isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return 0.0;
+    }
+  if ([[cell menuView] isHorizontal] && GnomeThemeIsApplicationMenuItem ([cell menuItem]))
+    {
+      return GnomeThemeApplicationMenuIconWidth;
+    }
+  originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  if ([[cell menuView] isHorizontal])
     {
       return originalWidth;
     }
@@ -1137,13 +1160,17 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (CGFloat) _overrideNSMenuItemCellMethod_keyEquivalentWidth
 {
   typedef CGFloat (*KeyEquivalentWidthIMP)(id, SEL);
-  KeyEquivalentWidthIMP originalIMP = (KeyEquivalentWidthIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                                            for: self];
+  KeyEquivalentWidthIMP originalIMP = (KeyEquivalentWidthIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
-  CGFloat originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  CGFloat originalWidth = 0.0;
 
-  if ([[cell menuView] isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return 0.0;
+    }
+  originalWidth = (originalIMP != NULL) ? originalIMP (self, _cmd) : 0.0;
+  if ([[cell menuView] isHorizontal])
     {
       return originalWidth;
     }
@@ -1154,12 +1181,17 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (NSRect) _overrideNSMenuItemCellMethod_stateImageRectForBounds: (NSRect)cellFrame
 {
   typedef NSRect (*StateRectIMP)(id, SEL, NSRect);
-  StateRectIMP originalIMP = (StateRectIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  StateRectIMP originalIMP = (StateRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   NSMenuView *menuView = [cell menuView];
-  NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  NSRect rect;
 
-  if ([menuView isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return cellFrame;
+    }
+  rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  if ([menuView isHorizontal])
     {
       return rect;
     }
@@ -1172,12 +1204,17 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (NSRect) _overrideNSMenuItemCellMethod_keyEquivalentRectForBounds: (NSRect)cellFrame
 {
   typedef NSRect (*KeyRectIMP)(id, SEL, NSRect);
-  KeyRectIMP originalIMP = (KeyRectIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  KeyRectIMP originalIMP = (KeyRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   NSMenuView *menuView = [cell menuView];
-  NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  NSRect rect;
 
-  if ([menuView isHorizontal] || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return cellFrame;
+    }
+  rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  if ([menuView isHorizontal])
     {
       return rect;
     }
@@ -1190,17 +1227,20 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 - (NSRect) _overrideNSMenuItemCellMethod_titleRectForBounds: (NSRect)cellFrame
 {
   typedef NSRect (*TitleRectIMP)(id, SEL, NSRect);
-  TitleRectIMP originalIMP = (TitleRectIMP)[[GSTheme theme] overriddenMethod: _cmd for: self];
+  TitleRectIMP originalIMP = (TitleRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   NSMenuView *menuView = [cell menuView];
-  NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  NSRect rect;
   CGFloat leftInset = [menuView imageAndTitleOffset] + 1.0;
   CGFloat rightEdge = NSMaxX (cellFrame) - 10.0;
   CGFloat keyWidth = [menuView keyEquivalentWidth];
 
-  if ([menuView isHorizontal]
-    || [[cell menuItem] isSeparatorItem]
-    || GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return cellFrame;
+    }
+  rect = (originalIMP != NULL) ? originalIMP (self, _cmd, cellFrame) : cellFrame;
+  if ([menuView isHorizontal] || [[cell menuItem] isSeparatorItem])
     {
       return rect;
     }
@@ -1220,8 +1260,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                                         inView: (NSView *)controlView
 {
   typedef void (*DrawStateImageIMP)(id, SEL, NSRect, NSView *);
-  DrawStateImageIMP originalIMP = (DrawStateImageIMP)[[GSTheme theme] overriddenMethod: _cmd
-                                                                                    for: self];
+  DrawStateImageIMP originalIMP = (DrawStateImageIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuItemCell class]);
   NSMenuItemCell *cell = (NSMenuItemCell *)self;
   NSMenuItem *item = [cell menuItem];
   GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
@@ -1231,10 +1270,13 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSColor *color = nil;
   NSRect stateRect;
 
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return;
+    }
   if (theme == nil
     || isHorizontal
     || item == nil
-    || GnomeThemePhase67UsesPopupButtonCellLayout (cell)
     || (state != NSOnState && state != NSMixedState))
     {
       if (originalIMP != NULL)

@@ -73,6 +73,10 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#d0d0d0") forKey: @"menuSeparatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f6f6f6") forKey: @"menuBarBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#d6d6d6") forKey: @"menuBarBorderColor"];
+  /* Toolbars sit on the window background, like a GNOME header bar, with a
+     light bottom edge (GSTheme's fallback is dark grey). */
+  [colors setColor: GnomeThemeColorFromHex (@"#fafafa") forKey: @"toolbarBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#e6e6e6") forKey: @"toolbarBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#d6d6d6") forKey: @"menuBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#c7c7c7") forKey: @"scrollBarColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#e8e8e8") forKey: @"headerColor"];
@@ -119,6 +123,8 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#4a4a4a") forKey: @"menuSeparatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"menuBarBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"menuBarBorderColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"toolbarBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#1a1a1a") forKey: @"toolbarBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"menuBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#525252") forKey: @"scrollBarColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#303030") forKey: @"headerColor"];
@@ -159,6 +165,8 @@ GnomeThemePopulateHighContrastPalette(NSColorList *colors)
   [colors setColor: [NSColor whiteColor] forKey: @"menuSeparatorColor"];
   [colors setColor: [NSColor blackColor] forKey: @"menuBarBackgroundColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"menuBarBorderColor"];
+  [colors setColor: [NSColor blackColor] forKey: @"toolbarBackgroundColor"];
+  [colors setColor: [NSColor whiteColor] forKey: @"toolbarBorderColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"menuBorderColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"scrollBarColor"];
   [colors setColor: [NSColor blackColor] forKey: @"textBackgroundColor"];

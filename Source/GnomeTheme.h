@@ -30,6 +30,14 @@
    method up for `baseClass`, the class the override was installed on, instead. */
 IMP GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass);
 
+/* YES for the application-name item GNUstep puts first in a horizontal
+   (NSWindows95InterfaceStyle) main menu (see -organizeMenu:isHorizontal:). The
+   theme draws it as a GNOME main-menu icon instead of the app's name. */
+BOOL GnomeThemeIsApplicationMenuItem(NSMenuItem *item);
+
+/* Width of that icon. */
+extern const CGFloat GnomeThemeApplicationMenuIconWidth;
+
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;
