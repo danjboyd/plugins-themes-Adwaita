@@ -110,6 +110,12 @@ static char GnomeThemeToolbarButtonHoverKey;
 
 static NSView *GnomeThemeLastFocusedEntryView = nil;
 
+/* GTK's focus-visible: buttons, checkboxes and other non-text controls show
+   their focus ring only after a key press, and hide it again on a pointer
+   press. A dialog opened with the mouse shows no ring on its focused button.
+   Text entries show theirs whenever they have focus, as in GTK. */
+static BOOL GnomeThemeFocusVisible = NO;
+
 @interface NSSearchFieldCell (GnomeThemePrivateLayout)
 - (NSButtonCell *) cancelButtonCell;
 - (NSButtonCell *) searchButtonCell;
@@ -378,6 +384,40 @@ GnomeThemeTrackFocusedEntryView(NSView *view)
   if ([view window] != nil)
     {
       [[view window] setViewsNeedDisplay: YES];
+    }
+}
+
+static BOOL
+GnomeThemeViewShowsFocusRing(NSView *view)
+{
+  return GnomeThemeFocusVisible && GnomeThemeViewHasFocus (view);
+}
+
+/* Redraws each window's focused view, so its ring follows focus-visible. */
+static void
+GnomeThemeRedisplayFocusedViews(void)
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSWindow *window;
+
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      id responder = [window firstResponder];
+
+      if ([window isVisible] == NO)
+        {
+          continue;
+        }
+      /* An editing text field's first responder is its field editor. */
+      if ([responder isKindOfClass: [NSText class]]
+        && [[responder delegate] isKindOfClass: [NSView class]])
+        {
+          responder = [responder delegate];
+        }
+      if ([responder isKindOfClass: [NSView class]])
+        {
+          [responder setNeedsDisplay: YES];
+        }
     }
 }
 
@@ -1617,6 +1657,38 @@ GnomeThemeDrawTabLabel(NSString *label,
 
 @implementation GnomeTheme (Controls)
 
+- (void) _overrideNSApplicationMethod_sendEvent: (NSEvent *)event
+{
+  typedef void (*SendEventIMP)(id, SEL, NSEvent *);
+  SendEventIMP originalIMP = (SendEventIMP)GnomeThemeOriginalMethod (_cmd, self, [NSApplication class]);
+  BOOL visible = GnomeThemeFocusVisible;
+
+  switch ([event type])
+    {
+      case NSKeyDown:
+        visible = YES;
+        break;
+      case NSLeftMouseDown:
+      case NSRightMouseDown:
+      case NSOtherMouseDown:
+        visible = NO;
+        break;
+      default:
+        break;
+    }
+  /* Before dispatch, so a click that moves focus also clears the ring of
+     the view losing it. */
+  if (visible != GnomeThemeFocusVisible)
+    {
+      GnomeThemeFocusVisible = visible;
+      GnomeThemeRedisplayFocusedViews ();
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, event);
+    }
+}
+
 - (void) setKeyEquivalent: (NSString *)key
              forButtonCell: (NSButtonCell *)cell
 {
@@ -1650,15 +1722,12 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   CGFloat radius = MIN (9.0, floor (frame.size.height / 2.0));
 
-  if ([view isKindOfClass: [NSButton class]])
+  /* Buttons draw their own ring: push buttons and pop-ups in -drawButton:,
+     checkboxes and radios around the indicator. NSCell would put this one
+     around the title. */
+  if ([view isKindOfClass: [NSButton class]] || GnomeThemeFocusVisible == NO)
     {
-      NSButtonCell *cell = (NSButtonCell *)[(NSButton *)view cell];
-
-      if (GnomeThemeButtonCellIsCheckbox (cell)
-        || GnomeThemeButtonCellIsRadio (cell))
-        {
-          return;
-        }
+      return;
     }
 
   GnomeThemeDrawFocusRing (self, NSInsetRect (frame, -1.0, -1.0), radius + 1.0);
@@ -1675,7 +1744,7 @@ GnomeThemeDrawTabLabel(NSString *label,
   BOOL selected = GnomeThemeStateIsSelected (state);
   BOOL persistentAccentSelection = selected && GnomeThemeButtonCellUsesPersistentAccentSelection (cell);
   BOOL momentaryPressed = selected && (persistentAccentSelection == NO);
-  BOOL focused = GnomeThemeViewHasFocus (view);
+  BOOL focused = GnomeThemeViewShowsFocusRing (view);
   BOOL popupButton = [cell isKindOfClass: [NSPopUpButtonCell class]];
   BOOL isDefaultButton = NO;
   NSColor *fillColor = nil;
@@ -1749,9 +1818,11 @@ GnomeThemeDrawTabLabel(NSString *label,
 
   GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, fillColor, strokeColor, 1.0);
 
+  /* Inside the edge, like libadwaita's focus ring (outline-offset: -2px):
+     the button fills its frame, so a ring outside it would be clipped. */
   if (focused && disabled == NO)
     {
-      GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, -3.0, -3.0), radius + 3.0);
+      GnomeThemeDrawFocusRing (self, NSInsetRect (frame, 1.25, 1.25), MAX (0.0, radius - 0.75));
     }
 }
 
@@ -2025,7 +2096,7 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSView *controlView = [cell controlView];
   NSRect knobRect = [sliderCell knobRectFlipped: [controlView isFlipped]];
   BOOL enabled = [cell isEnabled];
-  BOOL focused = GnomeThemeViewHasFocus (controlView) && enabled;
+  BOOL focused = GnomeThemeViewShowsFocusRing (controlView) && enabled;
   NSColor *fillColor = GnomeThemeBlend (GnomeThemeColor (self,
                                                          @"textBackgroundColor",
                                                          [NSColor textBackgroundColor]),
@@ -3469,7 +3540,7 @@ GnomeThemeDrawTabLabel(NSString *label,
         markColor = [NSColor disabledControlTextColor];
       }
 
-    if (GnomeThemeViewHasFocus (controlView) && enabled)
+    if (GnomeThemeViewShowsFocusRing (controlView) && enabled)
       {
         NSRect focusRect = GnomeThemeIndicatorFocusRect (cell, cellFrame);
         CGFloat focusRadius = radio
