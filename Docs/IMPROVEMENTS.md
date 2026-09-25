@@ -100,15 +100,23 @@ a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
    the original. This was the root cause of the invisible toolbar items; the
    theme works around it with `GnomeThemeOriginalMethod()`.
 
-### Reported by OneDriveServiceManager, not reproduced
+### Reported by OneDriveServiceManager: withdrawn
 
-Checked under Xvfb with the probe. None of these happened with this theme or
-with the default theme; each needs exact steps from the app before it goes
-anywhere.
+OneDriveServiceManager rechecked these on 2026-09-24 with the current theme
+installed. None is a GNUstep bug; don't report them upstream.
 
-- A label holding one long "word" (a path) draws nothing. It clips (or
-  truncates, with a truncating line break mode) at every height tried.
-- A pop-up button with the focus takes Return. The window's default button
-  fired.
-- Return/Esc key equivalents stop working after another panel closes. Both
-  still fired.
+- **A label holding one long "word" (a path) draws nothing.** Its text was
+  four leading spaces and then the path. GNUstep wrapped at the spaces and
+  put the path on a second line, which the one-line frame hid. Expected
+  behaviour.
+- **A pop-up button with the focus takes Return.** The window had no default
+  button cell, only a button with a Return key equivalent.
+  `setDefaultButtonCell:` fixes it, matching the probe.
+- **Return/Esc key equivalents stop working after another panel closes.**
+  Seen only with xdotool's synthetic events, sent to a window that had lost
+  the focus. Not a proven bug. Calling `makeKeyAndOrderFront:` on the window
+  again is still good UX.
+- **The toolbar view-item image loss is not caused by copying or archiving**
+  (OneDriveServiceManager's first guess). Upstream item 1 above gives the real
+  cause. OneDriveServiceManager now uses plain image items, so it no longer
+  needs the workaround.
