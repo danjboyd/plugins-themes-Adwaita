@@ -125,6 +125,16 @@ static NSView *GnomeThemeLastFocusedEntryView = nil;
    border-spacing, which leaves about 5px before the first glyph. */
 static const CGFloat GnomeThemeIndicatorLabelGap = 4.0;
 
+static GnomeTheme *GnomeThemeActiveTheme(void);
+
+static CGFloat
+GnomeThemeIndicatorMinimumSize(void)
+{
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+
+  return (theme != nil) ? [[theme metrics] indicatorMinimumSize] : 18.0;
+}
+
 /* GTK's focus-visible: buttons, checkboxes and other non-text controls show
    their focus ring only after a key press, and hide it again on a pointer
    press. A dialog opened with the mouse shows no ring on its focused button.
@@ -1443,6 +1453,10 @@ GnomeThemeEmphasizedFont(NSFont *font)
       return font;
     }
 
+  if ([[GnomeThemeActiveTheme () metrics] emphasizesButtonTitles] == NO)
+    {
+      return font;
+    }
   boldFont = [fontManager convertFont: font toHaveTrait: NSBoldFontMask];
   return (boldFont != nil) ? boldFont : font;
 }
@@ -1603,7 +1617,7 @@ static NSRect
 GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame)
 {
   NSRect contentRect = [cell drawingRectForBounds: cellFrame];
-  CGFloat indicatorSize = MAX (18.0, floor (contentRect.size.height * 0.58));
+  CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (contentRect.size.height * 0.58));
   NSRect indicatorRect = GnomeThemeIndicatorRectInContent (cell, contentRect, indicatorSize);
   NSSize labelSize = GnomeThemeButtonLabelSize (cell);
   CGFloat labelWidth = MIN (labelSize.width,
@@ -3408,7 +3422,7 @@ GnomeThemeDrawTabLabel(NSString *label,
       /* Mirrors drawInteriorWithFrame: an indicator of at least 18pt at +2,
          the label gap, then the title in the cell's own font. */
       NSAttributedString *title = [cell attributedTitle];
-      CGFloat indicatorSize = MAX (18.0, floor (drawing.size.height * 0.58));
+      CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (drawing.size.height * 0.58));
       CGFloat labelWidth = [title length] > 0 ? ceil ([title size].width) : 0.0;
       CGFloat width = bezel + 2.0 + indicatorSize + (labelWidth > 0.0 ? GnomeThemeIndicatorLabelGap + labelWidth + slack : 2.0);
 
@@ -3602,7 +3616,7 @@ GnomeThemeDrawTabLabel(NSString *label,
     BOOL highlighted = [(NSButtonCell *)self isHighlighted];
     NSInteger state = [(NSButtonCell *)self state];
     NSRect contentRect = [(NSButtonCell *)self drawingRectForBounds: cellFrame];
-    CGFloat indicatorSize = MAX (18.0, floor (contentRect.size.height * 0.58));
+    CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (contentRect.size.height * 0.58));
     NSRect indicatorRect = GnomeThemeIndicatorRectInContent ((NSButtonCell *)self, contentRect, indicatorSize);
     NSRect titleRect = GnomeThemeIndicatorTitleRect ((NSButtonCell *)self, contentRect, indicatorRect);
     NSColor *fillColor = nil;

@@ -48,6 +48,23 @@
   _buttonVerticalPadding = ceil (MAX (6.0, floor (base * 0.55)));
   /* GTK list rows: a line of text (about base + 3) with 8px above and below. */
   _tableRowHeight = ceil (MAX (34.0, base + 19.0));
+  _indicatorMinimumSize = 18.0;
+  _emphasizesButtonTitles = YES;
+  _compact = [settings compactMetrics];
+
+  /* Compact metrics fit layouts made at GNUstep's: no minimum tab height
+     (GSTheme's own), GNUstep's button margins, regular-weight button titles
+     and smaller indicators. */
+  if (_compact)
+    {
+      _minimumTabHeight = 0.0;
+      _maximumTabHeight = 0.0;
+      _buttonHorizontalPadding = 0.0;
+      _buttonVerticalPadding = 0.0;
+      _tableRowHeight = ceil (base + 12.0);
+      _indicatorMinimumSize = 14.0;
+      _emphasizesButtonTitles = NO;
+    }
 }
 
 - (CGFloat) menuBarHeight
@@ -103,6 +120,21 @@
 - (CGFloat) tableRowHeight
 {
   return _tableRowHeight;
+}
+
+- (CGFloat) indicatorMinimumSize
+{
+  return _indicatorMinimumSize;
+}
+
+- (BOOL) emphasizesButtonTitles
+{
+  return _emphasizesButtonTitles;
+}
+
+- (BOOL) compact
+{
+  return _compact;
 }
 
 @end

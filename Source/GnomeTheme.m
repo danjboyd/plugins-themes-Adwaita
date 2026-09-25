@@ -454,9 +454,11 @@ GnomeThemeKeepsHiddenWindowSize(void)
 {
   CGFloat padding = [_metrics horizontalMenuTitlePadding];
 
+  /* GTK's menu bar leaves about 20px between titles; NSMenuView adds its
+     edge padding (4pt a side) to this. */
   if ([aMenuView isHorizontal] == YES)
     {
-      return proposedWidth + (padding * 2.5);
+      return proposedWidth + 12.0;
     }
   return proposedWidth + padding;
 }
@@ -638,10 +640,13 @@ GnomeThemeKeepsHiddenWindowSize(void)
                  forKey: @"GSMenuSeparatorHeight"];
   [dictionary setObject: [NSNumber numberWithFloat: [_metrics scrollerWidth]]
                  forKey: @"GSScrollerDefaultWidth"];
-  [dictionary setObject: [NSNumber numberWithFloat: [_metrics minimumTabHeight]]
-                 forKey: @"GSMinimumTabHeight"];
-  [dictionary setObject: [NSNumber numberWithFloat: [_metrics maximumTabHeight]]
-                 forKey: @"GSMaximumTabHeightPrivate"];
+  if ([_metrics compact] == NO)
+    {
+      [dictionary setObject: [NSNumber numberWithFloat: [_metrics minimumTabHeight]]
+                     forKey: @"GSMinimumTabHeight"];
+      [dictionary setObject: [NSNumber numberWithFloat: [_metrics maximumTabHeight]]
+                     forKey: @"GSMaximumTabHeightPrivate"];
+    }
 
   return dictionary;
 }

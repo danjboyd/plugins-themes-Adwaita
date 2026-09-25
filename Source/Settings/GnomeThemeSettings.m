@@ -28,6 +28,38 @@ static NSString *GnomeThemeDefaultMonospaceFontName = @"Monospace";
 static CGFloat GnomeThemeDefaultInterfaceFontSize = 11.0;
 static CGFloat GnomeThemeDefaultMonospaceFontSize = 11.0;
 static CGFloat GnomeThemeDefaultFontScale = (96.0 / 72.0);
+/* GNUstep's default NSFontSize, which Gorm and nib layouts were made at. */
+static CGFloat GnomeThemeCompactInterfaceFontSize = 12.0;
+
+static BOOL
+GnomeThemeWantsCompactMetrics(void)
+{
+  NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"];
+  NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
+  NSEnumerator *enumerator;
+  NSString *key;
+
+  if (choice != nil && [choice caseInsensitiveCompare: @"compact"] == NSOrderedSame)
+    {
+      return YES;
+    }
+  if (choice != nil && [choice caseInsensitiveCompare: @"gnome"] == NSOrderedSame)
+    {
+      return NO;
+    }
+  enumerator = [[NSArray arrayWithObjects: @"NSMainNibFile", @"NSMainStoryboardFile",
+                                           @"GSMainMarkupFile", nil] objectEnumerator];
+  while ((key = [enumerator nextObject]) != nil)
+    {
+      id value = [info objectForKey: key];
+
+      if ([value isKindOfClass: [NSString class]] && [value length] > 0)
+        {
+          return YES;
+        }
+    }
+  return NO;
+}
 
 static CGFloat
 GnomeThemeResolvedFontScale(void)
@@ -287,6 +319,17 @@ GnomeThemeResolveFont(NSString *preferredName,
   fontSize *= fontScale;
   monoSize *= fontScale;
 
+  _compactMetrics = GnomeThemeWantsCompactMetrics ();
+  if (_compactMetrics)
+    {
+      /* GNUstep's size, still following GnomeFontScale; the monospace font
+         keeps its size relative to the interface font. */
+      CGFloat compact = GnomeThemeCompactInterfaceFontSize * (fontScale / GnomeThemeDefaultFontScale);
+
+      monoSize *= compact / fontSize;
+      fontSize = compact;
+    }
+
   if ([gtkThemeName rangeOfString: @"HighContrast"
                           options: NSCaseInsensitiveSearch].location != NSNotFound)
     {
@@ -318,6 +361,11 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (CGFloat) interfaceFontSize
 {
   return _interfaceFontSize;
+}
+
+- (BOOL) compactMetrics
+{
+  return _compactMetrics;
 }
 
 - (NSString *) monospaceFontName

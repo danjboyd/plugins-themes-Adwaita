@@ -35,6 +35,9 @@
   CGFloat _buttonHorizontalPadding;
   CGFloat _buttonVerticalPadding;
   CGFloat _tableRowHeight;
+  CGFloat _indicatorMinimumSize;
+  BOOL _emphasizesButtonTitles;
+  BOOL _compact;
 }
 
 - (void) reloadFromSettings: (GnomeThemeSettings *)settings;
@@ -50,5 +53,10 @@
 - (CGFloat) buttonHorizontalPadding;
 - (CGFloat) buttonVerticalPadding;
 - (CGFloat) tableRowHeight;
+/* The smallest checkbox or radio indicator. */
+- (CGFloat) indicatorMinimumSize;
+/* Whether push button titles are bold, as libadwaita's are. */
+- (BOOL) emphasizesButtonTitles;
+- (BOOL) compact;
 
 @end

@@ -36,6 +36,7 @@ typedef enum
   NSString *_gtkThemeName;
   GnomeThemeColorScheme _colorScheme;
   BOOL _highContrast;
+  BOOL _compactMetrics;
 }
 
 - (void) reload;
@@ -47,6 +48,12 @@ typedef enum
 - (NSString *) gtkThemeName;
 - (BOOL) prefersDarkAppearance;
 - (BOOL) highContrastEnabled;
+/* GNUstep's metrics (12pt text, GNUstep's button margins and tab height)
+   instead of GNOME's, for apps whose windows come from Gorm or nib files and
+   were laid out at those metrics. The GnomeThemeMetrics default chooses
+   ("compact" or "gnome"); otherwise apps with a main nib, storyboard or
+   markup file get compact metrics. */
+- (BOOL) compactMetrics;
 
 - (NSFont *) interfaceFont;
 - (NSFont *) boldInterfaceFont;
