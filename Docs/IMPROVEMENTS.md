@@ -46,6 +46,7 @@ it was found. Compare against the libadwaita reference with
 | Menu bar titles were about 37px apart; GTK's are about 20px | about 22px, so narrow windows (Gorm's document window) fit their menus |
 | GNOME apps have no menu bar | `GnomeThemeMenuStyle = primary` (a user default, or the app's Info.plist) turns it into GNOME's main menu button: at the end of the toolbar when the window shows one (the toolbar is narrowed for it), otherwise alone in a slim bar; it shows a copy of the main menu (the menus, then the application menu's items) right-aligned under the button, rebuilt each time it opens |
 | An app laid out in Gorm for GNOME's metrics would get compact metrics (it has a main nib) | apps can declare `GnomeThemeMetrics` in their Info.plist; the user's default still wins |
+| Gorm's palettes make controls at GNUstep's sizes (22pt buttons) | `Palettes/Adwaita`: a Gorm palette of controls at GNOME's sizes, with fonts left at the system font's default size so they follow the app's metrics (checked: archived at 12pt in a compact process, read back at 14.7pt in a GNOME one) |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -74,10 +75,9 @@ window, compared with the GNUstep theme). Still open:
 - **Menu bars in very narrow windows** can still run past the edge; ☰ stays
   first so the application menu is always reachable.
 - **Designing for GNOME's metrics in Gorm** means running Gorm with
-  `-GnomeThemeMetrics gnome`, where its own inspectors are cramped. Gorm's
-  palettes also drop controls at GNUstep's sizes (22pt buttons). An Adwaita
-  palette (34pt controls, HIG spacing), or roomier inspectors in Gorm itself,
-  would make this comfortable.
+  `-GnomeThemeMetrics gnome`, where its own inspectors are cramped. The
+  Adwaita palette (`Palettes/Adwaita`, see the README) provides controls at
+  GNOME's sizes; roomier inspectors would need changes in Gorm itself.
 - **The primary menu's separators** are darker than GNOME's.
 - **Gorm's CustomView palette item** draws as a pale disabled button instead
   of a dark tile.

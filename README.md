@@ -166,7 +166,19 @@ windows laid out at GNOME's metrics instead:
    ```
 
    With GNUstep Make, put these in `APPNAMEInfo.plist` next to the makefile.
-2. Lay its windows out in Gorm running with GNOME's metrics, so what you see
+2. Install the Adwaita palette: controls at GNOME's sizes (34pt buttons,
+   entries, pop-ups and search fields, a suggested button, checkboxes,
+   radios, heading and body labels). Gorm's own palettes make 22pt controls.
+
+   ```sh
+   make palette installpalette GNUSTEP_INSTALLATION_DOMAIN=USER
+   defaults write Gorm UserPalettes \
+     '("'$HOME'/GNUstep/Library/ApplicationSupport/Palettes/Adwaita.palette")'
+   ```
+
+   (or open it once with Palettes ▸ Open… in Gorm's Tools menu, which
+   remembers it). It appears as the last icon in Gorm's palette panel.
+3. Lay its windows out in Gorm running with GNOME's metrics, so what you see
    is what the app will show:
 
    ```sh
@@ -177,9 +189,9 @@ windows laid out at GNOME's metrics instead:
    document's windows show the app's real text and control sizes. Size push
    buttons and text fields 34pt high, and leave GNOME's spacing: 6pt between
    related controls, 12pt between groups, 18pt from the window's edge.
-3. Leave control fonts at the system font's default size (Gorm's default).
-   Those are archived as "the system font" and follow the metrics the app
-   runs with; a font given an explicit size keeps it.
+4. Leave control fonts at the system font's default size (Gorm's default,
+   and the palette's). Those are archived as "the system font" and follow
+   the metrics the app runs with; a font given an explicit size keeps it.
 
 ## Development Notes
 
