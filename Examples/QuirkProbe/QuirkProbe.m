@@ -20,6 +20,7 @@
 
 #import "QuirkProbe.h"
 #import <GNUstepGUI/GSTheme.h>
+#import <GNUstepGUI/GSDragView.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -891,6 +892,67 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* Tool tips and drag images are hidden by shrinking their window to
+   NSZeroRect before ordering it out, which leaves them frozen under
+   Mutter/Xwayland (GNOME/mutter#5080). On Wayland the theme keeps the size;
+   elsewhere it leaves GNUstep's shrink alone. */
+- (void) showForHiding: (NSWindow *)window
+{
+  [window setFrame: NSMakeRect (100, 100, 80, 24) display: NO];
+  [window orderFront: nil];
+}
+
+- (void) checkHiddenWindow: (NSWindow *)window ident: (NSString *)ident
+{
+  BOOL wayland = (getenv ("WAYLAND_DISPLAY") != NULL);
+  NSRect frame = [window frame];
+  NSString *detail = [NSString stringWithFormat: @"%@ after hiding (%@), %@",
+    NSStringFromSize (frame.size), wayland ? @"Wayland" : @"not Wayland",
+    [window isVisible] ? @"still visible" : @"ordered out"];
+
+  /* GNUstep clamps NSZeroRect to 1x1. */
+  BOOL shrunk = (NSWidth (frame) <= 1 && NSHeight (frame) <= 1);
+
+  if ([window isVisible] == NO && shrunk != wayland)
+    {
+      [self pass: ident detail: detail];
+    }
+  else
+    {
+      [self fail: ident detail: detail];
+    }
+}
+
+- (void) checkHiddenWindows
+{
+  Class panelClass = NSClassFromString (@"GSTTPanel");
+  GSDragView *dragView = [GSDragView sharedDragView];
+
+  if (panelClass == Nil)
+    {
+      [self skip: @"tooltip-hide-keeps-size" detail: @"GSTTPanel not found"];
+    }
+  else
+    {
+      NSWindow *panel = [[panelClass alloc] initWithContentRect: NSMakeRect (0, 0, 100, 25)
+                                                      styleMask: NSBorderlessWindowMask
+                                                        backing: NSBackingStoreRetained
+                                                          defer: YES];
+
+      /* Hidden as -[GSToolTips _endDisplay:] does it. */
+      [panel setReleasedWhenClosed: NO];
+      [self showForHiding: panel];
+      [panel setFrame: NSZeroRect display: NO];
+      [panel orderOut: nil];
+      [self checkHiddenWindow: panel ident: @"tooltip-hide-keeps-size"];
+      RELEASE (panel);
+    }
+
+  [self showForHiding: [dragView window]];
+  [dragView performSelector: @selector(_clearupWindow)];
+  [self checkHiddenWindow: [dragView window] ident: @"drag-image-hide-keeps-size"];
+}
+
 - (void) checkFirstWindows: (NSTimer *)timer
 {
   [self saveWindow: _controlsWindow named: @"controls"];
@@ -905,6 +967,7 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkToolbarHover];
   [self checkPopUpButton];
   [self checkFonts];
+  [self checkHiddenWindows];
 
   _lateWindow = [self windowWithFrame: NSMakeRect (480, 560, 300, 100) title: @"QuirkProbe Late Window"];
   [_lateWindow makeKeyAndOrderFront: nil];
