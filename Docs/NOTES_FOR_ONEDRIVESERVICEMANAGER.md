@@ -144,6 +144,26 @@ mouse shows no ring on its buttons. After a key press (Tab, Return, Escape,
 anything) the focused button gets a ring just inside its edge; the next click
 hides it again. No change needed on your side.
 
+## GNOME-native polish (theme change, 2026-09-25)
+
+- **Tab views** (the Details window) look like a GtkNotebook: a thin frame,
+  plain text tabs with a blue underline under the selected one, and the
+  pages on a white background.
+- **Alerts** look like GNOME's: no app icon, a centred bold heading over
+  centred text, and buttons of equal width in a row, the default at the
+  right. Nothing to change; `NSAlert` gets this.
+- **The ☰ main menu** sits at the right end of the menu bar.
+- **Checkbox and radio labels** sit closer to their box (4pt instead of
+  10pt); `sizeToFit` accounts for it.
+- **Toolbars** the app gives no display mode are icon-only, and each button
+  shows its label as a tool tip. `MainWindowController.m` sets
+  `NSToolbarDisplayModeIconAndLabel`, so yours keeps its labels; drop that
+  line for the GNOME look (and `setToolTip:` where the label isn't the tip
+  you want).
+- **Tables** built in code get GNOME's 34pt rows and no cell spacing. Your
+  outline sets `MAX(22, lineHeight + 8)`, about 25pt, and keeps it; drop the
+  `setRowHeight:` call for GNOME's density.
+
 ## Where to report theme problems
 
 Add them to plugins-themes-adwaita's `Docs/IMPROVEMENTS.md` or tell the theme

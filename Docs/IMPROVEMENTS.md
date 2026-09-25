@@ -11,7 +11,7 @@ it was found. Compare against the libadwaita reference with
 | --- | --- |
 | Image-only `NSToolbarItem`s drew nothing (image and label) | `GnomeThemeOriginalMethod()`: overrides reached from a subclass (`GSToolbarButtonCell`) found no original method |
 | `sizeToFit` buttons clipped their last word ("Sign In" → "Sign") | `cellSize` measures with the drawing geometry (bezel margins + title insets) |
-| `sizeToFit` checkboxes/radios clipped ("Errors only" → "Errors") | `cellSize` accounts for the ≥18pt indicator and 10pt gap |
+| `sizeToFit` checkboxes/radios clipped ("Errors only" → "Errors") | `cellSize` accounts for the ≥18pt indicator and the label gap |
 | Multi-line labels and `NSAlert` informative text showed one line | `titleRectForBounds:` keeps the full rect for labels that need (and have room for) more lines |
 | Password field text sat 10pt left of other fields' text | same subclass fix (`NSSecureTextFieldCell`) |
 | ThemeDemo stuck at 2× after a `capture-theme-demo.sh --scale 2` run | the script passes `-GSScaleFactor`/`-GSTheme` as launch arguments |
@@ -28,33 +28,28 @@ it was found. Compare against the libadwaita reference with
 | `NSMenuItemCell` overrides used the exact-class lookup, and pop-up buttons' layout depended on it failing | they use `GnomeThemeOriginalMethod()`; pop-up button cells get their geometry explicitly, so an upstream fix to `-overriddenMethod:for:` can't move pop-up titles |
 | Under GNOME Wayland, tool tips and drag images showed only the first time (GNOME/mutter#5080, upstream items 5 and 6) | on Wayland the tool tip panel and the drag window are ordered out without first being shrunk to `NSZeroRect`; elsewhere GNUstep's shrink is kept |
 | A focused push button (OneDriveServiceManager's Cancel, the first key view in its panels) had a ring around its title and blue fragments in its corners | NSCell's inner ring is no longer drawn for buttons, and the button's own ring runs just inside its edge, like libadwaita's (a ring outside the frame was clipped to the corners); as in GTK (focus-visible), rings on buttons, checkboxes, radios and sliders show only after a key press and hide on a pointer press, while text fields keep theirs whenever focused |
+| Table rows were about 28px (GNUstep's default 16pt clipped the text) with 3–4px of text inset | tables built in code start with GTK's list density: 34pt rows (scaled with the interface font) and no intercell spacing; table cells and headers inset their text 6px, as GTK list cells do; apps that set a row height or spacing keep theirs, and nib/Gorm tables keep their archived values |
+| Toolbars showed icon and label; GNOME header bars show icons with tool tips | a toolbar the app gives no display mode starts icon-only (later toolbars with its identifier copy it); a button without its label gets the label as its tool tip unless the item has one; `setDisplayMode:` and nib/Gorm toolbars are respected |
+| The ☰ main menu sat at the start of the menu bar; GNOME puts it at the end | its rect moves to the right end of the bar (`-[NSMenuView rectOfItemAtIndex:]`), which drawing, hit testing and highlighting follow; its menu opens right-aligned under it |
+| Alerts had GNUstep's layout: app icon, left title, a groove line, buttons at the right | laid out like `AdwAlertDialog`: no icon or line, a centred bold heading (title-2 size) over centred body text, and 44pt buttons of equal width in a row (stacked full width when the titles don't fit), default button at the right |
+| Tab views drew pill tabs with a blue top bar and no frame | GtkNotebook style: a 1px frame, plain text tabs on the window background, a 4pt accent underline under the selected tab, content on the view background (tab views built in code now draw their background, Cocoa's default) |
+| Checkbox and radio labels sat 10pt after the indicator | 4pt, GTK's spacing (about 5px before the first glyph) |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
 
-## GNOME-native polish (suggested)
+## GNOME-native polish
 
-Seen side by side with the libadwaita reference (Data Views and Controls pages)
-and in OneDriveServiceManager's main window.
+The six items found side by side with the libadwaita reference (row density,
+icon-only toolbars, the main menu's position, alerts, tab views and checkbox
+spacing) are in the Fixed table. Still different from GNOME:
 
-1. **Row height and cell padding.** libadwaita rows are about 34px with 6px of
-   text inset and wide column spacing; the theme's are about 28px with 3–4px.
-   Density affects every app's layout, so change it deliberately.
-2. **Icon-only toolbar items.** GNOME header bar buttons are icon-only with
-   tooltips; GNUstep toolbars default to icon above label. The theme keeps the
-   display mode the app sets; an app that wants the GNOME look can use
-   `NSToolbarDisplayModeIconOnly` and set tooltips.
-3. **Main menu at the end of the bar.** GNOME puts the main menu button at the
-   right. The theme's ☰ stays first, because GSTheme moves the app item back to
-   the front whenever it organises the menu.
-4. **Alerts like `AdwAlertDialog`.** Centred bold heading and body, no app icon
-   or separator line, equal-width buttons in a row (stacked when narrow), and
-   rounded corners.
-5. **Tab views.** GNOME uses flat tabs with an accent underline on the selected
-   one (GtkNotebook) or a view switcher. The theme's pill tabs with a blue top
-   bar read as custom.
-6. **Checkbox and radio spacing.** GTK uses about a 6–8pt gap between indicator
-   and label (theme: 10) and packs option groups tighter.
+- **Packing of option groups.** GTK stacks checkboxes and radios tighter
+  than most GNUstep layouts; that spacing belongs to the app.
+- **Text width.** At the same font and size, GNUstep's text runs about 5%
+  wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
+- **Alerts keep a title bar.** `AdwAlertDialog` has none; GNUstep's panel
+  has the window manager's.
 
 ## Theme follow-ups
 
