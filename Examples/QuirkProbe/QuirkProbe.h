@@ -43,6 +43,7 @@
   NSTextField *_pathLabel;
   NSTextField *_truncatedPathLabel;
   NSString *_alertText;
+  NSArray *_primaryExtraItems;
   NSUInteger _passed;
   NSUInteger _failed;
   NSUInteger _known;

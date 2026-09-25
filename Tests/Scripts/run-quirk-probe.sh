@@ -24,6 +24,9 @@
 #   bash Tests/Scripts/run-quirk-probe.sh [--theme PATH] [--output DIR]
 #                                         [--display :N] [--no-build]
 #
+# QUIRK_PROBE_ARGS passes extra defaults to the probe, for example
+# QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".
+#
 # --output DIR  also writes a PNG of each probe window to DIR.
 # --display :N  uses an existing X display instead of starting Xvfb.
 
@@ -126,6 +129,11 @@ monospace-font-name='Noto Sans Mono 11'
 KEYFILE
 
 PROBE_ARGS=(-GSTheme "$THEME" -NSMenuInterfaceStyle NSWindows95InterfaceStyle)
+# Extra defaults for the probe, e.g. QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".
+if [ -n "${QUIRK_PROBE_ARGS:-}" ]; then
+  read -r -a EXTRA_ARGS <<< "$QUIRK_PROBE_ARGS"
+  PROBE_ARGS+=("${EXTRA_ARGS[@]}")
+fi
 if [ -n "$OUTPUT" ]; then
   mkdir -p "$OUTPUT"
   PROBE_ARGS+=(-ProbeOutput "$(cd "$OUTPUT" && pwd)")

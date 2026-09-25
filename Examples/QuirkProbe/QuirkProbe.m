@@ -1431,6 +1431,164 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* What the primary menu showed, seen from inside its tracking loop. */
+static NSMutableArray *QuirkProbePrimaryTitles = nil;
+static NSRect QuirkProbePrimaryFrame;
+
+static NSView *
+QuirkProbePrimaryButtonIn (NSView *view)
+{
+  return QuirkProbeFindViewOfClass (view, NSClassFromString (@"GnomeThemePrimaryMenuButton"));
+}
+
+/* Fires while the ☰'s menu is tracking: note the vertical menu that's
+   showing, then close it with a click outside. */
+- (void) inspectPrimaryMenu: (NSTimer *)timer
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSWindow *window;
+  NSEvent *up, *down;
+
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSMenuView *menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([window contentView], [NSMenuView class]);
+
+      if ([window isVisible] && menuView != nil && [menuView isHorizontal] == NO)
+        {
+          NSEnumerator *items = [[[menuView menu] itemArray] objectEnumerator];
+          NSMenuItem *item;
+
+          QuirkProbePrimaryFrame = [window frame];
+          [self saveWindow: window named: @"primary-menu"];
+          while ((item = [items nextObject]) != nil)
+            {
+              [QuirkProbePrimaryTitles addObject: [item isSeparatorItem] ? @"--" : [item title]];
+            }
+        }
+    }
+  up = [NSEvent mouseEventWithType: NSLeftMouseUp location: NSMakePoint (-50, -50) modifierFlags: 0
+                         timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 0];
+  down = [NSEvent mouseEventWithType: NSLeftMouseDown location: NSMakePoint (-50, -50) modifierFlags: 0
+                           timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 1];
+  [NSApp postEvent: up atStart: NO];
+  [NSApp postEvent: down atStart: NO];
+  [NSApp postEvent: up atStart: NO];
+}
+
+/* With -GnomeThemeMenuStyle primary: a window without a toolbar shows a
+   slim bar holding ☰; a window with one shows ☰ at the toolbar's end and no
+   menu bar; clicking ☰ shows the main menu vertically under it. */
+- (void) checkPrimaryMenu
+{
+  NSView *controlsFrame = [[_controlsWindow contentView] superview];
+  NSView *toolbarFrame = [[_toolbarWindow contentView] superview];
+  NSMenuView *controlsBar = (NSMenuView *)QuirkProbeFindViewOfClass (controlsFrame, [NSMenuView class]);
+  NSMenuView *toolbarBar = (NSMenuView *)QuirkProbeFindViewOfClass (toolbarFrame, [NSMenuView class]);
+  NSView *barButton = QuirkProbePrimaryButtonIn (controlsBar);
+  NSView *toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
+  NSView *toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
+  NSString *detail;
+  NSRect buttonInWindow;
+  NSEvent *click;
+
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"] == NO)
+    {
+      [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary"];
+      return;
+    }
+
+  detail = [NSString stringWithFormat: @"bar %gpt high with %@; toolbar window: bar %gpt, ☰ %@ beside a toolbar ending at %g",
+    NSHeight ([controlsBar frame]), barButton != nil ? @"☰" : @"no ☰",
+    NSHeight ([toolbarBar frame]), NSStringFromRect ([toolbarButton frame]), NSMaxX ([toolbarView frame])];
+  if (barButton != nil && NSHeight ([controlsBar frame]) >= 34 && ([toolbarBar superview] == nil || NSHeight ([toolbarBar frame]) == 0)
+    && toolbarButton != nil && NSMinX ([toolbarButton frame]) == NSMaxX ([toolbarView frame])
+    && NSMaxX ([toolbarButton frame]) == NSMaxX ([toolbarFrame bounds]))
+    [self pass: @"primary-menu-placement" detail: detail];
+  else
+    [self fail: @"primary-menu-placement" detail: detail];
+
+  /* Hiding the toolbar moves ☰ to a bar; showing it again moves it back.
+     The content view keeps meeting the bar or toolbar with no gap. */
+  {
+    NSToolbar *toolbar = [_toolbarWindow toolbar];
+    NSView *content = [_toolbarWindow contentView];
+    NSMenuView *bar;
+    CGFloat hiddenBar, hiddenGap, shownGap;
+
+    [toolbar setVisible: NO];
+    bar = (NSMenuView *)QuirkProbeFindViewOfClass (toolbarFrame, [NSMenuView class]);
+    hiddenBar = NSHeight ([bar frame]);
+    hiddenGap = NSMinY ([bar frame]) - NSMaxY ([content frame]);
+    [toolbar setVisible: YES];
+    toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
+    toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
+    shownGap = NSMinY ([toolbarView frame]) - NSMaxY ([content frame]);
+    detail = [NSString stringWithFormat: @"toolbar hidden: bar %gpt, %gpt above the content; shown: toolbar %gpt above it, ☰ %@",
+      hiddenBar, hiddenGap, shownGap, NSStringFromRect ([toolbarButton frame])];
+    if (hiddenBar >= 34 && QuirkProbePrimaryButtonIn (bar) != nil && fabs (hiddenGap) <= 1 && fabs (shownGap) <= 1
+      && [toolbarButton window] == _toolbarWindow && NSMinX ([toolbarButton frame]) == NSMaxX ([toolbarView frame]))
+      [self pass: @"primary-menu-toolbar-toggle" detail: detail];
+    else
+      [self fail: @"primary-menu-toolbar-toggle" detail: detail];
+  }
+
+  /* Open it, with an application menu and an Edit menu added: the click's
+     tracking loop runs until -inspectPrimaryMenu: closes the menu. */
+  {
+    NSMenu *mainMenu = [NSApp mainMenu];
+    NSString *name = [[NSProcessInfo processInfo] processName];
+    NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: name]);
+    NSMenu *editMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Edit"]);
+    NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: name action: NULL keyEquivalent: @""]);
+    NSMenuItem *editItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: @"Edit" action: NULL keyEquivalent: @""]);
+
+    [appMenu addItemWithTitle: @"Preferences…" action: NULL keyEquivalent: @","];
+    [appMenu addItemWithTitle: @"About QuirkProbe" action: @selector(orderFrontStandardAboutPanel:) keyEquivalent: @""];
+    [editMenu addItemWithTitle: @"Copy" action: @selector(copy:) keyEquivalent: @"c"];
+    [appItem setSubmenu: appMenu];
+    [editItem setSubmenu: editMenu];
+    [mainMenu insertItem: appItem atIndex: 0];
+    [mainMenu addItem: editItem];
+    _primaryExtraItems = [[NSArray alloc] initWithObjects: appItem, editItem, nil];
+  }
+  ASSIGN (QuirkProbePrimaryTitles, [NSMutableArray array]);
+  /* Changing the main menu gives the window a new menu view and ☰. */
+  barButton = QuirkProbePrimaryButtonIn ([[_controlsWindow contentView] superview]);
+  buttonInWindow = [barButton convertRect: [barButton bounds] toView: nil];
+  click = [NSEvent mouseEventWithType: NSLeftMouseDown
+                             location: NSMakePoint (NSMaxX (buttonInWindow) - 23, NSMidY (buttonInWindow))
+                        modifierFlags: 0
+                            timestamp: 0
+                         windowNumber: [_controlsWindow windowNumber]
+                              context: nil
+                          eventNumber: 0
+                           clickCount: 1
+                             pressure: 1.0];
+  [self after: 0.3 perform: @selector(inspectPrimaryMenu:) mode: NSEventTrackingRunLoopMode];
+  [barButton mouseDown: click];
+  {
+    NSEnumerator *extras = [_primaryExtraItems objectEnumerator];
+    NSMenuItem *extra;
+
+    while ((extra = [extras nextObject]) != nil)
+      {
+        [[NSApp mainMenu] removeItem: extra];
+      }
+    DESTROY (_primaryExtraItems);
+  }
+
+  detail = [NSString stringWithFormat: @"menu %@ at %@, the button's right edge at %g",
+    [QuirkProbePrimaryTitles componentsJoinedByString: @" | "], NSStringFromRect (QuirkProbePrimaryFrame),
+    [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x];
+  /* The app's menus in order, then its application menu's items. */
+  if ([[QuirkProbePrimaryTitles componentsJoinedByString: @" | "]
+        isEqualToString: @"File | Edit | -- | Preferences… | About QuirkProbe"]
+    && fabs (NSMaxX (QuirkProbePrimaryFrame) - [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x) < 1.0)
+    [self pass: @"primary-menu-opens" detail: detail];
+  else
+    [self fail: @"primary-menu-opens" detail: detail];
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -1532,6 +1690,7 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
   [self checkMetricsMode];
+  [self checkPrimaryMenu];
   [self checkFonts];
   [self checkHiddenWindows];
 
