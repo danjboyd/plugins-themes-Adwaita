@@ -114,13 +114,24 @@ toolbar, or a slim bar) are built.
 
 ### Phase 1: theme only
 
-1. An opt-in setting, e.g. `GnomeThemeWindowDecorations = headerbar`
-   (user default, then Info.plist, like the others), documented to be used
-   with `GSX11HandlesWindowDecorations NO`. First find out whether the theme
-   can set the backend flag itself: the backend reads it when the display
-   server is created (`NSApplication`, around `libs-gui/Source/NSApplication.m:894`),
-   probably before the theme's defaults domain exists. If it can't, the
-   user or app sets both.
+1. The opt-in is the backend flag alone (Dan, 2026-09-25): whenever
+   GNUstep draws the decorations (`GSX11HandlesWindowDecorations NO`), this
+   theme draws the header bar. There is no separate theme setting.
+
+   Checked 2026-09-25: the theme can't set the backend flag itself. The
+   theme is loaded (`+[GSTheme initialize]`, then `-[GnomeTheme activate]`)
+   from inside the X11 backend's start-up, after the backend has copied the
+   default into a file-static `BOOL` (`XGServerWindow.m:79`, read at 1485).
+   With `GSX11HandlesWindowDecorations = NO` in the theme's runtime defaults
+   domain, ThemeDemo on Xvfb had no title bar (the backend still left
+   decorations to the window manager); with `-GSX11HandlesWindowDecorations
+   NO` on the command line, GNUstep drew its own. Overriding
+   `-[XGServer handlesWindowDecorations]` doesn't help either: the backend
+   reads the static directly (lines 224, 341, 1618, 1906 and others), so
+   the WM would still decorate. Loading code earlier through
+   `GSAppKitUserBundles` would work but needs a second bundle per user.
+   Until libs-back changes (phase 2 can add a way for the theme to ask for
+   client-side decorations), the user or app sets the backend flag.
 2. `-windowDecorator` returns `GnomeThemeHeaderBarDecorationView`, a
    subclass of `GSStandardWindowDecorationView`:
    - height 47 (libadwaita's header bar, measured in the reference renders
@@ -174,6 +185,50 @@ mark the split. Opt-in per app (see Decisions).
   Phase 1 alone (no Mutter snapping, square corners, no shadow) is not a
   release.
 - Phase 3 (toolbar items in the header bar row) is opt-in per app.
+
+## Progress (2026-09-25)
+
+Phase 1, steps 1 and 2 are built (not yet committed at the time of
+writing): `Source/Rendering/GnomeThemeHeaderBar.m`, the ☰ hand-over in
+`GnomeThemePrimaryMenu.m`, `button-layout` and
+`action-double-click-titlebar` in `GnomeThemeSettings`, six `header-bar-*`
+QuirkProbe checks, and `make check-quirks` runs four configurations (38, 41,
+44 and 47 checks, all passing).
+
+Measured and settled (from `Reference/HeaderBar/headerbar_reference.py`,
+libadwaita 1.7.6):
+
+- The bar is 46px *including* the 1px border GTK draws round a window
+  without a compositor shadow: the border covers the bar's outer pixels, and
+  the buttons' 6px margins count from the window's edge. (The "47" above was
+  46 plus that border counted twice.)
+- libadwaita's bar is flat: the window background, no bottom line.
+- Window buttons: 34px, 3px apart, a 24px circle at 10% of the text colour
+  (15% hover, 30% pressed) round a 16px icon; icons drawn from Adwaita's
+  `window-*-symbolic.svg` paths (restore is one 6px square outline).
+- Title: the bold interface font (libadwaita ignores `titlebar-font`),
+  centred with its ascent and descent box centred in the bar.
+- Not focused (GTK's backdrop state follows keyboard focus, not main-window
+  status): text at 60% of the text colour over the background.
+
+GNUstep facts found on the way:
+
+- `-[NSWindow zoom:]` maximises but only goes back through an autosave
+  name; the header bar keeps the frame to restore itself.
+- `GSWindowDecorationView -layout` puts a menu bar 1pt above the content
+  area; the header bar trims it so the bar keeps its 46px.
+- NSButton is flipped (the icons turn over for it).
+- QuirkProbe renders come from the window's backing store: call
+  `displayIfNeeded` after a state change before rendering.
+
+Still to do in phase 1:
+
+- Try it by hand: dragging the bar, resizing from each edge and corner (the
+  loop uses the real pointer, so the probe can't drag), the resize cursors
+  (added with `addCursorRect:` on the decoration view; not checked yet), and
+  hover on the window buttons.
+- Step 3: panels, sheets, alerts, utility windows, untitled and borderless
+  windows, fullscreen.
 
 ## Testing
 

@@ -65,6 +65,7 @@ Source/                  Theme implementation
 Resources/               Theme bundle metadata and assets
 Examples/ThemeDemo/      GNUstep-side demo app
 Reference/AdwaitaDemo/   GTK4/libadwaita comparison harness
+Reference/HeaderBar/     libadwaita header bar measurements and renders
 Tests/Scripts/           Capture and local verification helpers
 Docs/                    Public design notes and roadmap
 ```
@@ -151,6 +152,21 @@ so an app can declare how it was designed):
   itself is unchanged, so key equivalents and validation work as before.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
+### Header bar (in development)
+
+With `GSX11HandlesWindowDecorations NO` (a user default, for example
+`defaults write NSGlobalDomain GSX11HandlesWindowDecorations NO`), GNUstep
+draws the window decorations instead of the window manager, and this theme
+draws them as libadwaita's header bar: one 46pt row with the bold title
+centred, round window buttons in the order of GNOME's `button-layout`, and
+the primary menu's ☰ before them. Drag the bar to move the window; resize
+from any edge or corner; double-click the bar for GNOME's
+`action-double-click-titlebar` action (maximise by default). The theme can't
+set the flag itself: GNUstep's backend reads it before any theme loads.
+
+Not yet: Mutter's snapping and tiling, the shadow and rounded top corners
+(these need changes in libs-back), and toolbar items in the header bar row.
+
 ### Designing a GNOME-style app in Gorm
 
 Gorm itself runs with compact metrics (its own windows come from Gorm files
@@ -220,8 +236,10 @@ pop-up titles, and the size of hidden tool tip and drag windows), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
 Add `--output DIR` to save a PNG of each probe window. `make check-quirks`
-runs the probe twice, the second time with the primary menu
-(`QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary"`).
+runs the probe four times: with the menu bar and with the primary menu
+(`QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary"`), each with the window
+manager's title bar and with the theme's header bar
+(`-GSX11HandlesWindowDecorations NO`).
 
 Useful helpers:
 
