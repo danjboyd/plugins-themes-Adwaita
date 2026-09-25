@@ -134,13 +134,15 @@ set +u
 . /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
 set -u
 
-defaults write ThemeDemo GSTheme Adwaita
-if [ -n "$SCALE" ]; then
-  defaults write ThemeDemo GSScaleFactor "$SCALE"
-else
-  defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
-fi
+# Theme and scale go on the command line (GNUstep's argument domain), so they
+# apply to this capture only. Writing them with `defaults write` left ThemeDemo
+# at double size for every later launch after a `--scale 2` capture.
+defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
 defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
+DEFAULT_ARGS=(-GSTheme Adwaita)
+if [ -n "$SCALE" ]; then
+  DEFAULT_ARGS+=(-GSScaleFactor "$SCALE")
+fi
 
 APP="$REPO_DIR/Examples/ThemeDemo/ThemeDemo.app/ThemeDemo"
 if [ ! -x "$APP" ]; then
@@ -158,7 +160,7 @@ if [ -n "$OPEN_MENU" ]; then
   APP_ARGS+=(--open-menu "$OPEN_MENU")
 fi
 
-"$APP" "${APP_ARGS[@]}" >/tmp/theme-demo-capture.log 2>&1 &
+"$APP" "${APP_ARGS[@]}" "${DEFAULT_ARGS[@]}" >/tmp/theme-demo-capture.log 2>&1 &
 APP_PID=$!
 
 WIN_ID=""
