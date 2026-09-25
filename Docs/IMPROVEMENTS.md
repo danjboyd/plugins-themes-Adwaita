@@ -47,6 +47,10 @@ it was found. Compare against the libadwaita reference with
 | GNOME apps have no menu bar | `GnomeThemeMenuStyle = primary` (a user default, or the app's Info.plist) turns it into GNOME's main menu button: at the end of the toolbar when the window shows one (the toolbar is narrowed for it), otherwise alone in a slim bar; it shows a copy of the main menu (the menus, then the application menu's items) right-aligned under the button, rebuilt each time it opens |
 | An app laid out in Gorm for GNOME's metrics would get compact metrics (it has a main nib) | apps can declare `GnomeThemeMetrics` in their Info.plist; the user's default still wins |
 | Gorm's palettes make controls at GNUstep's sizes (22pt buttons) | `Palettes/Adwaita`: a Gorm palette of controls at GNOME's sizes, with fonts left at the system font's default size so they follow the app's metrics (checked: archived at 12pt in a compact process, read back at 14.7pt in a GNOME one) |
+| The header bar was drawn at 1× with a scale factor (`GSScaleFactor 2`: a 23pt bar), and the content sat 1pt off (gap at the left and bottom) | offsets and the minimum width are in device pixels, scaled by the factor; `-[GSWindowDecorationView layout]` places the content from an origin `+contentRectForFrameRect:styleMask:` leaves unscaled (a GNUstep bug that also shifts its own title bar), which the header bar corrects |
+| In Arabic, Hebrew and other right-to-left languages the header bar kept its left-to-right order | mirrored as GTK mirrors it (checked against a GTK render): button-layout's start at the right, close outermost at the left, ☰ to the right of the buttons; the direction comes from the first preferred language (`NSForceRightToLeftWritingDirection` forces it) |
+| Right and middle clicks on the header bar did nothing; the double-click actions "menu" and "lower" did nothing | GNOME's `action-right-click-titlebar` (default: the window menu), `action-middle-click-titlebar` and all double-click actions: "lower" orders the window back, "menu" opens a window menu with the entries of Mutter's that GNUstep can carry out (Hide, Maximize/Restore, Always on Top, Close), which stays open after the click |
+| The header bar in high contrast looked as in the normal palette | libadwaita's high contrast details: a 1px ring round each window button's circle and a darker window border |
 | Clicking ☰ opened its menu and the release closed it again (libs-gui 0.32, upstream item 8) | the menu opens on the click's release and stays open until a click picks an item or lands outside it; Escape closes it |
 | With `GSX11HandlesWindowDecorations NO`, GNUstep drew a NeXT title bar (black, round miniaturise and close buttons, resizable only from a bottom bar) | libadwaita's header bar, measured against libadwaita 1.7 renders (`Reference/HeaderBar`): 46pt including a 1px window border, bold centred title (shifted clear of the buttons when they're in the way, shortened with an ellipsis), round 34pt window buttons with Adwaita's icons in `button-layout` order, ☰ before them with the primary menu, title and icons dimmed when the window isn't key; moving by the bar, resizing from every edge and corner (5pt strips inside the border), and the `action-double-click-titlebar` action, with maximise going back to the frame before. The theme can't turn this on itself: the backend reads the flag before the theme loads. Alerts (alone or as sheets) have no bar, as AdwAlertDialog: a border only. Panels get the bar with a close button; windows with buttons and no title get the bar without one; borderless windows and `NSFullScreenWindowMask` get neither bar nor border |
 
@@ -110,6 +114,12 @@ window, compared with the GNUstep theme). Still open:
   or libs-gui stops shrinking them (libs-gui#964). When a libs-gui release
   has a84b42471 (upstream item 8), ☰ can open on the press again and track
   with GNUstep's own first-release rule.
+- **High contrast as current GNOME does it.** The theme's high contrast
+  palette is white on black, chosen by a `gtk-theme` name containing
+  "HighContrast" (GNOME 3's). GNOME now sets
+  `org.gnome.desktop.a11y.interface high-contrast`, and libadwaita keeps
+  the light or dark palette with stronger borders and outlines. The header
+  bar draws libadwaita's details in whichever palette is active.
 - **Check libs-gui master before its next release.** On 2026-09-25 the
   probe's `table-header` check failed against master (gui ff49ac8): header
   text starts about 110pt in and isn't dimmed. Everything else, including

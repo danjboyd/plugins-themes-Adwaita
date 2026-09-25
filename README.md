@@ -161,8 +161,12 @@ draws them as libadwaita's header bar: one 46pt row with the bold title
 centred, round window buttons in the order of GNOME's `button-layout`, and
 the primary menu's ☰ before them. Drag the bar to move the window; resize
 from any edge or corner; double-click the bar for GNOME's
-`action-double-click-titlebar` action (maximise by default). The theme can't
-set the flag itself: GNUstep's backend reads it before any theme loads.
+`action-double-click-titlebar` action (maximise by default); right-click it
+for the window menu (Hide, Maximize, Always on Top, Close). It follows the
+scale factor (`GSScaleFactor`), mirrors in right-to-left languages, and has
+libadwaita's high contrast details. Alerts have no bar, as GNOME's. The
+theme can't set the flag itself: GNUstep's backend reads it before any theme
+loads.
 
 Not yet: Mutter's snapping and tiling, the shadow and rounded top corners
 (these need changes in libs-back), and toolbar items in the header bar row.
@@ -236,10 +240,13 @@ pop-up titles, and the size of hidden tool tip and drag windows), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
 Add `--output DIR` to save a PNG of each probe window. `make check-quirks`
-runs the probe four times: with the menu bar and with the primary menu
+runs the probe six times: with the menu bar and with the primary menu
 (`QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary"`), each with the window
 manager's title bar and with the theme's header bar
-(`-GSX11HandlesWindowDecorations NO`).
+(`-GSX11HandlesWindowDecorations NO`), then the header bar's checks alone in
+the dark and high contrast palettes (`QUIRK_PROBE_STYLE=dark` or
+`high-contrast` with `-ProbeOnly header-bar`). The probe sets the decoration
+flag itself, so a user default doesn't change the runs.
 
 Useful helpers:
 

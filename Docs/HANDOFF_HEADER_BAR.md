@@ -235,6 +235,16 @@ GNUstep facts found on the way:
   post `NSCursorUpdate` events: deliver them before reading
   `[NSCursor currentCursor]`.
 
+Smaller gaps closed afterwards (2026-09-25): the scale factor (offsets in
+device pixels; the content origin GNUstep leaves unscaled is corrected),
+right-to-left mirroring (matched to a GTK `--rtl` render), GNOME's right,
+middle and double-click title bar actions with a window menu, and
+libadwaita's high contrast ring and border. `make check-quirks` runs six
+configurations (38, 42, 48, 52, then 9 and 9 header bar checks in dark and
+high contrast). Left as is: the title and icon colour is the theme's text
+colour (#1f1f1f), where libadwaita uses 80% black (#323236); that is a
+palette-wide choice.
+
 Next: phase 2 (libs-back). The proposal to send to libs-back's maintainers
 is `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
 
