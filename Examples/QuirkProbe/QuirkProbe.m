@@ -223,6 +223,24 @@ QuirkProbeMoveMouse (NSWindow *window, NSPoint point)
   [window displayIfNeeded];
 }
 
+/* Moves the pointer as QuirkProbeMoveMouse does, then delivers the cursor
+   updates that entering or leaving cursor rects posts to the queue, so
+   [NSCursor currentCursor] shows the result. */
+static void
+QuirkProbeMoveMouseForCursor (NSWindow *window, NSPoint point)
+{
+  NSEvent *update;
+
+  QuirkProbeMoveMouse (window, point);
+  while ((update = [NSApp nextEventMatchingMask: NSCursorUpdateMask
+                                      untilDate: [NSDate distantPast]
+                                         inMode: NSDefaultRunLoopMode
+                                        dequeue: YES]) != nil)
+    {
+      [NSApp sendEvent: update];
+    }
+}
+
 /* Sends an event through NSApp, as a real key or pointer press arrives. */
 static void
 QuirkProbeSendApplicationEvent (NSWindow *window, NSEventType type)
@@ -1512,12 +1530,42 @@ objectValueForTableColumn: (NSTableColumn *)column
 
 /* What the primary menu showed, seen from inside its tracking loop. */
 static NSMutableArray *QuirkProbePrimaryTitles = nil;
+/* Set when the Escape check had to close the menu with a click. */
+static BOOL QuirkProbeEscapeNeededClick = NO;
 static NSRect QuirkProbePrimaryFrame;
 
 static NSView *
 QuirkProbePrimaryButtonIn (NSView *view)
 {
   return QuirkProbeFindViewOfClass (view, NSClassFromString (@"GnomeThemePrimaryMenuButton"));
+}
+
+/* Fires while the ☰'s menu is tracking: presses Escape. */
+- (void) pressEscape: (NSTimer *)timer
+{
+  NSString *escape = [NSString stringWithFormat: @"%C", (unichar)0x1b];
+
+  [NSApp postEvent: [NSEvent keyEventWithType: NSKeyDown
+                                     location: NSZeroPoint
+                                modifierFlags: 0
+                                    timestamp: 0
+                                 windowNumber: [_controlsWindow windowNumber]
+                                      context: nil
+                                   characters: escape
+                  charactersIgnoringModifiers: escape
+                                    isARepeat: NO
+                                      keyCode: 9]
+           atStart: NO];
+}
+
+/* Fires if Escape didn't close the menu: close it with a click. */
+- (void) closeMenuAfterEscape: (NSTimer *)timer
+{
+  NSEvent *up = [NSEvent mouseEventWithType: NSLeftMouseUp location: NSMakePoint (-50, -50) modifierFlags: 0
+                                  timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 0];
+
+  QuirkProbeEscapeNeededClick = YES;
+  [NSApp postEvent: up atStart: NO];
 }
 
 /* Fires while the ☰'s menu is tracking: note the vertical menu that's
@@ -1638,6 +1686,33 @@ QuirkProbePrimaryButtonIn (NSView *view)
   detail = [NSString stringWithFormat: @"menu %@ at %@, the button's right edge at %g",
     [QuirkProbePrimaryTitles componentsJoinedByString: @" | "], NSStringFromRect (QuirkProbePrimaryFrame),
     [_controlsWindow convertBaseToScreen: NSMakePoint (NSMaxX (buttonInWindow) - 6, 0)].x];
+  /* Escape closes it. */
+  {
+    NSTimer *fallback;
+
+    barButton = QuirkProbePrimaryButtonIn ([[_controlsWindow contentView] superview]);
+    [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseUp
+                                         location: [click locationInWindow]
+                                    modifierFlags: 0
+                                        timestamp: 0
+                                     windowNumber: [_controlsWindow windowNumber]
+                                          context: nil
+                                      eventNumber: 0
+                                       clickCount: 1
+                                         pressure: 0.0]
+             atStart: NO];
+    [self after: 0.3 perform: @selector(pressEscape:) mode: NSEventTrackingRunLoopMode];
+    fallback = [NSTimer timerWithTimeInterval: 1.5 target: self selector: @selector(closeMenuAfterEscape:)
+                                     userInfo: nil repeats: NO];
+    [[NSRunLoop currentRunLoop] addTimer: fallback forMode: NSEventTrackingRunLoopMode];
+    [barButton mouseDown: click];
+    [fallback invalidate];
+    if (QuirkProbeEscapeNeededClick == NO)
+      [self pass: @"primary-menu-escape" detail: @"Escape closed the menu"];
+    else
+      [self fail: @"primary-menu-escape" detail: @"the menu stayed open after Escape"];
+  }
+
   /* The app's menus in order, then its application menu's items. */
   if ([[QuirkProbePrimaryTitles componentsJoinedByString: @" | "]
         isEqualToString: @"File | Edit | -- | Preferences… | About QuirkProbe"]
@@ -1865,9 +1940,28 @@ QuirkProbePrimaryButtonIn (NSView *view)
     NSView *inside = [frameView hitTest: NSMakePoint (12, midY)];
     NSView *fixed = [controlsFrame hitTest: NSMakePoint (2, 100)];
 
-    detail = [NSString stringWithFormat: @"edges %@; 12pt in: %@; unresizable window's edge: %@",
-      edges ? @"taken" : @"not taken", NSStringFromClass ([inside class]), NSStringFromClass ([fixed class])];
-    if (edges && inside != frameView && fixed != controlsFrame)
+    NSCursor *leftCursor, *cornerCursor, *insideCursor;
+
+    /* The cursor shows the resize direction. */
+    [_headerWindow makeKeyWindow];
+    [_headerWindow resetCursorRects];
+    QuirkProbeMoveMouseForCursor (_headerWindow, NSMakePoint (NSMidX (bounds), NSMidY (bounds) - 20));
+    QuirkProbeMoveMouseForCursor (_headerWindow, NSMakePoint (2, midY));
+    leftCursor = [NSCursor currentCursor];
+    QuirkProbeMoveMouseForCursor (_headerWindow, NSMakePoint (3, 3));
+    cornerCursor = [NSCursor currentCursor];
+    QuirkProbeMoveMouseForCursor (_headerWindow, NSMakePoint (NSMidX (bounds), NSMidY (bounds) - 20));
+    insideCursor = [NSCursor currentCursor];
+    [_controlsWindow makeKeyWindow];
+
+    detail = [NSString stringWithFormat: @"edges %@; 12pt in: %@; unresizable window's edge: %@; cursors: left edge %@, corner %@, inside %@",
+      edges ? @"taken" : @"not taken", NSStringFromClass ([inside class]), NSStringFromClass ([fixed class]),
+      leftCursor == [NSCursor resizeLeftRightCursor] ? @"left-right" : @"other",
+      (cornerCursor != leftCursor && cornerCursor != [NSCursor resizeUpDownCursor] && cornerCursor != insideCursor) ? @"diagonal" : @"other",
+      insideCursor == [NSCursor arrowCursor] ? @"arrow" : @"other"];
+    if (edges && inside != frameView && fixed != controlsFrame
+      && leftCursor == [NSCursor resizeLeftRightCursor] && cornerCursor != leftCursor
+      && cornerCursor != insideCursor && insideCursor != leftCursor)
       [self pass: @"header-bar-resize-edges" detail: detail];
     else
       [self fail: @"header-bar-resize-edges" detail: detail];
@@ -1890,6 +1984,49 @@ QuirkProbePrimaryButtonIn (NSView *view)
       [self pass: @"header-bar-double-click" detail: detail];
     else
       [self fail: @"header-bar-double-click" detail: detail];
+  }
+
+  /* Other kinds of window: where the content starts and which buttons
+     show. Panels (utility ones too) get the bar, as GNOME's dialogs do;
+     a window with buttons and no title gets the bar without one; without
+     title or buttons only the border stays; fullscreen has neither. */
+  {
+    struct { const char *name; BOOL panel; NSUInteger style; CGFloat top; NSUInteger buttons; } kinds[] = {
+      { "panel", YES, NSTitledWindowMask | NSClosableWindowMask, 46, 1 },
+      { "utility", YES, NSTitledWindowMask | NSClosableWindowMask | NSUtilityWindowMask, 46, 1 },
+      { "untitled", NO, NSClosableWindowMask | NSResizableWindowMask, 46, 2 },
+      { "resizable", NO, NSResizableWindowMask, 1, 0 },
+      { "borderless", NO, NSBorderlessWindowMask, 0, 0 },
+      { "fullscreen", NO, NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask | NSFullScreenWindowMask, 0, 0 }
+    };
+    NSMutableArray *parts = [NSMutableArray array];
+    BOOL ok = YES;
+    NSUInteger i;
+
+    for (i = 0; i < sizeof (kinds) / sizeof (kinds[0]); i++)
+      {
+        Class windowClass = kinds[i].panel ? [NSPanel class] : [NSWindow class];
+        NSWindow *window = [[windowClass alloc] initWithContentRect: NSMakeRect (500, 300, 260, 100)
+                                                          styleMask: kinds[i].style
+                                                            backing: NSBackingStoreBuffered
+                                                              defer: NO];
+        NSView *kindFrame = [[window contentView] superview];
+        CGFloat top = QuirkProbeTopGap (kindFrame, [[window contentView] frame]);
+        NSUInteger count = [QuirkProbeWindowButtons (kindFrame) count];
+        BOOL edge = [kindFrame hitTest: NSMakePoint (2, 50)] == kindFrame;
+        BOOL expectEdge = (kinds[i].style & NSResizableWindowMask) && !(kinds[i].style & NSFullScreenWindowMask);
+
+        [window setTitle: @"Kind"];
+        [parts addObject: [NSString stringWithFormat: @"%s %gpt, %lu button(s)%@", kinds[i].name, top,
+          (unsigned long)count, edge ? @", resize edges" : @""]];
+        ok = ok && top == kinds[i].top && count == kinds[i].buttons && edge == expectEdge;
+        RELEASE (window);
+      }
+    detail = [parts componentsJoinedByString: @"; "];
+    if (ok)
+      [self pass: @"header-bar-window-kinds" detail: detail];
+    else
+      [self fail: @"header-bar-window-kinds" detail: detail];
   }
 
   /* A window that can only be closed: one button, at the end, which
@@ -2086,6 +2223,23 @@ QuirkProbePrimaryButtonIn (NSView *view)
       [self checkLabel: text ident: @"alert-informative-text-wraps" lineHeight: [self lineHeight]];
     }
   [self checkAlertLayout: panel];
+  /* With the header bar, an alert has none (as AdwAlertDialog): a 1pt
+     border round its content, and it can still take the keyboard (it
+     isn't key here: the late window is, on a display without a window
+     manager). */
+  if (QuirkProbeDrawsDecorations ())
+    {
+      NSView *frameView = [[panel contentView] superview];
+      CGFloat top = QuirkProbeTopGap (frameView, [[panel contentView] frame]);
+      NSString *detail = [NSString stringWithFormat: @"content %gpt from the top, %@ buttons, %@",
+        top, [QuirkProbeWindowButtons (frameView) count] > 0 ? @"with" : @"no",
+        [panel canBecomeKeyWindow] ? @"can become key" : @"can't become key"];
+
+      if (top == 1 && [QuirkProbeWindowButtons (frameView) count] == 0 && [panel canBecomeKeyWindow])
+        [self pass: @"header-bar-alert" detail: detail];
+      else
+        [self fail: @"header-bar-alert" detail: detail];
+    }
   /* -stopModal takes effect when the modal loop next handles an event. */
   [NSApp stopModal];
   [NSApp postEvent: [NSEvent otherEventWithType: NSApplicationDefined
