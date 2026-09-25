@@ -23,7 +23,13 @@
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
+#import <objc/runtime.h>
 #import <math.h>
+
+/* Associated-object key: the grid lines (an NSTableViewGridLineStyle in an
+   NSNumber) a table's app asked for, recorded by the -setGridStyleMask: and
+   -setDrawsGrid: overrides below. */
+static char GnomeThemeTableGridMaskKey;
 
 static inline GnomeTheme *
 GnomeThemeActivePhase67Theme(void)
@@ -368,11 +374,13 @@ GnomeThemePhase67MenuKeyEquivalentWidth(NSMenuItemCell *cell, GnomeTheme *theme)
   return ceil (keySize.width) + 12.0;
 }
 
+/* libadwaita column headers: small bold text (about 9pt against an 11pt
+   interface font). */
 static NSFont *
 GnomeThemePhase67HeaderFont(GnomeTheme *theme)
 {
   NSFont *font = nil;
-  CGFloat size = 11.0;
+  CGFloat size = 9.0;
 
   if (theme != nil)
     {
@@ -380,7 +388,7 @@ GnomeThemePhase67HeaderFont(GnomeTheme *theme)
     }
   if (font != nil)
     {
-      size = MAX (10.0, [font pointSize] - 1.0);
+      size = MAX (9.0, [font pointSize] - 3.0);
     }
 
   return [NSFont boldSystemFontOfSize: size];
@@ -450,29 +458,49 @@ GnomeThemePhase67MenuForegroundColor(GnomeTheme *theme,
   return color;
 }
 
-static void
-GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL emphasized)
+/* The background rows draw on, for the table a header (or corner) view
+   belongs to. */
+static NSColor *
+GnomeThemePhase67TableBackgroundColor(GnomeTheme *theme, NSTableView *tableView)
 {
-  NSColor *baseColor = GnomeThemePhase67Color (theme,
-                                               @"headerColor",
-                                               [NSColor headerColor]);
-  NSColor *strokeColor = GnomeThemePhase67Color (theme,
-                                                 @"menuBarBorderColor",
-                                                 [NSColor controlShadowColor]);
+  NSColor *fallback = [tableView backgroundColor];
 
-  if (emphasized)
+  if (fallback == nil)
     {
-      baseColor = GnomeThemePhase67Blend (baseColor, strokeColor, 0.08);
+      fallback = [NSColor controlBackgroundColor];
     }
+  return GnomeThemePhase67Color (theme, @"rowBackgroundColor", fallback);
+}
 
-  [baseColor set];
-  NSRectFillUsingOperation (rect, NSCompositeSourceOver);
+/* libadwaita column headers sit on the list's own background, with no fill,
+   border or column separators. */
+static void
+GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, NSTableView *tableView)
+{
+  [GnomeThemePhase67TableBackgroundColor (theme, tableView) set];
+  NSRectFill (rect);
+}
 
-  [strokeColor set];
-  [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMinX (rect), NSMinY (rect) + 0.5)
-                            toPoint: NSMakePoint (NSMaxX (rect), NSMinY (rect) + 0.5)];
-  [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMaxX (rect) - 0.5, NSMinY (rect))
-                            toPoint: NSMakePoint (NSMaxX (rect) - 0.5, NSMaxY (rect))];
+/* The grid lines to draw: the ones the app asked for, or none (the GNOME and
+   Cocoa default). GNUstep draws a grid on every table by default instead
+   (drawsGrid YES; on newer libs-gui, a mask with both lines), and releases
+   up to at least gui 0.32.0 don't implement -gridStyleMask (it returns 0), so
+   the table's own settings can't tell a default from a choice. */
+static NSTableViewGridLineStyle
+GnomeThemePhase67EffectiveGridMask(NSTableView *tableView)
+{
+  NSNumber *mask = objc_getAssociatedObject (tableView, &GnomeThemeTableGridMaskKey);
+
+  return (mask != nil) ? (NSTableViewGridLineStyle)[mask unsignedIntegerValue] : NSTableViewGridNone;
+}
+
+static void
+GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
+{
+  objc_setAssociatedObject (tableView,
+                            &GnomeThemeTableGridMaskKey,
+                            [NSNumber numberWithUnsignedInteger: mask],
+                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 @implementation GnomeTheme (MenusAndData)
@@ -653,8 +681,17 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
   return NSInsetRect (bounds, 12.0, 6.0);
 }
 
+/* Dim header text (libadwaita: 45% of the text colour); a clicked or
+   sorted column's header gets the full text colour. */
 - (NSColor *) tableHeaderTextColorForState: (GSThemeControlState)state
 {
+  NSColor *textColor = GnomeThemePhase67Color (self,
+                                               @"headerTextColor",
+                                               [NSColor headerTextColor]);
+  NSColor *background = GnomeThemePhase67Color (self,
+                                                @"rowBackgroundColor",
+                                                [NSColor controlBackgroundColor]);
+
   if (GnomeThemePhase67StateIsDisabled (state))
     {
       return GnomeThemePhase67Color (self,
@@ -664,18 +701,10 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
 
   if (GnomeThemePhase67StateIsHighlighted (state) || GnomeThemePhase67StateIsSelected (state))
     {
-      return GnomeThemePhase67Blend (GnomeThemePhase67Color (self,
-                                                             @"headerTextColor",
-                                                             [NSColor headerTextColor]),
-                                     GnomeThemePhase67Color (self,
-                                                             @"selectedControlColor",
-                                                             [NSColor selectedControlColor]),
-                                     0.18);
+      return textColor;
     }
 
-  return GnomeThemePhase67Color (self,
-                                 @"headerTextColor",
-                                 [NSColor headerTextColor]);
+  return GnomeThemePhase67Blend (textColor, background, 0.55);
 }
 
 - (NSRect) tableHeaderCellDrawingRectForBounds: (NSRect)theRect
@@ -694,23 +723,36 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
                       inView: (NSView *)controlView
                        state: (GSThemeControlState)state
 {
-  NSColor *textColor = [self tableHeaderTextColorForState: state];
+  NSTableView *tableView = nil;
 
-  GnomeThemePhase67DrawHeaderBackground (self,
-                                         cellFrame,
-                                         GnomeThemePhase67StateIsHighlighted (state)
-                                           || GnomeThemePhase67StateIsSelected (state));
+  if ([controlView isKindOfClass: [NSTableHeaderView class]])
+    {
+      tableView = [(NSTableHeaderView *)controlView tableView];
+    }
+  GnomeThemePhase67DrawHeaderBackground (self, cellFrame, tableView);
   [cell setFont: GnomeThemePhase67HeaderFont (self)];
-  [cell setTextColor: textColor];
-
-  (void)controlView;
+  [cell setTextColor: [self tableHeaderTextColorForState: state]];
+  /* GNUstep centres header titles by default; GNOME (and Cocoa) start them
+     at the leading edge. Titles an app aligned left or right keep that. */
+  if ([cell alignment] == NSCenterTextAlignment)
+    {
+      [cell setAlignment: NSLeftTextAlignment];
+    }
 }
 
 - (void) drawTableCornerView: (NSView *)cornerView
                     withClip: (NSRect)aRect
 {
+  NSTableView *tableView = nil;
+  NSView *scrollView = [[cornerView superview] superview];
+
   (void)aRect;
-  GnomeThemePhase67DrawHeaderBackground (self, [cornerView bounds], NO);
+  if ([scrollView isKindOfClass: [NSScrollView class]]
+    && [[(NSScrollView *)scrollView documentView] isKindOfClass: [NSTableView class]])
+    {
+      tableView = [(NSScrollView *)scrollView documentView];
+    }
+  GnomeThemePhase67DrawHeaderBackground (self, [cornerView bounds], tableView);
 }
 
 - (void) drawTableViewBackgroundInClipRect: (NSRect)clipRect
@@ -774,14 +816,18 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
   NSBezierPath *path = [NSBezierPath bezierPath];
   NSInteger rowCount = [tableView numberOfRows];
   NSInteger columnCount = [tableView numberOfColumns];
-  NSTableViewGridLineStyle mask = [tableView gridStyleMask];
+  NSTableViewGridLineStyle mask = GnomeThemePhase67EffectiveGridMask (tableView);
   NSInteger row = 0;
   NSInteger column = 0;
 
+  if (mask == NSTableViewGridNone)
+    {
+      return;
+    }
   gridColor = [gridColor colorWithAlphaComponent: 0.72];
   [gridColor set];
 
-  for (row = 0; row < rowCount; row++)
+  for (row = 0; (mask & NSTableViewSolidHorizontalGridLineMask) != 0 && row < rowCount; row++)
     {
       NSRect rowRect = [tableView rectOfRow: row];
       CGFloat y = NSMaxY (rowRect) - 0.5;
@@ -795,11 +841,8 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
           break;
         }
 
-      if ((mask & NSTableViewSolidHorizontalGridLineMask) != 0 || row < rowCount)
-        {
-          [path moveToPoint: NSMakePoint (NSMinX (aRect), y)];
-          [path lineToPoint: NSMakePoint (NSMaxX ([view bounds]), y)];
-        }
+      [path moveToPoint: NSMakePoint (NSMinX (aRect), y)];
+      [path lineToPoint: NSMakePoint (NSMaxX ([view bounds]), y)];
     }
 
   if ((mask & NSTableViewSolidVerticalGridLineMask) != 0)
@@ -954,6 +997,41 @@ GnomeThemePhase67DrawHeaderBackground(GnomeTheme *theme, NSRect rect, BOOL empha
 @end
 
 @implementation GnomeTheme (MenusAndDataOverrides)
+
+/* Record the grid lines the app asks for (see
+   GnomeThemePhase67EffectiveGridMask). Tables decoded from a nib or Gorm file
+   go through -setDrawsGrid:, so they keep the grid they were archived with. */
+- (void) _overrideNSTableViewMethod_setGridStyleMask: (NSTableViewGridLineStyle)gridType
+{
+  typedef void (*SetGridIMP)(id, SEL, NSTableViewGridLineStyle);
+  SetGridIMP originalIMP = (SetGridIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, gridType);
+    }
+  GnomeThemePhase67RecordTableGrid (self, gridType);
+  /* Older libs-gui only draws a grid while drawsGrid is set. */
+  if (gridType != NSTableViewGridNone && [(NSTableView *)self drawsGrid] == NO)
+    {
+      [(NSTableView *)self setDrawsGrid: YES];
+      GnomeThemePhase67RecordTableGrid (self, gridType);
+    }
+}
+
+- (void) _overrideNSTableViewMethod_setDrawsGrid: (BOOL)flag
+{
+  typedef void (*SetDrawsGridIMP)(id, SEL, BOOL);
+  SetDrawsGridIMP originalIMP = (SetDrawsGridIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, flag);
+    }
+  GnomeThemePhase67RecordTableGrid (self, flag
+    ? (NSTableViewSolidVerticalGridLineMask | NSTableViewSolidHorizontalGridLineMask)
+    : NSTableViewGridNone);
+}
 
 - (void) _overrideNSMenuItemCellMethod_drawKeyEquivalentWithFrame: (NSRect)cellFrame
                                                            inView: (NSView *)controlView

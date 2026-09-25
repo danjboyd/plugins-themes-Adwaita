@@ -891,6 +891,12 @@ GnomeThemeEraseScrollerRect(NSScroller *scroller, NSRect rect)
     }
 }
 
+/* An overlay-style scroll indicator, as in libadwaita: no track, just a thin
+   rounded slider along the outer edge in a dim text colour, thicker and
+   darker while it is being dragged. The scroller strip itself shows the
+   scroll view's background. (libadwaita also hides the indicator until the
+   pointer moves or the view scrolls; GNUstep has no hover tracking for
+   scrollers, so it stays visible while the content overflows.) */
 static void
 GnomeThemeDrawModernScroller(GnomeTheme *theme,
                              NSScroller *scroller,
@@ -899,23 +905,15 @@ GnomeThemeDrawModernScroller(GnomeTheme *theme,
                              BOOL isHorizontal)
 {
   NSRect bounds = [scroller bounds];
-  NSRect trackRect;
   NSRect knobRect = [scroller rectForPart: NSScrollerKnob];
   NSColor *backgroundColor = GnomeThemeScrollerBackgroundColor (scroller);
-  NSColor *trackFill = GnomeThemeBlend (GnomeThemeColor (theme,
-                                                         @"controlShadowColor",
-                                                         [NSColor controlShadowColor]),
-                                        backgroundColor,
-                                        0.88);
-  NSColor *thumbFill = GnomeThemeBlend (GnomeThemeColor (theme,
-                                                         @"controlShadowColor",
-                                                         [NSColor controlShadowColor]),
-                                        backgroundColor,
-                                        (hitPart == NSScrollerKnob) ? 0.36 : 0.48);
+  BOOL dragging = (hitPart == NSScrollerKnob);
+  NSColor *textColor = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
+  NSColor *thumbFill = GnomeThemeBlend (textColor, backgroundColor, dragging ? 0.5 : 0.7);
   CGFloat minorAxis = isHorizontal ? bounds.size.height : bounds.size.width;
-  CGFloat majorInset = MAX (2.0, floor (minorAxis * 0.18));
-  CGFloat trackThickness = floor (MAX (5.0, MIN (8.0, minorAxis - (majorInset * 2.0))));
-  CGFloat radius = floor (trackThickness / 2.0);
+  CGFloat thickness = MIN (dragging ? 8.0 : 4.0, MAX (2.0, minorAxis - 4.0));
+  CGFloat edgeMargin = 3.0;
+  CGFloat endInset = 2.0;
 
   (void)rect;
 
@@ -927,43 +925,26 @@ GnomeThemeDrawModernScroller(GnomeTheme *theme,
 
   if (isHorizontal)
     {
-      trackRect = NSMakeRect (NSMinX (bounds) + majorInset,
-                              floor (NSMidY (bounds) - (trackThickness / 2.0)),
-                              MAX (0.0, bounds.size.width - (majorInset * 2.0)),
-                              trackThickness);
-      knobRect = NSMakeRect (NSMinX (knobRect),
-                             trackRect.origin.y,
-                             knobRect.size.width,
-                             trackRect.size.height);
+      /* Along the bottom edge (the scroller is flipped: larger y is lower). */
+      CGFloat y = [scroller isFlipped]
+        ? NSMaxY (bounds) - edgeMargin - thickness
+        : NSMinY (bounds) + edgeMargin;
+
+      knobRect = NSMakeRect (NSMinX (knobRect) + endInset, y,
+                             MAX (0.0, NSWidth (knobRect) - 2.0 * endInset), thickness);
     }
   else
     {
-      trackRect = NSMakeRect (floor (NSMidX (bounds) - (trackThickness / 2.0)),
-                              NSMinY (bounds) + majorInset,
-                              trackThickness,
-                              MAX (0.0, bounds.size.height - (majorInset * 2.0)));
-      knobRect = NSMakeRect (trackRect.origin.x,
-                             NSMinY (knobRect),
-                             trackRect.size.width,
-                             knobRect.size.height);
+      knobRect = NSMakeRect (NSMaxX (bounds) - edgeMargin - thickness,
+                             NSMinY (knobRect) + endInset,
+                             thickness, MAX (0.0, NSHeight (knobRect) - 2.0 * endInset));
     }
 
-  trackRect = NSIntersectionRect (trackRect, bounds);
-  knobRect = NSIntersectionRect (knobRect, trackRect);
-
-  if (NSIsEmptyRect (trackRect) == NO)
+  knobRect = NSIntersectionRect (knobRect, bounds);
+  if (NSIsEmptyRect (knobRect) == NO && thumbFill != nil)
     {
-      GnomeThemeFillAndStrokeRoundedRect (trackRect,
-                                          radius,
-                                          trackFill,
-                                          nil,
-                                          0.0);
-    }
-
-  if (NSIsEmptyRect (knobRect) == NO)
-    {
-      GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (knobRect, 0.5, 0.5),
-                                          MAX (2.0, radius - 0.5),
+      GnomeThemeFillAndStrokeRoundedRect (knobRect,
+                                          floor (thickness / 2.0),
                                           thumbFill,
                                           nil,
                                           0.0);
@@ -1808,6 +1789,15 @@ GnomeThemeDrawTabLabel(NSString *label,
       return;
     }
 
+  /* libadwaita lists and column views have no frame: the list is a plain
+     area on the window background. Other scroll views (text views, for
+     example) keep theirs. */
+  if ([view isKindOfClass: [NSScrollView class]]
+    && [[(NSScrollView *)view documentView] isKindOfClass: [NSTableView class]])
+    {
+      return;
+    }
+
   if ([view isKindOfClass: [NSScrollView class]])
     {
       backgroundFill = GnomeThemeBlend (backgroundFill, windowFill, 0.18);
@@ -2022,6 +2012,39 @@ GnomeThemeDrawTabLabel(NSString *label,
                                       fillColor,
                                       strokeColor,
                                       focused ? 1.4 : 1.0);
+}
+
+/* Scroll views holding a table or outline view get no bezel and no line
+   between the content and the scrollers (see -drawBorderType:frame:view:):
+   the space GNUstep leaves for them is filled with the table's background,
+   so the list reads as one plain area. Everything else keeps GNUstep's
+   drawing. */
+- (void) drawScrollViewRect: (NSRect)rect
+                     inView: (NSView *)view
+{
+  NSTableView *tableView = nil;
+  NSColor *background = nil;
+
+  if ([view isKindOfClass: [NSScrollView class]])
+    {
+      id documentView = [(NSScrollView *)view documentView];
+
+      if ([documentView isKindOfClass: [NSTableView class]])
+        {
+          tableView = documentView;
+        }
+    }
+  if (tableView == nil)
+    {
+      [super drawScrollViewRect: rect inView: view];
+      return;
+    }
+
+  background = [tableView backgroundColor];
+  background = GnomeThemeColor (self, @"rowBackgroundColor",
+                                (background != nil) ? background : [NSColor controlBackgroundColor]);
+  [background set];
+  NSRectFill (NSIntersectionRect (rect, [view bounds]));
 }
 
 - (void) drawScrollerRect: (NSRect)rect
@@ -2477,9 +2500,10 @@ GnomeThemeDrawTabLabel(NSString *label,
   typedef NSRect (*TitleRectIMP)(id, SEL, NSRect);
   TitleRectIMP originalIMP = (TitleRectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextFieldCell class]);
   NSTextFieldCell *cell = (NSTextFieldCell *)self;
-  /* Header cells already get the theme's header insets from
-     -tableHeaderCellDrawingRectForBounds:; the original method would apply them a
-     second time (the header layout was tuned when it wasn't reachable for them). */
+  /* Header cells skip the original method and the text-field insets below
+     (they are bordered, so they would get the read-only field's 10pt); they
+     get a small inset of their own so their titles line up with the rows'
+     text. */
   BOOL headerCell = [cell isKindOfClass: [NSTableHeaderCell class]];
   NSRect titleRect = (originalIMP != NULL && headerCell == NO) ? originalIMP (self, _cmd, aRect) : aRect;
   NSFont *font = GnomeThemeResolvedEditorFont (cell);
@@ -2508,7 +2532,12 @@ GnomeThemeDrawTabLabel(NSString *label,
         }
     }
 
-  if ([cell isBezeled] || [cell isBordered])
+  if (headerCell)
+    {
+      titleRect.origin.x += 2.0;
+      titleRect.size.width = MAX (0.0, titleRect.size.width - 4.0);
+    }
+  else if ([cell isBezeled] || [cell isBordered])
     {
       BOOL readonlyField = ([cell isEditable] == NO && [cell isSelectable] == NO);
       CGFloat horizontalInset = readonlyField ? 10.0 : 4.0;
