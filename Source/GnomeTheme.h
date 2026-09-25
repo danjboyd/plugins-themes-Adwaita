@@ -50,9 +50,21 @@ BOOL GnomeThemeUsesPrimaryMenu(void);
    header bar as the windows' title bar. */
 BOOL GnomeThemeUsesHeaderBar(void);
 
+/* YES when the app's first preferred language is written right to left
+   (or NSForceRightToLeftWritingDirection is set): the header bar is
+   mirrored, as GTK mirrors it. */
+BOOL GnomeThemeUsesRightToLeft(void);
+
 /* The colour of a header bar's title and icons in `window`: the text
    colour, dimmed when the window isn't focused. */
 NSColor *GnomeThemeHeaderBarTextColor(NSWindow *window);
+
+/* Shows `menu` with its window's top-right corner (rightAligned) or
+   top-left corner at `corner` (screen coordinates) and tracks it as
+   GNOME's menus behave: it stays open until a click picks an item or lands
+   outside it, or Escape is pressed. Call it after the click that opens it
+   has been released. */
+void GnomeThemeTrackMenu(NSMenu *menu, NSPoint corner, BOOL rightAligned);
 
 /* A new (retained) ☰ button for the header bar, from GnomeThemePrimaryMenu.m:
    a 34px button 6px from the view's right edge, centred vertically. */

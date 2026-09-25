@@ -235,6 +235,8 @@ GnomeThemeResolveFont(NSString *preferredName,
   RELEASE (_gtkThemeName);
   RELEASE (_buttonLayout);
   RELEASE (_titlebarDoubleClickAction);
+  RELEASE (_titlebarMiddleClickAction);
+  RELEASE (_titlebarRightClickAction);
   [super dealloc];
 }
 
@@ -375,6 +377,8 @@ GnomeThemeResolveFont(NSString *preferredName,
   GSettings *settings = GnomeThemeCreateDesktopSettings ("org.gnome.desktop.wm.preferences", &schema);
   NSString *buttonLayout = nil;
   NSString *doubleClick = nil;
+  NSString *middleClick = nil;
+  NSString *rightClick = nil;
 
   if (settings != NULL && schema != NULL)
     {
@@ -396,6 +400,24 @@ GnomeThemeResolveFont(NSString *preferredName,
               g_free (value);
             }
         }
+      if (g_settings_schema_has_key (schema, "action-middle-click-titlebar"))
+        {
+          gchar *value = g_settings_get_string (settings, "action-middle-click-titlebar");
+          if (value != NULL)
+            {
+              middleClick = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
+      if (g_settings_schema_has_key (schema, "action-right-click-titlebar"))
+        {
+          gchar *value = g_settings_get_string (settings, "action-right-click-titlebar");
+          if (value != NULL)
+            {
+              rightClick = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
       g_object_unref (settings);
     }
   if (schema != NULL)
@@ -406,6 +428,8 @@ GnomeThemeResolveFont(NSString *preferredName,
   /* GNOME's defaults. */
   ASSIGNCOPY (_buttonLayout, [buttonLayout length] > 0 ? buttonLayout : @"appmenu:close");
   ASSIGNCOPY (_titlebarDoubleClickAction, [doubleClick length] > 0 ? doubleClick : @"toggle-maximize");
+  ASSIGNCOPY (_titlebarMiddleClickAction, [middleClick length] > 0 ? middleClick : @"none");
+  ASSIGNCOPY (_titlebarRightClickAction, [rightClick length] > 0 ? rightClick : @"menu");
 }
 
 - (NSString *) buttonLayout
@@ -416,6 +440,16 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (NSString *) titlebarDoubleClickAction
 {
   return _titlebarDoubleClickAction;
+}
+
+- (NSString *) titlebarMiddleClickAction
+{
+  return _titlebarMiddleClickAction;
+}
+
+- (NSString *) titlebarRightClickAction
+{
+  return _titlebarRightClickAction;
 }
 
 - (NSString *) interfaceFontName

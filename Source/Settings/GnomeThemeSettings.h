@@ -39,6 +39,8 @@ typedef enum
   BOOL _compactMetrics;
   NSString *_buttonLayout;
   NSString *_titlebarDoubleClickAction;
+  NSString *_titlebarMiddleClickAction;
+  NSString *_titlebarRightClickAction;
 }
 
 - (void) reload;
@@ -59,10 +61,14 @@ typedef enum
 - (BOOL) compactMetrics;
 
 /* org.gnome.desktop.wm.preferences: button-layout (for example
-   "appmenu:minimize,maximize,close") and action-double-click-titlebar (for
-   example "toggle-maximize"), with GNOME's defaults when unset. */
+   "appmenu:minimize,maximize,close") and the title bar's
+   action-double-click-titlebar, action-middle-click-titlebar and
+   action-right-click-titlebar (for example "toggle-maximize", "none",
+   "menu"), with GNOME's defaults when unset. */
 - (NSString *) buttonLayout;
 - (NSString *) titlebarDoubleClickAction;
+- (NSString *) titlebarMiddleClickAction;
+- (NSString *) titlebarRightClickAction;
 
 - (NSFont *) interfaceFont;
 - (NSFont *) boldInterfaceFont;

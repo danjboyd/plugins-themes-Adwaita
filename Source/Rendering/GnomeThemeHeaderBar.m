@@ -32,6 +32,7 @@
 #import "../Settings/GnomeThemeSettings.h"
 
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
 #import <GNUstepGUI/GSDisplayServer.h>
 #import <GNUstepGUI/GSTheme.h>
 #import <GNUstepGUI/GSWindowDecorationView.h>
@@ -64,6 +65,10 @@ static const CGFloat GnomeThemeWindowButtonPressedFill = 0.30;
    focused (GTK's backdrop state), and of the border. */
 static const CGFloat GnomeThemeBackdropText = 0.60;
 static const CGFloat GnomeThemeWindowBorderShade = 0.125;
+/* High contrast (libadwaita's, measured the same way): a 1px ring round
+   each button's circle, and a darker border. */
+static const CGFloat GnomeThemeHighContrastRing = 0.36;
+static const CGFloat GnomeThemeHighContrastBorderShade = 0.40;
 
 enum
 {
@@ -82,6 +87,22 @@ enum
 - (void) _captureMouse: (id)sender;
 - (void) _releaseMouse: (id)sender;
 @end
+
+BOOL
+GnomeThemeUsesRightToLeft(void)
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSArray *languages;
+
+  /* Cocoa's switch for trying a right-to-left layout. */
+  if ([defaults objectForKey: @"NSForceRightToLeftWritingDirection"] != nil)
+    {
+      return [defaults boolForKey: @"NSForceRightToLeftWritingDirection"];
+    }
+  languages = [NSLocale preferredLanguages];
+  return [languages count] > 0
+    && [NSLocale characterDirectionForLanguage: [languages objectAtIndex: 0]] == NSLocaleLanguageDirectionRightToLeft;
+}
 
 BOOL
 GnomeThemeUsesHeaderBar(void)
@@ -360,6 +381,14 @@ GnomeThemeResizeCursor(NSUInteger edges)
     }
   [[background blendedColorWithFraction: fill ofColor: text] set];
   [[NSBezierPath bezierPathWithOvalInRect: circle] fill];
+  if ([GnomeThemeCurrentSettings () highContrastEnabled])
+    {
+      NSBezierPath *ring = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect (circle, 0.5, 0.5)];
+
+      [ring setLineWidth: 1.0];
+      [[background blendedColorWithFraction: GnomeThemeHighContrastRing ofColor: text] set];
+      [ring stroke];
+    }
 
   [text set];
   [self drawIconInRect: NSInsetRect (circle, 4.0, 4.0)];
@@ -406,14 +435,27 @@ GnomeThemeResizeCursor(NSUInteger edges)
     {
       *t = GnomeThemeHeaderBarHeight;
     }
+  /* Offsets are in device pixels; the bar is drawn in points. */
+  if ((style & NSUnscaledWindowMask) == 0)
+    {
+      CGFloat factor = [[NSScreen mainScreen] userSpaceScaleFactor];
+
+      *l *= factor;
+      *r *= factor;
+      *t *= factor;
+      *b *= factor;
+    }
 }
 
 + (CGFloat) minFrameWidthWithTitle: (NSString *)aTitle
                          styleMask: (NSUInteger)aStyle
 {
-  /* Room for the buttons; the title is shortened to fit. */
-  return 2.0 * GnomeThemeWindowButtonMargin
-    + 3.0 * GnomeThemeWindowButtonSize + 2.0 * GnomeThemeWindowButtonSpacing;
+  /* Room for the buttons (in device pixels, as the offsets); the title is
+     shortened to fit. */
+  CGFloat factor = (aStyle & NSUnscaledWindowMask) ? 1.0 : [[NSScreen mainScreen] userSpaceScaleFactor];
+
+  return factor * (2.0 * GnomeThemeWindowButtonMargin
+                   + 3.0 * GnomeThemeWindowButtonSize + 2.0 * GnomeThemeWindowButtonSpacing);
 }
 
 - (id) initWithFrame: (NSRect)frame
@@ -533,17 +575,95 @@ GnomeThemeResizeCursor(NSUInteger edges)
       [_menuButton removeFromSuperview];
       DESTROY (_menuButton);
     }
+
+  if (GnomeThemeUsesRightToLeft ())
+    {
+      [self mirrorBarLayout];
+    }
+}
+
+/* In a right-to-left language GTK mirrors the header bar: button-layout's
+   start is at the right, the buttons at its end are at the left (close
+   outermost), and the ☰ is 6px to their right. The layout above is made
+   left to right; this turns it over. */
+- (void) mirrorBarLayout
+{
+  NSRect bounds = [self bounds];
+  NSArray *views = [NSArray arrayWithObjects: closeButton ?: (id)[NSNull null],
+                                              miniaturizeButton ?: (id)[NSNull null],
+                                              _zoomButton ?: (id)[NSNull null], nil];
+  NSEnumerator *enumerator = [views objectEnumerator];
+  id view;
+  CGFloat start = _startLimit;
+
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if (view != [NSNull null])
+        {
+          NSRect frame = [view frame];
+
+          frame.origin.x = NSMinX (bounds) + NSMaxX (bounds) - NSMaxX (frame);
+          [view setFrame: frame];
+        }
+    }
+  if (_menuButton != nil)
+    {
+      /* The ☰ view keeps its margin at its right: mirror the button, not
+         the view. */
+      NSRect frame = [_menuButton frame];
+
+      frame.origin.x = NSMinX (bounds) + NSMaxX (bounds) - NSMaxX (frame) + GnomeThemeWindowButtonMargin;
+      [_menuButton setFrame: frame];
+    }
+  _startLimit = NSMinX (bounds) + NSMaxX (bounds) - _endLimit;
+  _endLimit = NSMinX (bounds) + NSMaxX (bounds) - start;
 }
 
 /* GSWindowDecorationView puts a menu bar 1pt above the content area, over
    the border it expects there; here that would be the header bar's last
    row. */
+/* GSWindowDecorationView's +contentRectForFrameRect:styleMask: scales the
+   content's size to points but not its origin, so with a scale factor
+   other than 1 the content, and the menu bar and toolbar laid out from
+   it, sit the border's width in pixels, taken as points, from the edges:
+   a gap at the left and bottom, and an overlap under the bar. (GNUstep's
+   own title bar has the same offset.) Moves them back. */
+- (void) scaleContentOrigin
+{
+  NSUInteger style = [window styleMask];
+  CGFloat factor = [[NSScreen mainScreen] userSpaceScaleFactor];
+  NSEnumerator *enumerator;
+  NSView *subview;
+  float l, r, t, b;
+  NSPoint shift;
+
+  if ((style & NSUnscaledWindowMask) || factor == 1.0)
+    {
+      return;
+    }
+  [object_getClass (self) offsets: &l : &r : &t : &b forStyleMask: style];
+  shift = NSMakePoint (l / factor - l, b / factor - b);
+  contentRect.origin = NSMakePoint (l / factor, b / factor);
+  enumerator = [[self subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if (subview != closeButton && subview != miniaturizeButton && subview != _zoomButton
+        && subview != _menuButton)
+        {
+          NSPoint origin = [subview frame].origin;
+
+          [subview setFrameOrigin: NSMakePoint (origin.x + shift.x, origin.y + shift.y)];
+        }
+    }
+}
+
 - (void) layout
 {
   NSEnumerator *enumerator;
   NSView *subview;
 
   [super layout];
+  [self scaleContentOrigin];
   enumerator = [[self subviews] objectEnumerator];
   while ((subview = [enumerator nextObject]) != nil)
     {
@@ -646,7 +766,10 @@ GnomeThemeResizeCursor(NSUInteger edges)
     }
   if (NSEqualRects (contentRect, bounds) == NO)
     {
-      [[background blendedColorWithFraction: GnomeThemeWindowBorderShade ofColor: [NSColor controlTextColor]] set];
+      CGFloat shade = [GnomeThemeCurrentSettings () highContrastEnabled]
+        ? GnomeThemeHighContrastBorderShade : GnomeThemeWindowBorderShade;
+
+      [[background blendedColorWithFraction: shade ofColor: [NSColor controlTextColor]] set];
       NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
     }
   if (NSIntersectsRect (rect, contentRect))
@@ -856,15 +979,58 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
   [window invalidateCursorRectsForView: self];
 }
 
-- (void) performDoubleClickAction
+- (void) toggleAlwaysOnTop: (id)sender
 {
-  NSString *action = [GnomeThemeCurrentSettings () titlebarDoubleClickAction] ?: @"toggle-maximize";
+  [window setLevel: [window level] > NSNormalWindowLevel ? NSNormalWindowLevel : NSFloatingWindowLevel];
+}
+
+/* The window menu, with the entries of Mutter's that GNUstep can carry
+   out. (Mutter's own needs the window manager: see
+   Docs/PROPOSAL_LIBS_BACK_CSD.md.) */
+- (NSMenu *) windowMenu
+{
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @""]);
+  NSUInteger style = [window styleMask];
+  id <NSMenuItem> item;
+
+  if (style & NSMiniaturizableWindowMask)
+    {
+      item = [menu addItemWithTitle: @"Hide" action: @selector(miniaturize:) keyEquivalent: @""];
+      [item setTarget: window];
+    }
+  if (style & NSResizableWindowMask)
+    {
+      item = [menu addItemWithTitle: [window isZoomed] ? @"Restore" : @"Maximize"
+                             action: @selector(toggleMaximized:)
+                      keyEquivalent: @""];
+      [item setTarget: self];
+    }
+  if ([menu numberOfItems] > 0)
+    {
+      [menu addItem: [NSMenuItem separatorItem]];
+    }
+  item = [menu addItemWithTitle: @"Always on Top" action: @selector(toggleAlwaysOnTop:) keyEquivalent: @""];
+  [item setTarget: self];
+  [item setState: [window level] > NSNormalWindowLevel ? NSOnState : NSOffState];
+  if (style & NSClosableWindowMask)
+    {
+      [menu addItem: [NSMenuItem separatorItem]];
+      item = [menu addItemWithTitle: @"Close" action: @selector(performClose:) keyEquivalent: @""];
+      [item setTarget: window];
+    }
+  return menu;
+}
+
+/* The title bar actions GNOME's settings name: "toggle-maximize" (and its
+   horizontal and vertical forms, which GNUstep can't do separately),
+   "minimize", "lower", "menu" and "none". A menu opens when the press
+   that asked for it is released (`release` is that button's up event), so
+   that it stays open. */
+- (void) performTitleBarAction: (NSString *)action release: (NSEventType)release
+{
   NSUInteger style = [window styleMask];
 
-  if (([action isEqualToString: @"toggle-maximize"]
-       || [action isEqualToString: @"toggle-maximize-horizontally"]
-       || [action isEqualToString: @"toggle-maximize-vertically"])
-    && (style & NSResizableWindowMask))
+  if ([action hasPrefix: @"toggle-maximize"] && (style & NSResizableWindowMask))
     {
       [self toggleMaximized: self];
     }
@@ -872,7 +1038,55 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
     {
       [window miniaturize: self];
     }
-  /* "lower", "menu" and "none": nothing GNUstep can do from here. */
+  else if ([action isEqualToString: @"lower"])
+    {
+      [window orderBack: self];
+    }
+  else if ([action isEqualToString: @"menu"])
+    {
+      NSUInteger mask = NSLeftMouseDraggedMask | NSRightMouseDraggedMask | NSOtherMouseDraggedMask
+        | NSLeftMouseUpMask | NSRightMouseUpMask | NSOtherMouseUpMask;
+      NSEvent *event;
+
+      do
+        {
+          event = [window nextEventMatchingMask: mask
+                                      untilDate: [NSDate distantFuture]
+                                         inMode: NSEventTrackingRunLoopMode
+                                        dequeue: YES];
+        }
+      while ([event type] != release);
+      GnomeThemeTrackMenu ([self windowMenu], [NSEvent mouseLocation], NO);
+    }
+}
+
+/* Right and middle clicks on the bar run GNOME's actions for them (the
+   window menu and nothing, by default). */
+- (void) rightMouseDown: (NSEvent *)event
+{
+  NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
+
+  if (hasTitleBar && NSPointInRect (p, titleBarRect) && [self resizeEdgesForPoint: p] == 0)
+    {
+      [self performTitleBarAction: [GnomeThemeCurrentSettings () titlebarRightClickAction] ?: @"menu"
+                          release: NSRightMouseUp];
+      return;
+    }
+  [super rightMouseDown: event];
+}
+
+- (void) otherMouseDown: (NSEvent *)event
+{
+  NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
+
+  if (hasTitleBar && NSPointInRect (p, titleBarRect) && [self resizeEdgesForPoint: p] == 0
+    && [event buttonNumber] == 2)
+    {
+      [self performTitleBarAction: [GnomeThemeCurrentSettings () titlebarMiddleClickAction] ?: @"none"
+                          release: NSOtherMouseUp];
+      return;
+    }
+  [super otherMouseDown: event];
 }
 
 - (void) mouseDown: (NSEvent *)event
@@ -889,7 +1103,8 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
     {
       if ([event clickCount] == 2)
         {
-          [self performDoubleClickAction];
+          [self performTitleBarAction: [GnomeThemeCurrentSettings () titlebarDoubleClickAction] ?: @"toggle-maximize"
+                              release: NSLeftMouseUp];
         }
       else
         {
