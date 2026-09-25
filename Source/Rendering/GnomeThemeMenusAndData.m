@@ -20,6 +20,7 @@
 
 #import "../GnomeTheme.h"
 #import "../Settings/GnomeThemeSettings.h"
+#import "../Settings/GnomeThemeMetrics.h"
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
@@ -1005,6 +1006,88 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 @end
 
 @implementation GnomeTheme (MenusAndDataOverrides)
+
+/* GNOME puts the main menu button at the end of the header bar. GSTheme keeps
+   the application item first in the menu (see -organizeMenu:isHorizontal:),
+   so move its rect instead: to the right end of the bar, with the other
+   items shifted into its place. Drawing, hit testing, highlighting and
+   submenu placement all use these rects. */
+- (NSRect) _overrideNSMenuViewMethod_rectOfItemAtIndex: (NSInteger)index
+{
+  typedef NSRect (*RectIMP)(id, SEL, NSInteger);
+  RectIMP originalIMP = (RectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
+  NSMenu *menu = [menuView menu];
+  NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, index) : NSZeroRect;
+  NSRect appRect;
+
+  if ([menuView isHorizontal] == NO || [menu numberOfItems] < 2
+    || GnomeThemeIsApplicationMenuItem ((NSMenuItem *)[menu itemAtIndex: 0]) == NO)
+    {
+      return rect;
+    }
+  appRect = (index == 0) ? rect : originalIMP (self, _cmd, 0);
+  if (index == 0)
+    {
+      /* Mirrors the bar's left padding (the first item's x). */
+      rect.origin.x = NSMaxX ([menuView bounds]) - NSMinX (appRect) - NSWidth (appRect);
+    }
+  else
+    {
+      rect.origin.x -= NSWidth (appRect);
+    }
+  return rect;
+}
+
+/* The main menu opens under its button, right edges aligned, as GNOME's
+   main-menu popover does; GNUstep lines submenus up on the item's left edge,
+   which at the end of the bar would hang past the window. */
+- (NSPoint) _overrideNSMenuViewMethod_locationForSubmenu: (NSMenu *)aSubmenu
+{
+  typedef NSPoint (*LocationIMP)(id, SEL, NSMenu *);
+  LocationIMP originalIMP = (LocationIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
+  NSMenu *menu = [menuView menu];
+  NSPoint location = (originalIMP != NULL) ? originalIMP (self, _cmd, aSubmenu) : NSZeroPoint;
+  NSMenuItem *first = ([menu numberOfItems] > 0) ? (NSMenuItem *)[menu itemAtIndex: 0] : nil;
+  NSRect itemRect;
+  NSRect submenuFrame;
+
+  if ([menuView isHorizontal] && aSubmenu != nil && [first submenu] == aSubmenu
+    && GnomeThemeIsApplicationMenuItem (first))
+    {
+      itemRect = [menuView convertRect: [menuView rectOfItemAtIndex: 0] toView: nil];
+      submenuFrame = [[[aSubmenu menuRepresentation] window] frame];
+      location.x = [[menuView window] convertBaseToScreen: NSMakePoint (NSMaxX (itemRect), 0.0)].x
+        - NSWidth (submenuFrame);
+    }
+  return location;
+}
+
+/* Tables built in code start with GTK's list density: 34pt rows and no
+   spacing between cells (GNUstep's defaults are 16pt rows, which clip the
+   interface font, and 5x2pt gaps that break up the selection). Apps that set
+   their own keep them; tables decoded from a nib or Gorm file get their
+   archived values, which are decoded after these defaults. */
+- (void) _overrideNSTableViewMethod__initDefaults
+{
+  typedef void (*InitDefaultsIMP)(id, SEL);
+  InitDefaultsIMP originalIMP = (InitDefaultsIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+  GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
+  Ivar rowHeight = class_getInstanceVariable ([NSTableView class], "_rowHeight");
+  Ivar spacing = class_getInstanceVariable ([NSTableView class], "_intercellSpacing");
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  /* Set directly: -setRowHeight: tiles, and the table isn't built yet. */
+  if (theme != nil && rowHeight != NULL && spacing != NULL)
+    {
+      *(CGFloat *)((char *)self + ivar_getOffset (rowHeight)) = [[theme metrics] tableRowHeight];
+      *(NSSize *)((char *)self + ivar_getOffset (spacing)) = NSMakeSize (0.0, 0.0);
+    }
+}
 
 /* Record the grid lines the app asks for (see
    GnomeThemePhase67EffectiveGridMask). Tables decoded from a nib or Gorm file

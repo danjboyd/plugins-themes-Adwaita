@@ -2336,8 +2336,6 @@ ThemeDemoPrintLine(NSString *line)
   [tableView setDataSource: _tableDataSource];
   [tableView setDelegate: _tableDataSource];
   [tableView setUsesAlternatingRowBackgroundColors: YES];
-  [tableView setIntercellSpacing: NSMakeSize (0.0, 0.0)];
-  [tableView setRowHeight: 28.0];
 
   NSTableColumn *controlColumn = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"control"]);
   [[controlColumn headerCell] setStringValue: @"Control"];
@@ -2373,8 +2371,6 @@ ThemeDemoPrintLine(NSString *line)
   [outlineView setUsesAlternatingRowBackgroundColors: YES];
   [outlineView setDataSource: _tableDataSource];
   [outlineView setDelegate: _tableDataSource];
-  [outlineView setIntercellSpacing: NSMakeSize (0.0, 0.0)];
-  [outlineView setRowHeight: 28.0];
 
   NSTableColumn *titleColumn = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"title"]);
   [[titleColumn headerCell] setStringValue: @"Section"];

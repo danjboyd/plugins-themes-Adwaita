@@ -39,11 +39,15 @@
   _menuSeparatorHeight = ceil (MAX (10.0, floor (base * 0.95)));
   _scrollerWidth = [settings prefersDarkAppearance] ? 12.0 : 13.0;
   _horizontalMenuTitlePadding = ceil (MAX (8.0, floor (base * 0.75)));
-  _minimumTabHeight = ceil (MAX (34.0, base + 20.0));
+  /* GtkNotebook's header: 36px of tabs between the frame and the line under
+     them. */
+  _minimumTabHeight = ceil (MAX (38.0, base + 23.0));
   _maximumTabHeight = ceil (_minimumTabHeight + 10.0);
   _textFieldHeight = ceil (MAX (34.0, base + 20.0));
   _buttonHorizontalPadding = ceil (MAX (14.0, floor (base * 1.2)));
   _buttonVerticalPadding = ceil (MAX (6.0, floor (base * 0.55)));
+  /* GTK list rows: a line of text (about base + 3) with 8px above and below. */
+  _tableRowHeight = ceil (MAX (34.0, base + 19.0));
 }
 
 - (CGFloat) menuBarHeight
@@ -94,6 +98,11 @@
 - (CGFloat) buttonVerticalPadding
 {
   return _buttonVerticalPadding;
+}
+
+- (CGFloat) tableRowHeight
+{
+  return _tableRowHeight;
 }
 
 @end

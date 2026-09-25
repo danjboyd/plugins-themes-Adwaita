@@ -34,6 +34,7 @@
   CGFloat _textFieldHeight;
   CGFloat _buttonHorizontalPadding;
   CGFloat _buttonVerticalPadding;
+  CGFloat _tableRowHeight;
 }
 
 - (void) reloadFromSettings: (GnomeThemeSettings *)settings;
@@ -48,5 +49,6 @@
 - (CGFloat) textFieldHeight;
 - (CGFloat) buttonHorizontalPadding;
 - (CGFloat) buttonVerticalPadding;
+- (CGFloat) tableRowHeight;
 
 @end

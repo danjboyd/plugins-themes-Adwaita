@@ -28,6 +28,11 @@
 #import <objc/runtime.h>
 #import <math.h>
 
+/* GSToolbarButton, private to libs-gui. */
+@protocol GnomeThemeToolbarButton
+- (NSToolbarItem *) toolbarItem;
+@end
+
 /* Associated-object keys on a toolbar button: its hover tracking-rect tag,
    and whether the pointer is over it. */
 static char GnomeThemeToolbarButtonTrackingKey;
@@ -109,6 +114,10 @@ static char GnomeThemeToolbarButtonHoverKey;
 @end
 
 static NSView *GnomeThemeLastFocusedEntryView = nil;
+
+/* Between a checkbox or radio indicator and its label: GTK's checkbutton
+   border-spacing, which leaves about 5px before the first glyph. */
+static const CGFloat GnomeThemeIndicatorLabelGap = 4.0;
 
 /* GTK's focus-visible: buttons, checkboxes and other non-text controls show
    their focus ring only after a key press, and hide it again on a pointer
@@ -1561,13 +1570,13 @@ GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame)
   NSSize labelSize = GnomeThemeButtonLabelSize (cell);
   CGFloat labelWidth = MIN (labelSize.width,
                             MAX (0.0, NSMaxX (contentRect)
-                              - (NSMaxX (indicatorRect) + 10.0)));
+                              - (NSMaxX (indicatorRect) + GnomeThemeIndicatorLabelGap)));
   NSRect focusRect = indicatorRect;
 
   if (labelWidth > 0.0)
     {
       focusRect.size.width = (NSMaxX (indicatorRect) - NSMinX (indicatorRect))
-        + 8.0 + labelWidth;
+        + GnomeThemeIndicatorLabelGap + labelWidth;
     }
 
   focusRect = NSInsetRect (focusRect, -3.0, -3.0);
@@ -1607,25 +1616,12 @@ GnomeThemeButtonCellUsesPersistentAccentSelection(NSCell *cell)
   return (showsStateByMask != NSNoCellMask);
 }
 
-static NSRect
-GnomeThemeTabAccentRect(NSRect tabRect, BOOL flipped)
-{
-  CGFloat accentHeight = MIN (3.0, MAX (2.0, floor (tabRect.size.height * 0.12)));
-  CGFloat horizontalInset = MIN (14.0, MAX (8.0, floor (tabRect.size.width * 0.18)));
-
-  tabRect = NSInsetRect (tabRect, horizontalInset, 0.0);
-  if (flipped)
-    {
-      tabRect.origin.y += 3.0;
-    }
-  else
-    {
-      tabRect.origin.y = NSMaxY (tabRect) - accentHeight - 3.0;
-    }
-  tabRect.size.height = accentHeight;
-
-  return tabRect;
-}
+/* GtkNotebook tabs: text with 13px on each side, 7px apart, the first 9px
+   in from the frame; the selected one is underlined in the accent colour. */
+static const CGFloat GnomeThemeTabPadding = 13.0;
+static const CGFloat GnomeThemeTabGap = 7.0;
+static const CGFloat GnomeThemeTabStart = 9.0;
+static const CGFloat GnomeThemeTabUnderline = 4.0;
 
 static void
 GnomeThemeDrawTabLabel(NSString *label,
@@ -1647,7 +1643,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                  textColor, NSForegroundColorAttributeName,
                                  nil];
   labelSize = [label sizeWithAttributes: attributes];
-  labelRect = NSInsetRect (tabRect, 14.0, 5.0);
+  labelRect = NSInsetRect (tabRect, GnomeThemeTabPadding, 0.0);
   labelRect.origin.x = floor (NSMidX (labelRect) - (MIN (labelSize.width, labelRect.size.width) / 2.0));
   labelRect.origin.y = floor (NSMidY (labelRect) - (labelSize.height / 2.0));
   labelRect.size.height = ceil (labelSize.height);
@@ -2356,15 +2352,26 @@ GnomeThemeDrawTabLabel(NSString *label,
                                     tabView: view];
 }
 
+/* Top tabs look like a libadwaita GtkNotebook: a 1px frame around tabs and
+   content, the tabs as plain text on the window background with a line under
+   them, and the content on the view background. */
 - (void) drawTabViewBezelRect: (NSRect)aRect
                   tabViewType: (NSTabViewType)type
                        inView: (NSView *)view
 {
   NSTabView *tabView = (NSTabView *)view;
+  BOOL flipped = [view isFlipped];
+  CGFloat tabHeight = [self tabHeightForType: type];
+  NSColor *headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  NSColor *contentFill = GnomeThemeColor (self, @"textBackgroundColor", [NSColor textBackgroundColor]);
+  NSColor *borderColor = GnomeThemeBlend (GnomeThemeColor (self,
+                                                           @"controlShadowColor",
+                                                           [NSColor controlShadowColor]),
+                                          headerFill,
+                                          0.43);
+  NSRect headerRect;
   NSRect contentRect;
-  NSRect panelRect;
-  NSColor *panelFill = nil;
-  NSColor *panelStroke = nil;
+  NSRect separatorRect;
 
   if ([view isKindOfClass: [NSTabView class]] == NO
     || GnomeThemeUsesCustomTopTabs (type) == NO)
@@ -2373,31 +2380,19 @@ GnomeThemeDrawTabLabel(NSString *label,
       return;
     }
 
-  contentRect = [super tabViewContentRectForBounds: aRect
-                                       tabViewType: type
-                                           tabView: tabView];
-  panelRect = NSInsetRect (contentRect, 0.5, 0.5);
-  panelFill = GnomeThemeBlend (GnomeThemeColor (self,
-                                                @"textBackgroundColor",
-                                                [NSColor textBackgroundColor]),
-                               GnomeThemeColor (self,
-                                                @"windowBackgroundColor",
-                                                [NSColor windowBackgroundColor]),
-                               0.08);
-  panelStroke = GnomeThemeBlend (GnomeThemeColor (self,
-                                                  @"controlShadowColor",
-                                                  [NSColor controlShadowColor]),
-                                 panelFill,
-                                 0.18);
+  NSDivideRect (aRect, &headerRect, &contentRect, tabHeight, flipped ? NSMinYEdge : NSMaxYEdge);
+  NSDivideRect (headerRect, &separatorRect, &headerRect, 1.0, flipped ? NSMaxYEdge : NSMinYEdge);
 
+  [headerFill set];
+  NSRectFill (headerRect);
   if ([tabView drawsBackground])
     {
-      GnomeThemeFillAndStrokeRoundedRect (panelRect, 11.0, panelFill, panelStroke, 1.0);
+      [contentFill set];
+      NSRectFill (contentRect);
     }
-  else
-    {
-      GnomeThemeFillAndStrokeRoundedRect (panelRect, 11.0, nil, panelStroke, 1.0);
-    }
+  [borderColor set];
+  NSRectFill (separatorRect);
+  NSFrameRect (aRect);
 }
 
 - (void) drawTabViewRect: (NSRect)rect
@@ -2406,25 +2401,18 @@ GnomeThemeDrawTabLabel(NSString *label,
             selectedItem: (NSTabViewItem *)selectedItem
 {
   NSTabView *tabView = (NSTabView *)view;
-  NSTabViewItem *selectedTab = selectedItem;
   NSTabViewType type = [tabView tabViewType];
   BOOL truncate = [tabView allowsTruncatedLabels];
   BOOL flipped = [view isFlipped];
   NSRect bounds = [view bounds];
   CGFloat tabHeight = [self tabHeightForType: type];
-  NSFont *font = nil;
-  NSColor *panelFill = nil;
-  NSColor *tabFill = nil;
-  NSColor *tabStroke = nil;
-  NSColor *pressedFill = nil;
-  NSColor *selectedStroke = nil;
-  NSColor *selectedTextColor = nil;
-  NSColor *inactiveTextColor = nil;
+  NSColor *headerFill = nil;
+  NSColor *textColor = nil;
   NSColor *accentColor = nil;
+  NSFont *font = nil;
   NSEnumerator *enumerator = nil;
   NSTabViewItem *item = nil;
-  CGFloat cursorX = 12.0;
-  CGFloat gap = 8.0;
+  CGFloat cursorX = NSMinX (bounds) + GnomeThemeTabStart;
 
   if ([view isKindOfClass: [NSTabView class]] == NO
     || GnomeThemeUsesCustomTopTabs (type) == NO)
@@ -2436,41 +2424,10 @@ GnomeThemeDrawTabLabel(NSString *label,
       return;
     }
 
-  panelFill = GnomeThemeBlend (GnomeThemeColor (self,
-                                                @"textBackgroundColor",
-                                                [NSColor textBackgroundColor]),
-                               GnomeThemeColor (self,
-                                                @"windowBackgroundColor",
-                                                [NSColor windowBackgroundColor]),
-                               0.08);
-  tabFill = GnomeThemeBlend (GnomeThemeColor (self,
-                                              @"controlBackgroundColor",
-                                              [NSColor controlBackgroundColor]),
-                             GnomeThemeColor (self,
-                                              @"windowBackgroundColor",
-                                              [NSColor windowBackgroundColor]),
-                             0.35);
-  tabStroke = GnomeThemeBlend (GnomeThemeColor (self,
-                                                @"controlShadowColor",
-                                                [NSColor controlShadowColor]),
-                               tabFill,
-                               0.35);
-  pressedFill = GnomeThemeBlend (tabFill,
-                                 GnomeThemeColor (self,
-                                                  @"selectedControlColor",
-                                                  [NSColor selectedControlColor]),
-                                 0.14);
-  selectedStroke = GnomeThemeBlend (GnomeThemeColor (self,
-                                                     @"controlShadowColor",
-                                                     [NSColor controlShadowColor]),
-                                    panelFill,
-                                    0.22);
-  selectedTextColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
-  inactiveTextColor = GnomeThemeBlend (selectedTextColor,
-                                       GnomeThemeColor (self,
-                                                        @"controlShadowColor",
-                                                        [NSColor controlShadowColor]),
-                                       0.35);
+  [self drawTabViewBezelRect: bounds tabViewType: type inView: view];
+
+  headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   accentColor = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   font = [tabView font];
   if (font == nil)
@@ -2485,72 +2442,44 @@ GnomeThemeDrawTabLabel(NSString *label,
   enumerator = [items objectEnumerator];
   while ((item = [enumerator nextObject]) != nil)
     {
-      BOOL selected = (item == selectedTab);
-      BOOL pressed = ([item tabState] == NSPressedTab);
       NSString *label = [item label];
       NSSize labelSize = [item sizeOfLabel: truncate];
-      CGFloat tabWidth = ceil (MAX (labelSize.width + 34.0, 92.0));
+      CGFloat tabWidth = ceil (labelSize.width + 2.0 * GnomeThemeTabPadding);
+      /* Inside the frame, down to (and over) the line under the tabs. */
       NSRect tabRect = NSMakeRect (cursorX,
-                                   flipped ? 4.0 : (NSMaxY (bounds) - tabHeight + 4.0),
+                                   flipped ? NSMinY (bounds) + 1.0 : NSMaxY (bounds) - tabHeight,
                                    tabWidth,
-                                   tabHeight - 5.0);
-      NSRect drawRect = tabRect;
+                                   tabHeight - 1.0);
 
-      if (selected == NO)
-        {
-          if (flipped)
-            {
-              drawRect.origin.y += 4.0;
-              drawRect.size.height -= 7.0;
-            }
-          else
-            {
-              drawRect.size.height -= 7.0;
-            }
-        }
-
-      if ([label length] == 0)
-        {
-          cursorX += tabWidth + gap;
-          continue;
-        }
-
-      [item drawLabel: truncate inRect: drawRect];
+      /* NSTabViewItem records its hit rect while drawing its label; its
+         own label is then painted over. */
+      [item drawLabel: truncate inRect: tabRect];
+      [headerFill set];
+      NSRectFill (NSIntersectionRect (tabRect,
+                                      NSInsetRect (tabRect, 0.0, GnomeThemeTabUnderline)));
 
       if (truncate
-        && labelSize.width > NSWidth (drawRect) - 28.0
+        && labelSize.width > NSWidth (tabRect) - 2.0 * GnomeThemeTabPadding
         && [item respondsToSelector: @selector(_truncatedLabel)])
         {
           label = [item _truncatedLabel];
         }
+      GnomeThemeDrawTabLabel (label, tabRect, font, textColor);
 
-      if (selected)
+      if (item == selectedItem)
         {
-          NSRect accentRect = GnomeThemeTabAccentRect (drawRect, flipped);
+          NSRect underline = tabRect;
 
-          GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (drawRect, 0.5, 0.5),
-                                              10.0,
-                                              panelFill,
-                                              selectedStroke,
-                                              1.0);
-          GnomeThemeFillAndStrokeRoundedRect (accentRect,
-                                              accentRect.size.height / 2.0,
-                                              accentColor,
-                                              nil,
-                                              0.0);
-          GnomeThemeDrawTabLabel (label, drawRect, font, selectedTextColor);
-        }
-      else
-        {
-          GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (drawRect, 0.5, 0.5),
-                                              10.0,
-                                              pressed ? pressedFill : tabFill,
-                                              tabStroke,
-                                              1.0);
-          GnomeThemeDrawTabLabel (label, drawRect, font, inactiveTextColor);
+          underline.size.height = GnomeThemeTabUnderline;
+          if (flipped)
+            {
+              underline.origin.y = NSMaxY (tabRect) - GnomeThemeTabUnderline;
+            }
+          [accentColor set];
+          NSRectFill (underline);
         }
 
-      cursorX += tabWidth + gap;
+      cursorX += tabWidth + GnomeThemeTabGap;
     }
 }
 
@@ -2655,7 +2584,13 @@ GnomeThemeDrawTabLabel(NSString *label,
         }
     }
 
+  /* GTK list cells pad their text 6px from the column edge; headers match. */
   if (headerCell)
+    {
+      titleRect.origin.x += 4.0;
+      titleRect.size.width = MAX (0.0, titleRect.size.width - 8.0);
+    }
+  else if ([[cell controlView] isKindOfClass: [NSTableView class]])
     {
       titleRect.origin.x += 2.0;
       titleRect.size.width = MAX (0.0, titleRect.size.width - 4.0);
@@ -2933,6 +2868,53 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
+/* A tab view's content sits on the view background, as a GtkNotebook's does.
+   GNUstep starts tab views without a background (Cocoa's default is to draw
+   one); apps that turn it off keep theirs off, and tab views decoded from a
+   nib or Gorm file keep their archived setting. */
+- (id) _overrideNSTabViewMethod_initWithFrame: (NSRect)frameRect
+{
+  typedef id (*InitIMP)(id, SEL, NSRect);
+  InitIMP originalIMP = (InitIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTabView class]);
+  NSTabView *tabView = nil;
+
+  if (originalIMP != NULL)
+    {
+      tabView = originalIMP (self, _cmd, frameRect);
+    }
+  [tabView setDrawsBackground: YES];
+  return tabView;
+}
+
+/* GNOME header bars show icon-only buttons with tool tips; GNUstep starts
+   toolbars with icon and label. The first toolbar with an identifier starts
+   icon-only; later ones copy it, as they copy any mode the app sets.
+   -setDisplayMode: (the app, or the customisation palette) still switches
+   modes, and toolbars decoded from a nib or Gorm file keep their archived
+   mode. */
+- (id) _overrideNSToolbarMethod_initWithIdentifier: (NSString *)identifier
+{
+  typedef id (*InitIMP)(id, SEL, NSString *);
+  InitIMP originalIMP = (InitIMP)GnomeThemeOriginalMethod (_cmd, self, [NSToolbar class]);
+  Ivar displayMode = class_getInstanceVariable ([NSToolbar class], "_displayMode");
+  NSToolbar *toolbar = nil;
+
+  if (originalIMP != NULL)
+    {
+      toolbar = originalIMP (self, _cmd, identifier);
+    }
+  /* Set directly: -setDisplayMode: reloads the toolbar and tells its
+     siblings. */
+  if (toolbar != nil && displayMode != NULL
+    && [toolbar displayMode] == NSToolbarDisplayModeIconAndLabel
+    && [toolbar respondsToSelector: @selector(_toolbarModel)]
+    && [toolbar performSelector: @selector(_toolbarModel)] == nil)
+    {
+      *(NSToolbarDisplayMode *)((char *)toolbar + ivar_getOffset (displayMode)) = NSToolbarDisplayModeIconOnly;
+    }
+  return toolbar;
+}
+
 /* Toolbar buttons get a flat hover highlight, like GNOME header bar buttons.
    GNUstep registers no tracking rects for them (-[NSButtonCell
    setShowsBorderOnlyWhileMouseInside:] is a FIXME), so add one whenever the
@@ -2952,6 +2934,18 @@ GnomeThemeDrawTabLabel(NSString *label,
   /* The pressed state is the darker background drawn below; GNUstep's own
      highlight (NSChangeGrayCellMask) turned the label white on it. */
   [[button cell] setHighlightsBy: NSNoCellMask];
+  /* Without its label, a button is named by its tool tip, as in GNOME. The
+     item's own tool tip, when it has one, is already on the button. */
+  if ([button respondsToSelector: @selector(toolbarItem)])
+    {
+      NSToolbarItem *item = [(id<GnomeThemeToolbarButton>)button toolbarItem];
+      BOOL iconOnly = ([[item toolbar] displayMode] == NSToolbarDisplayModeIconOnly);
+
+      if ([item toolTip] == nil)
+        {
+          [button setToolTip: iconOnly ? [item label] : nil];
+        }
+    }
   if (tag != nil)
     {
       [button removeTrackingRect: [tag integerValue]];
@@ -3306,11 +3300,11 @@ GnomeThemeDrawTabLabel(NSString *label,
   if (checkbox || radio)
     {
       /* Mirrors drawInteriorWithFrame: an indicator of at least 18pt at +2,
-         a 10pt gap, then the title in the cell's own font. */
+         the label gap, then the title in the cell's own font. */
       NSAttributedString *title = [cell attributedTitle];
       CGFloat indicatorSize = MAX (18.0, floor (drawing.size.height * 0.58));
       CGFloat labelWidth = [title length] > 0 ? ceil ([title size].width) : 0.0;
-      CGFloat width = bezel + 2.0 + indicatorSize + (labelWidth > 0.0 ? 10.0 + labelWidth + slack : 2.0);
+      CGFloat width = bezel + 2.0 + indicatorSize + (labelWidth > 0.0 ? GnomeThemeIndicatorLabelGap + labelWidth + slack : 2.0);
 
       size.width = MAX (size.width, ceil (width));
       size.height = MAX (size.height, indicatorSize + 4.0);
@@ -3513,7 +3507,7 @@ GnomeThemeDrawTabLabel(NSString *label,
     NSColor *markColor = nil;
     NSBezierPath *path = nil;
 
-    titleRect.origin.x = NSMaxX (indicatorRect) + 10.0;
+    titleRect.origin.x = NSMaxX (indicatorRect) + GnomeThemeIndicatorLabelGap;
     titleRect.size.width = NSMaxX (contentRect) - titleRect.origin.x;
 
     if (state == NSOnState || state == NSMixedState)

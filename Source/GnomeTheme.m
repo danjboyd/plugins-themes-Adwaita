@@ -447,9 +447,10 @@ GnomeThemeKeepsHiddenWindowSize(void)
    horizontal main menu, collecting the menu's loose items (Info, Quit, ...);
    when there were none it is empty and drawn disabled, so remove it. A
    non-empty one is drawn as the GNOME main-menu icon (see
-   -drawTitleForMenuItemCell:...). GNUstep can't hide menu items, and moving
-   the item to the end (where GNOME puts the main menu) doesn't last: GSTheme
-   moves it back to the front. */
+   -drawTitleForMenuItemCell:...) at the end of the bar (see
+   -[NSMenuView rectOfItemAtIndex:] in the overrides). GNUstep can't hide menu
+   items, and moving the item itself to the end doesn't last: GSTheme moves it
+   back to the front. */
 - (void) organizeMenu: (NSMenu *)menu
          isHorizontal: (BOOL)horizontal
 {
