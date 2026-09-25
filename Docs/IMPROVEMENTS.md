@@ -34,6 +34,14 @@ it was found. Compare against the libadwaita reference with
 | Alerts had GNUstep's layout: app icon, left title, a groove line, buttons at the right | laid out like `AdwAlertDialog`: no icon or line, a centred bold heading (title-2 size) over centred body text, and 44pt buttons of equal width in a row (stacked full width when the titles don't fit), default button at the right |
 | Tab views drew pill tabs with a blue top bar and no frame | GtkNotebook style: a 1px frame, plain text tabs on the window background, a 4pt accent underline under the selected tab, content on the view background (tab views built in code now draw their background, Cocoa's default) |
 | Checkbox and radio labels sat 10pt after the indicator | 4pt, GTK's spacing (about 5px before the first glyph) |
+| Cocoa apps' application menu (the main menu's first item, usually untitled or "NewApplication") showed as a blank or wrongly named item, with GSTheme's own empty app menu beside it | an untitled first item, the menu passed to `setAppleMenu:` (a no-op in GNUstep), a nib's `_NSAppleMenu`, or a first menu holding About or Hide is named after the app, so GSTheme adopts it and it becomes the ☰ menu |
+| Hide, Hide Others and Show All were offered, but GNOME has no hidden apps: `-hide:` orders the windows out and relies on GNUstep's app icon to bring them back (with `GSSuppressAppIcon` it leaves the windows up and puts an icon tile on the desktop) | they are left out of the application menu, with the separators they leave doubled |
+| In a narrow window whose menu items overflow the bar (Gorm's document window), ☰ covered the last items | it moves to the end only when every item fits; otherwise it stays first |
+| Gorm's document toolbar (Objects, Images, Sounds, Classes, File) lost its labels to the icon-only default | a toolbar whose delegate lists selectable items is a view switcher, which GNOME shows with icon and label, so it keeps them; an app that sets a mode itself is left alone |
+| Switches with the box after the title (`imagePosition` NSImageRight, all over Gorm's inspectors: "Command [ ]") drew the box first | the indicator goes at the end and the title before it, in the cell's alignment |
+| Grooved and bezelled boxes (Gorm's inspectors) had blue edges | `controlHighlightColor`/`controlLightHighlightColor` are the light edges of GNUstep's 3D bevels, not selection colours: white in the light palette, a light grey in the dark one |
+| Box titles drawn by an `NSTextFieldCell` (Gorm's "Type", "Options", "Alignment") came out upside down | text in a cell drawn by a non-flipped view (an NSBox) is drawn with string drawing; flipping the context by hand mirrored the glyphs |
+| `NSForm` entries (Gorm's "Title:" fields) were white boxes | the entry is drawn as an Adwaita entry; NSFormCell filled it with `textBackgroundColor` after the border |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -50,6 +58,25 @@ spacing) are in the Fixed table. Still different from GNOME:
   wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
 - **Alerts keep a title bar.** `AdwAlertDialog` has none; GNUstep's panel
   has the window manager's.
+
+## Gorm and other nib-based apps
+
+Found putting Gorm through its paces (its palettes, inspectors and document
+window, compared with the GNUstep theme). What's left comes from metrics, not
+drawing:
+
+- **Fixed layouts designed at GNUstep's metrics.** Gorm files (and nibs)
+  place controls in fixed frames sized for GNUstep's 12pt font. At GNOME's
+  interface size (11pt at 96dpi, about 14.7px) and with bold button titles,
+  labels and titles clip: "Miniaturize" shows as "Miniatur", the palette's
+  "Button" as "Butt". Every app whose windows come from Gorm or nib files is
+  affected, not only Gorm.
+- **Menu bars in narrow windows.** At this font and item padding, Gorm's
+  document window can't show Tools and Windows: they run past the window's
+  edge and can't be reached from there. ☰ stays first so the application
+  menu is always reachable.
+- **Gorm's CustomView palette item** draws as a pale disabled button instead
+  of a dark tile.
 
 ## Theme follow-ups
 
