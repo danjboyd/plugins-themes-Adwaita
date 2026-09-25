@@ -71,12 +71,15 @@ probe:
 	$(MAKE) -C Examples/QuirkProbe
 
 # Menu bar and primary menu, each with the window manager's title bar and
-# with the theme's header bar.
+# with the theme's header bar; then the header bar's checks in the dark and
+# high contrast palettes.
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install

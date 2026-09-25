@@ -101,6 +101,8 @@ class Reference(Adw.Application):
         # Without a settings daemon (a private X display) GTK doesn't pick
         # up GNOME's interface font, so set it as GNOME's default is.
         settings.set_property("gtk-font-name", self._options.font)
+        if self._options.rtl:
+            Gtk.Widget.set_default_direction(Gtk.TextDirection.RTL)
         if self._options.dark:
             Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
 
@@ -218,6 +220,7 @@ def main():
     parser.add_argument("--title", default="Adwaita Theme Demo")
     parser.add_argument("--font", default="Cantarell 11")
     parser.add_argument("--dark", action="store_true", help="use the dark style")
+    parser.add_argument("--rtl", action="store_true", help="lay out right to left")
     parser.add_argument("--width", type=int, default=760)
     parser.add_argument("--output", help="directory for PNG renders")
     options = parser.parse_args()

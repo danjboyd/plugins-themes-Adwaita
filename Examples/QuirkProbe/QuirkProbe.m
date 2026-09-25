@@ -43,6 +43,7 @@ typedef struct
   NSUInteger count;
   NSUInteger darkest;   /* lowest red + green + blue among accepted pixels */
   NSInteger minY;
+  NSUInteger lightest;  /* highest red + green + blue among accepted pixels */
 } QuirkProbeInk;
 
 typedef BOOL (*QuirkProbePixelTest)(NSUInteger red, NSUInteger green, NSUInteger blue);
@@ -68,6 +69,31 @@ static BOOL
 QuirkProbeIsWhite (NSUInteger red, NSUInteger green, NSUInteger blue)
 {
   return (red + green + blue) > 750;
+}
+
+/* Ink on the background whose red + green + blue is
+   QuirkProbeInkBackground, whether the ink is darker or lighter: text and
+   icons in any palette. */
+static NSUInteger QuirkProbeInkBackground = 750;
+
+static BOOL
+QuirkProbeIsInk (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  NSInteger difference = (NSInteger)(red + green + blue) - (NSInteger)QuirkProbeInkBackground;
+
+  return difference > 150 || difference < -150;
+}
+
+/* How far the ink in `area` is from the background, at most. */
+static NSUInteger
+QuirkProbeContrast (QuirkProbeInk ink, NSUInteger background)
+{
+  if (ink.count == 0)
+    {
+      return 0;
+    }
+  return MAX (ink.lightest > background ? ink.lightest - background : 0,
+              background > ink.darkest ? background - ink.darkest : 0);
 }
 
 /* Every pixel: for finding the darkest in an area. */
@@ -106,7 +132,7 @@ QuirkProbeRender (NSView *view)
 static QuirkProbeInk
 QuirkProbeMeasureIn (NSBitmapImageRep *rep, QuirkProbePixelTest test, NSRect area)
 {
-  QuirkProbeInk ink = { 0, 0, 0, 0, NSUIntegerMax, 0 };
+  QuirkProbeInk ink = { 0, 0, 0, 0, NSUIntegerMax, 0, 0 };
   NSInteger samples = [rep samplesPerPixel];
   NSInteger bits = [rep bitsPerSample];
   NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
@@ -150,6 +176,7 @@ QuirkProbeMeasureIn (NSBitmapImageRep *rep, QuirkProbePixelTest test, NSRect are
             {
               ink.count++;
               ink.darkest = MIN (ink.darkest, red + green + blue);
+              ink.lightest = MAX (ink.lightest, red + green + blue);
               minX = MIN (minX, x);
               maxX = MAX (maxX, x);
               minY = MIN (minY, y);
@@ -1830,6 +1857,9 @@ QuirkProbePrimaryButtonIn (NSView *view)
   NSButton *closeButton = [buttons lastObject];
   NSString *detail;
   NSRect titleInk = NSZeroRect;
+  NSUInteger barBackground = 750;
+  /* Set by run-quirk-probe.sh for QUIRK_PROBE_STYLE=high-contrast. */
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
 
   if (QuirkProbeDrawsDecorations () == NO)
     {
@@ -1881,33 +1911,42 @@ QuirkProbePrimaryButtonIn (NSView *view)
      circle 10% of the text colour behind the buttons. */
   {
     NSBitmapImageRep *rep;
-    QuirkProbeInk title, circle, background;
+    QuirkProbeInk title, circle, background, ring;
     NSRect closeFrame = [closeButton frame];
     NSView *menuButton = QuirkProbePrimaryButtonIn (frameView);
     CGFloat circleY = QuirkProbeTopGap (frameView, closeFrame) + 17;
     CGFloat centre, expected, end;
+    long circleContrast, ringContrast;
 
     /* Renders come from the backing store: draw the focus change first. */
     [_headerWindow makeKeyWindow];
     [_headerWindow displayIfNeeded];
     rep = QuirkProbeRender (frameView);
-    /* Up to the buttons, or the ☰ before them in the primary menu's
-       run. */
-    title = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk,
-                                 NSMakeRect (0, 1, NSMinX (menuButton != nil ? [menuButton frame]
-                                                           : [[buttons objectAtIndex: 0] frame]), 44));
+    barBackground = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (20, 4, 4, 4)).darkest;
+    QuirkProbeInkBackground = barBackground;
+    /* Inside the border, up to the buttons, or the ☰ before them in the
+       primary menu's run. */
+    title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                                 NSMakeRect (1, 1, NSMinX (menuButton != nil ? [menuButton frame]
+                                                           : [[buttons objectAtIndex: 0] frame]) - 1, 44));
     titleInk = NSMakeRect (title.minX, title.minY, title.width, title.height);
     centre = title.minX + title.width / 2.0;
     end = NSMinX (menuButton != nil ? [menuButton frame] : [[buttons objectAtIndex: 0] frame]) - 6;
     expected = MIN (NSWidth (bounds) / 2.0, end - title.width / 2.0);
     circle = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (NSMinX (closeFrame) + 6, circleY - 1, 2, 3));
     background = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (NSMinX (closeFrame) - 2, circleY - 1, 1, 3));
-    detail = [NSString stringWithFormat: @"title ink %ldx%ld at (%ld, %ld), centre %g (expected %g); circle %lu on %lu",
+    /* The circle's left edge: its ring in high contrast. */
+    ring = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (NSMinX (closeFrame) + 5, circleY - 1, 1, 3));
+    circleContrast = labs ((long)circle.darkest - (long)background.darkest);
+    ringContrast = labs ((long)ring.darkest - (long)background.darkest);
+    detail = [NSString stringWithFormat: @"title ink %ldx%ld at (%ld, %ld), centre %g (expected %g); circle %lu, its edge %lu, on %lu%@",
       (long)title.width, (long)title.height, (long)title.minX, (long)title.minY, centre, expected,
-      (unsigned long)circle.darkest, (unsigned long)background.darkest];
+      (unsigned long)circle.darkest, (unsigned long)ring.darkest, (unsigned long)background.darkest,
+      highContrast ? @" (high contrast: a ring)" : @""];
     if (title.count > 0 && fabs (centre - expected) <= 3 && title.minY >= 16 && title.minY <= 18
       && title.height >= 10 && title.height <= 14
-      && background.darkest > circle.darkest + 30 && background.darkest < circle.darkest + 110)
+      && circleContrast > 30 && circleContrast < 110
+      && (highContrast == NO || ringContrast > circleContrast + 60))
       [self pass: @"header-bar-render" detail: detail];
     else
       [self fail: @"header-bar-render" detail: detail];
@@ -1915,14 +1954,16 @@ QuirkProbePrimaryButtonIn (NSView *view)
 
   /* Another window key: the title dims, as GTK's backdrop state. */
   {
-    NSUInteger focused = QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk).darkest;
+    NSUInteger focused = QuirkProbeContrast (QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk),
+                                             barBackground);
     NSUInteger dimmed;
 
     [_controlsWindow makeKeyWindow];
     [_headerWindow displayIfNeeded];
-    dimmed = QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk).darkest;
-    detail = [NSString stringWithFormat: @"title's darkest pixel %lu focused, %lu not", (unsigned long)focused, (unsigned long)dimmed];
-    if (focused < 306 && dimmed >= focused + 150)
+    dimmed = QuirkProbeContrast (QuirkProbeMeasureIn (QuirkProbeRender (frameView), QuirkProbeIsAnyPixel, titleInk),
+                                 barBackground);
+    detail = [NSString stringWithFormat: @"title's contrast with the bar %lu focused, %lu not", (unsigned long)focused, (unsigned long)dimmed];
+    if (focused >= 450 && dimmed + 150 <= focused)
       [self pass: @"header-bar-backdrop" detail: detail];
     else
       [self fail: @"header-bar-backdrop" detail: detail];
@@ -1984,6 +2025,74 @@ QuirkProbePrimaryButtonIn (NSView *view)
       [self pass: @"header-bar-double-click" detail: detail];
     else
       [self fail: @"header-bar-double-click" detail: detail];
+  }
+
+  /* Right to left (as GTK in Arabic or Hebrew): the buttons at the end go
+     to the left, close outermost, 6pt from the edge; the ☰ 6pt to their
+     right. Switched through a volatile domain, so nothing is saved. */
+  {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSMutableArray *searchList = AUTORELEASE ([[defaults searchList] mutableCopy]);
+    NSArray *mirrored;
+    NSView *menuButton;
+    NSMutableArray *parts = [NSMutableArray array];
+    BOOL ok;
+    NSUInteger i;
+
+    [defaults setVolatileDomain: [NSDictionary dictionaryWithObject: @"YES" forKey: @"NSForceRightToLeftWritingDirection"]
+                        forName: @"QuirkProbeRightToLeft"];
+    [searchList insertObject: @"QuirkProbeRightToLeft" atIndex: 0];
+    [defaults setSearchList: searchList];
+    [frameView performSelector: @selector(updateRects)];
+    mirrored = QuirkProbeWindowButtons (frameView);
+    menuButton = QuirkProbePrimaryButtonIn (frameView);
+    for (i = 0; i < [mirrored count]; i++)
+      {
+        [parts addObject: [NSString stringWithFormat: @"%ld at %g", (long)[[mirrored objectAtIndex: i] tag],
+          NSMinX ([[mirrored objectAtIndex: i] frame])]];
+      }
+    if (menuButton != nil)
+      {
+        [parts addObject: [NSString stringWithFormat: @"☰ view at %g", NSMinX ([menuButton frame])]];
+      }
+    ok = [mirrored count] == 3
+      && [[mirrored objectAtIndex: 0] tag] == NSWindowCloseButton && NSMinX ([[mirrored objectAtIndex: 0] frame]) == 6
+      && [[mirrored objectAtIndex: 1] tag] == NSWindowZoomButton && NSMinX ([[mirrored objectAtIndex: 1] frame]) == 43
+      && [[mirrored objectAtIndex: 2] tag] == NSWindowMiniaturizeButton && NSMinX ([[mirrored objectAtIndex: 2] frame]) == 80
+      && (menuButton == nil || NSMinX ([menuButton frame]) == 120);
+
+    [searchList removeObject: @"QuirkProbeRightToLeft"];
+    [defaults setSearchList: searchList];
+    [defaults removeVolatileDomainForName: @"QuirkProbeRightToLeft"];
+    [frameView performSelector: @selector(updateRects)];
+
+    detail = [parts componentsJoinedByString: @", "];
+    if (ok)
+      [self pass: @"header-bar-rtl" detail: detail];
+    else
+      [self fail: @"header-bar-rtl" detail: detail];
+  }
+
+  /* A right-click on the bar opens the window menu (GNOME's default
+     action-right-click-titlebar), which stays open after the release. */
+  {
+    NSPoint inBar = NSMakePoint (40, NSHeight ([frameView bounds]) - 20);
+    NSString *titles;
+
+    ASSIGN (QuirkProbePrimaryTitles, [NSMutableArray array]);
+    [NSApp postEvent: [NSEvent mouseEventWithType: NSRightMouseUp location: inBar modifierFlags: 0 timestamp: 0
+                                     windowNumber: [_headerWindow windowNumber] context: nil eventNumber: 0
+                                       clickCount: 1 pressure: 0.0]
+             atStart: NO];
+    [self after: 0.3 perform: @selector(inspectPrimaryMenu:) mode: NSEventTrackingRunLoopMode];
+    [NSApp sendEvent: [NSEvent mouseEventWithType: NSRightMouseDown location: inBar modifierFlags: 0 timestamp: 0
+                                     windowNumber: [_headerWindow windowNumber] context: nil eventNumber: 0
+                                       clickCount: 1 pressure: 1.0]];
+    titles = [QuirkProbePrimaryTitles componentsJoinedByString: @" | "];
+    if ([titles isEqualToString: @"Hide | Maximize | -- | Always on Top | -- | Close"])
+      [self pass: @"header-bar-window-menu" detail: titles];
+    else
+      [self fail: @"header-bar-window-menu" detail: [titles length] > 0 ? titles : @"no menu open 0.3s after the click"];
   }
 
   /* Other kinds of window: where the content starts and which buttons
@@ -2139,6 +2248,14 @@ QuirkProbePrimaryButtonIn (NSView *view)
 
 - (void) checkFirstWindows: (NSTimer *)timer
 {
+  /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
+     high contrast runs (the other checks assume the light palette). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])
+    {
+      [self checkHeaderBar];
+      [self finish];
+      return;
+    }
   [self saveWindow: _controlsWindow named: @"controls"];
   [self saveWindow: _toolbarWindow named: @"toolbar"];
   [self saveWindow: _tableWindow named: @"tables"];

@@ -121,11 +121,19 @@ fi
 # The checks assume GNOME's default look (light, Cantarell 11), whatever this
 # desktop uses: give the probe its own GSettings with those values. The
 # header bar checks want every window button.
+# QUIRK_PROBE_STYLE=dark or high-contrast changes the look, for runs of the
+# header bar checks alone (-ProbeOnly header-bar).
+COLOR_SCHEME=default
+GTK_THEME_NAME=Adwaita
+case "${QUIRK_PROBE_STYLE:-}" in
+  dark) COLOR_SCHEME=prefer-dark ;;
+  high-contrast) GTK_THEME_NAME=HighContrast ;;
+esac
 mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
-cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<'KEYFILE'
+cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<KEYFILE
 [org/gnome/desktop/interface]
-color-scheme='default'
-gtk-theme='Adwaita'
+color-scheme='$COLOR_SCHEME'
+gtk-theme='$GTK_THEME_NAME'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'
 
@@ -135,10 +143,19 @@ action-double-click-titlebar='toggle-maximize'
 KEYFILE
 
 PROBE_ARGS=(-GSTheme "$THEME" -NSMenuInterfaceStyle NSWindows95InterfaceStyle)
+# The window manager's title bar unless the run asks for the header bar,
+# whatever the user's own defaults say.
+case "${QUIRK_PROBE_ARGS:-}" in
+  *HandlesWindowDecorations*) ;;
+  *) PROBE_ARGS+=(-GSX11HandlesWindowDecorations YES) ;;
+esac
 # Extra defaults for the probe, e.g. QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".
 if [ -n "${QUIRK_PROBE_ARGS:-}" ]; then
   read -r -a EXTRA_ARGS <<< "$QUIRK_PROBE_ARGS"
   PROBE_ARGS+=("${EXTRA_ARGS[@]}")
+fi
+if [ "${QUIRK_PROBE_STYLE:-}" = high-contrast ]; then
+  PROBE_ARGS+=(-ProbeHighContrast YES)
 fi
 if [ -n "$OUTPUT" ]; then
   mkdir -p "$OUTPUT"
