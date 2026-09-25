@@ -59,6 +59,13 @@ QuirkProbeIsNotWhite (NSUInteger red, NSUInteger green, NSUInteger blue)
   return (red + green + blue) < 705;
 }
 
+/* Every pixel: for finding the darkest in an area. */
+static BOOL
+QuirkProbeIsAnyPixel (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return YES;
+}
+
 /* The toolbar test image is magenta, a colour the theme never draws. */
 static BOOL
 QuirkProbeIsMagenta (NSUInteger red, NSUInteger green, NSUInteger blue)
@@ -151,6 +158,50 @@ static QuirkProbeInk
 QuirkProbeTextInk (NSView *view)
 {
   return QuirkProbeMeasure (QuirkProbeRender (view), QuirkProbeIsTextInk);
+}
+
+static NSView *
+QuirkProbeFindViewOfClass (NSView *view, Class viewClass)
+{
+  NSEnumerator *enumerator;
+  NSView *subview;
+
+  if (viewClass == Nil || [view isKindOfClass: viewClass])
+    {
+      return (viewClass == Nil) ? nil : view;
+    }
+  enumerator = [[view subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      NSView *found = QuirkProbeFindViewOfClass (subview, viewClass);
+
+      if (found != nil)
+        {
+          return found;
+        }
+    }
+  return nil;
+}
+
+/* Sends the window a mouse-moved event at `point` (window coordinates), as
+   the pointer would; tracking rects fire from these. */
+static void
+QuirkProbeMoveMouse (NSWindow *window, NSPoint point)
+{
+  NSEvent *event = [NSEvent mouseEventWithType: NSMouseMoved
+                                      location: point
+                                 modifierFlags: 0
+                                     timestamp: 0
+                                  windowNumber: [window windowNumber]
+                                       context: nil
+                                   eventNumber: 0
+                                    clickCount: 0
+                                      pressure: 0.0];
+
+  [window sendEvent: event];
+  /* Renders come from the window's backing store: draw what the event
+     invalidated first. */
+  [window displayIfNeeded];
 }
 
 static NSView *
@@ -485,6 +536,11 @@ objectValueForTableColumn: (NSTableColumn *)column
   [[_truncatedPathLabel cell] setLineBreakMode: NSLineBreakByTruncatingMiddle];
   [view addSubview: _truncatedPathLabel];
 
+  _popUpButton = [[NSPopUpButton alloc] initWithFrame: NSMakeRect (10, 60, 220, 30) pullsDown: NO];
+  [_popUpButton addItemsWithTitles: [NSArray arrayWithObjects: @"Personal account", @"Work or school", nil]];
+  [view addSubview: _popUpButton];
+  RELEASE (_popUpButton);
+
   [_controlsWindow makeKeyAndOrderFront: nil];
 
   _toolbarWindow = [self windowWithFrame: NSMakeRect (40, 560, 400, 120) title: @"QuirkProbe Toolbar"];
@@ -707,6 +763,116 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* GNOME apps have no menu named after the app; an empty one (this probe's:
+   its only menu is File) should be gone. */
+- (void) checkMenuBar
+{
+  NSMenu *mainMenu = [NSApp mainMenu];
+  NSString *first = ([mainMenu numberOfItems] > 0) ? [[mainMenu itemAtIndex: 0] title] : @"";
+  NSString *detail = [NSString stringWithFormat: @"first menu bar item \"%@\"", first];
+
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      [self skip: @"menubar-no-empty-app-item" detail: @"needs -NSMenuInterfaceStyle NSWindows95InterfaceStyle"];
+    }
+  else if ([first isEqualToString: [[NSProcessInfo processInfo] processName]])
+    {
+      [self fail: @"menubar-no-empty-app-item" detail: [detail stringByAppendingString: @" (empty app menu shown)"]];
+    }
+  else
+    {
+      [self pass: @"menubar-no-empty-app-item" detail: detail];
+    }
+}
+
+/* No dark line across the menu bar and toolbar (GSTheme's fallback toolbar
+   border is dark grey). */
+- (void) checkToolbarEdges
+{
+  NSView *frameView = [[_toolbarWindow contentView] superview];
+  NSView *toolbarView = QuirkProbeFindViewOfClass (frameView, NSClassFromString (@"GSToolbarView"));
+  NSBitmapImageRep *rep = QuirkProbeRender (frameView);
+  NSInteger bottom = 120;
+  QuirkProbeInk dark;
+  NSString *detail;
+
+  if (toolbarView != nil)
+    {
+      NSRect frame = [toolbarView convertRect: [toolbarView bounds] toView: frameView];
+
+      bottom = (NSInteger)([frameView isFlipped] ? NSMaxY (frame) : NSHeight ([frameView bounds]) - NSMinY (frame)) + 2;
+    }
+  /* A column clear of the toolbar items, from the top to just below the
+     toolbar. */
+  dark = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk,
+                              NSMakeRect ([rep pixelsWide] - 5, 0, 1, bottom));
+  detail = [NSString stringWithFormat: @"%lu dark pixels in the top %ldpt of the right edge",
+    (unsigned long)dark.count, (long)bottom];
+  if (dark.count == 0)
+    {
+      [self pass: @"toolbar-edges-light" detail: detail];
+    }
+  else
+    {
+      [self fail: @"toolbar-edges-light" detail: detail];
+    }
+}
+
+/* Moving the pointer over an image toolbar button shows the hover
+   background. */
+- (void) checkToolbarHover
+{
+  NSView *frameView = [[_toolbarWindow contentView] superview];
+  NSView *button = QuirkProbeFindViewOfClass (frameView, NSClassFromString (@"GSToolbarButton"));
+  NSRect inWindow;
+  NSUInteger before, after;
+  NSRect edge;
+
+  if (button == nil)
+    {
+      [self fail: @"toolbar-hover" detail: @"no toolbar button found"];
+      return;
+    }
+  /* A strip along the left edge, clear of the icon and label. */
+  edge = NSMakeRect (3, NSHeight ([button bounds]) / 2 - 5, 4, 10);
+  inWindow = [button convertRect: [button bounds] toView: nil];
+  QuirkProbeMoveMouse (_toolbarWindow, NSMakePoint (NSMaxX (inWindow) + 150, NSMinY (inWindow) - 30));
+  before = QuirkProbeMeasureIn (QuirkProbeRender (button), QuirkProbeIsAnyPixel, edge).darkest;
+  QuirkProbeMoveMouse (_toolbarWindow, NSMakePoint (NSMidX (inWindow), NSMidY (inWindow)));
+  after = QuirkProbeMeasureIn (QuirkProbeRender (button), QuirkProbeIsAnyPixel, edge).darkest;
+  QuirkProbeMoveMouse (_toolbarWindow, NSMakePoint (NSMaxX (inWindow) + 150, NSMinY (inWindow) - 30));
+
+  if (after + 20 <= before)
+    {
+      [self pass: @"toolbar-hover"
+          detail: [NSString stringWithFormat: @"background %lu away from the pointer, %lu under it",
+                     (unsigned long)before, (unsigned long)after]];
+    }
+  else
+    {
+      [self fail: @"toolbar-hover"
+          detail: [NSString stringWithFormat: @"background %lu away from the pointer, %lu under it (no hover)",
+                     (unsigned long)before, (unsigned long)after]];
+    }
+}
+
+/* A pop-up button's title starts near its left edge (the originals of the
+   theme's NSMenuItemCell overrides would put it about 50pt in). */
+- (void) checkPopUpButton
+{
+  QuirkProbeInk ink = QuirkProbeTextInk (_popUpButton);
+  NSString *detail = [NSString stringWithFormat: @"title starts %ldpt from the left edge", (long)ink.minX];
+
+  if (ink.count > 0 && ink.minX <= 24)
+    {
+      [self pass: @"popup-title-position" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-title-position" detail: detail];
+    }
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -734,6 +900,10 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
+  [self checkMenuBar];
+  [self checkToolbarEdges];
+  [self checkToolbarHover];
+  [self checkPopUpButton];
   [self checkFonts];
 
   _lateWindow = [self windowWithFrame: NSMakeRect (480, 560, 300, 100) title: @"QuirkProbe Late Window"];

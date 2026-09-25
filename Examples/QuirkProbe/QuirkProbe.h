@@ -35,6 +35,7 @@
   NSWindow *_tableWindow;
   NSTableView *_defaultGridTable;
   NSTableView *_explicitGridTable;
+  NSPopUpButton *_popUpButton;
   NSMutableArray *_sizedButtons;
   NSButton *_toolbarViewButton;
   NSTextField *_wrappingLabel;
