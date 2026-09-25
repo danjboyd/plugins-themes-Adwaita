@@ -45,6 +45,19 @@ void GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color);
    (the GnomeThemeMenuStyle default set to "primary"). */
 BOOL GnomeThemeUsesPrimaryMenu(void);
 
+/* YES when GNUstep draws the window decorations itself
+   (GSX11HandlesWindowDecorations NO): the theme then draws libadwaita's
+   header bar as the windows' title bar. */
+BOOL GnomeThemeUsesHeaderBar(void);
+
+/* The colour of a header bar's title and icons in `window`: the text
+   colour, dimmed when the window isn't focused. */
+NSColor *GnomeThemeHeaderBarTextColor(NSWindow *window);
+
+/* A new (retained) ☰ button for the header bar, from GnomeThemePrimaryMenu.m:
+   a 34px button 6px from the view's right edge, centred vertically. */
+NSView *GnomeThemeNewHeaderBarMenuButton(void);
+
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;

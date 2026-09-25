@@ -19,9 +19,10 @@
 */
 
 /* GNOME's primary menu instead of a menu bar (GnomeThemeMenuStyle =
-   "primary"). The window's menu bar becomes a single ☰ button: at the end
-   of the toolbar when the window shows one (the toolbar is narrowed to make
-   room), otherwise alone in a slim bar styled like a toolbar. Clicking it
+   "primary"). The window's menu bar becomes a single ☰ button: in the
+   header bar when the theme draws one (GnomeThemeHeaderBar.m), otherwise at
+   the end of the toolbar when the window shows one (the toolbar is narrowed
+   to make room), otherwise alone in a slim bar styled like a toolbar. Clicking it
    shows a copy of the main menu: its menus, then the application menu's
    items (About, Preferences, Quit), as GNOME's primary menu orders them.
    The app's menu itself is untouched, so key equivalents, validation and
@@ -54,6 +55,7 @@ static char GnomeThemePrimaryToolbarButtonKey;
 @interface NSView (GnomeThemePrimaryMenuDecoration)
 - (void) addMenuView: (NSMenuView *)menuView;
 - (NSMenuView *) removeMenuView;
+- (void) updateRects;
 @end
 
 @interface NSToolbar (GnomeThemePrimaryMenuPrivate)
@@ -81,6 +83,18 @@ GnomeThemeWindowShowsToolbar(NSWindow *window)
   NSToolbar *toolbar = [window toolbar];
 
   return toolbar != nil && [toolbar isVisible];
+}
+
+/* The height of the bar that holds the ☰: none when the header bar or the
+   toolbar holds it. */
+static CGFloat
+GnomeThemePrimaryBarHeightForWindow(NSWindow *window)
+{
+  if (GnomeThemeUsesHeaderBar () || GnomeThemeWindowShowsToolbar (window))
+    {
+      return 0.0;
+    }
+  return GnomeThemePrimaryBarHeight;
 }
 
 static NSMenu *
@@ -220,6 +234,13 @@ GnomeThemeCopyPrimaryMenu(void)
     }
   /* libadwaita's flat buttons: the text colour at 7% under the pointer,
      16% pressed, 6px corners (as the toolbar's buttons). */
+  if (_drawsBar == NO && GnomeThemeUsesHeaderBar ())
+    {
+      /* In the header bar: on the window's background, dimmed with the
+         title when the window isn't focused. */
+      background = [NSColor windowBackgroundColor];
+      textColor = GnomeThemeHeaderBarTextColor ([self window]);
+    }
   if (_hover || _pressed)
     {
       NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect: button xRadius: 6.0 yRadius: 6.0];
@@ -236,30 +257,74 @@ GnomeThemeCopyPrimaryMenu(void)
   return YES;
 }
 
-- (void) mouseDown: (NSEvent *)event
+/* Shows the primary menu under the button and tracks it until a click
+   picks an item or lands outside it. Tracking starts from a fresh press:
+   since libs-gui 0.32 (commit 82717eefe) any mouse up ends menu tracking,
+   so the release of the click that opened the menu would close it again.
+   Between clicks the menu follows the pointer, submenus included. */
+- (void) showPrimaryMenu
 {
   NSMenu *primary = GnomeThemeCopyPrimaryMenu ();
   NSMenuView *menuView = [primary menuRepresentation];
   NSRect button = [self convertRect: [self buttonRect] toView: nil];
   NSPoint corner = [[self window] convertBaseToScreen: NSMakePoint (NSMaxX (button), NSMinY (button))];
   NSWindow *menuWindow;
+  NSEvent *press;
 
-  if (NSPointInRect ([self convertPoint: [event locationInWindow] fromView: nil], [self buttonRect]) == NO
-    || [primary numberOfItems] == 0)
+  if ([primary numberOfItems] == 0)
     {
       return;
     }
-  _pressed = YES;
-  [self display];
-
   /* Shown as a context menu is, then moved under the button, right edges
      aligned, as GNOME's primary menu popover sits. */
   [primary displayTransient];
   menuWindow = [menuView window];
   [menuWindow setFrameOrigin: NSMakePoint (corner.x - NSWidth ([menuWindow frame]),
                                            corner.y - NSHeight ([menuWindow frame]))];
-  [menuView mouseDown: event];
+  press = [NSEvent mouseEventWithType: NSLeftMouseDown
+                             location: [menuWindow mouseLocationOutsideOfEventStream]
+                        modifierFlags: 0
+                            timestamp: [[NSApp currentEvent] timestamp]
+                         windowNumber: [menuWindow windowNumber]
+                              context: nil
+                          eventNumber: 0
+                           clickCount: 1
+                             pressure: 1.0];
+  [menuView mouseDown: press];
   [primary closeTransient];
+}
+
+/* As a GTK menu button: pressed while the pointer is on it, and the menu
+   opens when the click is released there. */
+- (void) mouseDown: (NSEvent *)event
+{
+  NSEvent *current = event;
+
+  if (NSPointInRect ([self convertPoint: [event locationInWindow] fromView: nil], [self buttonRect]) == NO)
+    {
+      return;
+    }
+  _pressed = YES;
+  [self display];
+  while ([current type] != NSLeftMouseUp)
+    {
+      BOOL inside;
+
+      current = [[self window] nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask
+                                           untilDate: [NSDate distantFuture]
+                                              inMode: NSEventTrackingRunLoopMode
+                                             dequeue: YES];
+      inside = NSPointInRect ([self convertPoint: [current locationInWindow] fromView: nil], [self buttonRect]);
+      if (inside != _pressed)
+        {
+          _pressed = inside;
+          [self display];
+        }
+    }
+  if (_pressed)
+    {
+      [self showPrimaryMenu];
+    }
 
   _pressed = NO;
   _hover = NSPointInRect ([self convertPoint: [[self window] mouseLocationOutsideOfEventStream] fromView: nil],
@@ -268,6 +333,15 @@ GnomeThemeCopyPrimaryMenu(void)
 }
 
 @end
+
+NSView *
+GnomeThemeNewHeaderBarMenuButton(void)
+{
+  GnomeThemePrimaryMenuButton *button = [[GnomeThemePrimaryMenuButton alloc] initWithFrame: NSZeroRect];
+
+  [button setDrawsBar: NO];
+  return button;
+}
 
 /* The ☰ button's width in a toolbar. */
 static CGFloat
@@ -285,6 +359,7 @@ GnomeThemePlaceToolbarButton(NSView *toolbarView)
   NSWindow *window = [toolbarView window];
   NSView *superview = [toolbarView superview];
   BOOL wanted = (window != nil && superview != nil && GnomeThemeUsesPrimaryMenu ()
+                 && GnomeThemeUsesHeaderBar () == NO
                  && [window menu] != nil && GnomeThemeWindowShowsToolbar (window));
   NSRect frame = [toolbarView frame];
 
@@ -318,7 +393,7 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
   NSView *windowView = [window windowView];
   NSToolbar *toolbar = [window toolbar];
   NSNumber *given = objc_getAssociatedObject (window, &GnomeThemePrimaryBarHeightKey);
-  CGFloat wanted = GnomeThemeWindowShowsToolbar (window) ? 0.0 : GnomeThemePrimaryBarHeight;
+  CGFloat wanted = GnomeThemePrimaryBarHeightForWindow (window);
 
   if ([window menu] != nil && given != nil && [given floatValue] != wanted
     && [windowView respondsToSelector: @selector(removeMenuView)])
@@ -357,7 +432,7 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
   given = objc_getAssociatedObject (window, &GnomeThemePrimaryBarHeightKey);
   if (given == nil)
     {
-      given = [NSNumber numberWithFloat: GnomeThemeWindowShowsToolbar (window) ? 0.0 : GnomeThemePrimaryBarHeight];
+      given = [NSNumber numberWithFloat: GnomeThemePrimaryBarHeightForWindow (window)];
       objc_setAssociatedObject (window, &GnomeThemePrimaryBarHeightKey, given, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
   return [given floatValue];
@@ -393,11 +468,19 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
       [menuView setInterfaceStyle: NSWindows95InterfaceStyle];
       [windowView addMenuView: menuView];
       [menuView sizeToFit];
-      button = AUTORELEASE ([[GnomeThemePrimaryMenuButton alloc] initWithFrame: [menuView bounds]]);
-      [button setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
-      [menuView addSubview: button];
+      if (GnomeThemeUsesHeaderBar () == NO)
+        {
+          button = AUTORELEASE ([[GnomeThemePrimaryMenuButton alloc] initWithFrame: [menuView bounds]]);
+          [button setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
+          [menuView addSubview: button];
+        }
     }
   GnomeThemeUpdatePrimaryMenuPlacement (window);
+  /* The header bar shows or hides its ☰ with the window's menu. */
+  if (GnomeThemeUsesHeaderBar () && [windowView respondsToSelector: @selector(updateRects)])
+    {
+      [windowView updateRects];
+    }
 }
 
 /* The menu view holds only the ☰ button, which draws the bar; the menu's
@@ -455,7 +538,7 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
   NSView *superview = [toolbarView superview];
 
   if (window != nil && superview != nil && GnomeThemeUsesPrimaryMenu () && [window menu] != nil
-    && GnomeThemeWindowShowsToolbar (window))
+    && GnomeThemeUsesHeaderBar () == NO && GnomeThemeWindowShowsToolbar (window))
     {
       frame.size.width = MIN (NSWidth (frame),
                               NSMaxX ([superview bounds]) - NSMinX (frame) - GnomeThemePrimaryToolbarButtonWidth ());

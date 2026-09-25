@@ -1,0 +1,923 @@
+/*
+   Copyright (C) 2026 Daniel Boyd
+
+   This file is part of the GNUstep Adwaita theme.
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; see the file COPYING.LIB.
+   If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* libadwaita's header bar as the window's title bar, when GNUstep draws the
+   window decorations itself (GSX11HandlesWindowDecorations NO; the theme
+   can't ask for that, the backend reads it before the theme loads). The
+   window's top row is a 46px bar with the bold title centred and round
+   window buttons in the order of GNOME's button-layout; the window can be
+   moved by the bar and resized from every edge and corner.
+
+   Sizes and colours are measured from libadwaita 1.7 renders
+   (Reference/HeaderBar/headerbar_reference.py). */
+
+#import "../GnomeTheme.h"
+#import "../Settings/GnomeThemeSettings.h"
+
+#import <AppKit/AppKit.h>
+#import <GNUstepGUI/GSDisplayServer.h>
+#import <GNUstepGUI/GSTheme.h>
+#import <GNUstepGUI/GSWindowDecorationView.h>
+
+/* The bar, and the 1px border round the window (GTK's border for windows
+   without a compositor shadow). As in GTK, the border is drawn over the
+   bar's outermost pixels: the bar is 46px including it, and the buttons'
+   margins are measured from the window's edge. */
+static const CGFloat GnomeThemeHeaderBarHeight = 46.0;
+static const CGFloat GnomeThemeWindowBorderWidth = 1.0;
+/* Window buttons: 34px, 6px from the bar's edges, 3px apart, a 24px circle
+   round a 16px icon. */
+static const CGFloat GnomeThemeWindowButtonSize = 34.0;
+static const CGFloat GnomeThemeWindowButtonMargin = 6.0;
+static const CGFloat GnomeThemeWindowButtonSpacing = 3.0;
+static const CGFloat GnomeThemeWindowButtonCircle = 24.0;
+/* Title: kept this far from the buttons at either end. */
+static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
+/* Resizing: a strip this wide inside each edge (there's no shadow margin
+   outside the window to put it in), and corners this long. */
+static const CGFloat GnomeThemeResizeEdge = 5.0;
+static const CGFloat GnomeThemeResizeCorner = 16.0;
+
+/* The text colour's share of the circle behind a window button: normal,
+   under the pointer, pressed. */
+static const CGFloat GnomeThemeWindowButtonFill = 0.10;
+static const CGFloat GnomeThemeWindowButtonHoverFill = 0.15;
+static const CGFloat GnomeThemeWindowButtonPressedFill = 0.30;
+/* The text colour's share of the title and icons in a window that isn't
+   focused (GTK's backdrop state), and of the border. */
+static const CGFloat GnomeThemeBackdropText = 0.60;
+static const CGFloat GnomeThemeWindowBorderShade = 0.125;
+
+enum
+{
+  GnomeThemeResizeLeft = 1,
+  GnomeThemeResizeRight = 2,
+  GnomeThemeResizeBottom = 4,
+  GnomeThemeResizeTop = 8
+};
+
+@interface GSStandardWindowDecorationView (GnomeThemeHeaderBarPrivate)
+- (NSPoint) mouseLocationOnScreenOutsideOfEventStream;
+- (void) moveWindowStartingWithEvent: (NSEvent *)event;
+@end
+
+@interface NSWindow (GnomeThemeHeaderBarPrivate)
+- (void) _captureMouse: (id)sender;
+- (void) _releaseMouse: (id)sender;
+@end
+
+BOOL
+GnomeThemeUsesHeaderBar(void)
+{
+  GSDisplayServer *server = GSCurrentServer ();
+
+  return server != nil && [server handlesWindowDecorations] == NO;
+}
+
+static GnomeThemeSettings *
+GnomeThemeCurrentSettings(void)
+{
+  GSTheme *theme = [GSTheme theme];
+
+  return [theme isKindOfClass: [GnomeTheme class]] ? [(GnomeTheme *)theme settings] : nil;
+}
+
+/* GTK's backdrop state follows the keyboard focus: a main window behind
+   a key panel is drawn as not focused. */
+static BOOL
+GnomeThemeWindowIsFocused(NSWindow *window)
+{
+  return [window isKeyWindow];
+}
+
+NSColor *
+GnomeThemeHeaderBarTextColor(NSWindow *window)
+{
+  NSColor *text = [NSColor controlTextColor];
+
+  if (GnomeThemeWindowIsFocused (window))
+    {
+      return text;
+    }
+  return [[NSColor windowBackgroundColor] blendedColorWithFraction: GnomeThemeBackdropText ofColor: text];
+}
+
+/* button-layout's two sides, keeping the buttons GNUstep has: close,
+   minimize and maximize. Without a colon everything is at the start, as in
+   GTK. */
+static void
+GnomeThemeParseButtonLayout(NSString *layout, NSArray **startOut, NSArray **endOut)
+{
+  NSArray *sides = [layout componentsSeparatedByString: @":"];
+  NSArray *known = [NSArray arrayWithObjects: @"close", @"minimize", @"maximize", nil];
+  NSMutableArray *result[2];
+  NSUInteger side;
+
+  for (side = 0; side < 2; side++)
+    {
+      NSEnumerator *enumerator;
+      NSString *name;
+
+      result[side] = [NSMutableArray array];
+      if (side >= [sides count])
+        {
+          continue;
+        }
+      enumerator = [[[sides objectAtIndex: side] componentsSeparatedByString: @","] objectEnumerator];
+      while ((name = [enumerator nextObject]) != nil)
+        {
+          name = [name stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+          if ([known containsObject: name] && [result[0] containsObject: name] == NO
+            && [result[1] containsObject: name] == NO)
+            {
+              [result[side] addObject: name];
+            }
+        }
+    }
+  *startOut = result[0];
+  *endOut = result[1];
+}
+
+static NSCursor *
+GnomeThemeResizeCursor(NSUInteger edges)
+{
+  static NSCursor *diagonal[2];
+  BOOL horizontal = (edges & (GnomeThemeResizeLeft | GnomeThemeResizeRight)) != 0;
+  BOOL vertical = (edges & (GnomeThemeResizeTop | GnomeThemeResizeBottom)) != 0;
+  NSUInteger index;
+
+  if (horizontal && vertical == NO)
+    {
+      return [NSCursor resizeLeftRightCursor];
+    }
+  if (vertical && horizontal == NO)
+    {
+      return [NSCursor resizeUpDownCursor];
+    }
+  /* Top-left and bottom-right share one diagonal, the other two the
+     other. */
+  index = ((edges & GnomeThemeResizeLeft) != 0) == ((edges & GnomeThemeResizeTop) != 0) ? 0 : 1;
+  if (diagonal[index] == nil)
+    {
+      NSImage *image = [NSImage imageNamed: index == 0 ? @"GSFrameResizeNWSECursor" : @"GSFrameResizeNESWCursor"];
+      NSSize size = [image size];
+
+      diagonal[index] = image != nil
+        ? [[NSCursor alloc] initWithImage: image hotSpot: NSMakePoint (floor (size.width / 2.0), floor (size.height / 2.0))]
+        : RETAIN ([NSCursor arrowCursor]);
+    }
+  return diagonal[index];
+}
+
+/* A round libadwaita window button. The action comes from GSTheme
+   (-performClose:, -miniaturize:, -zoom:); the images GNUstep sets on the
+   close button are ignored. */
+@interface GnomeThemeWindowButton : NSButton
+{
+  NSTrackingRectTag _tracking;
+  BOOL _hover;
+}
+@end
+
+@implementation GnomeThemeWindowButton
+
+- (void) updateTracking
+{
+  if (_tracking != 0)
+    {
+      [self removeTrackingRect: _tracking];
+      _tracking = 0;
+    }
+  if ([self window] != nil)
+    {
+      _tracking = [self addTrackingRect: [self bounds] owner: self userData: NULL assumeInside: NO];
+    }
+}
+
+- (void) viewDidMoveToWindow
+{
+  [super viewDidMoveToWindow];
+  [self updateTracking];
+}
+
+- (void) setFrame: (NSRect)frame
+{
+  [super setFrame: frame];
+  [self updateTracking];
+}
+
+- (void) mouseEntered: (NSEvent *)event
+{
+  _hover = YES;
+  [self setNeedsDisplay: YES];
+}
+
+- (void) mouseExited: (NSEvent *)event
+{
+  _hover = NO;
+  [self setNeedsDisplay: YES];
+}
+
+- (BOOL) acceptsFirstMouse: (NSEvent *)event
+{
+  return YES;
+}
+
+/* A point of a 16px icon, in the icon file's coordinates (origin at the
+   top left). */
+- (NSPoint) iconPoint: (NSRect)icon x: (CGFloat)x y: (CGFloat)y
+{
+  return NSMakePoint (NSMinX (icon) + x, [self isFlipped] ? NSMinY (icon) + y : NSMaxY (icon) - y);
+}
+
+/* A square outline of the given size and stroke, as the maximize and
+   restore icons draw it. */
+- (void) fillSquareOutline: (NSRect)icon at: (CGFloat)origin size: (CGFloat)size stroke: (CGFloat)stroke
+{
+  NSBezierPath *path = [NSBezierPath bezierPath];
+  NSPoint a = [self iconPoint: icon x: origin y: origin];
+  NSPoint b = [self iconPoint: icon x: origin + size y: origin + size];
+  NSPoint c = [self iconPoint: icon x: origin + stroke y: origin + stroke];
+  NSPoint d = [self iconPoint: icon x: origin + size - stroke y: origin + size - stroke];
+
+  [path appendBezierPathWithRect: NSMakeRect (MIN (a.x, b.x), MIN (a.y, b.y), fabs (b.x - a.x), fabs (b.y - a.y))];
+  [path appendBezierPathWithRect: NSMakeRect (MIN (c.x, d.x), MIN (c.y, d.y), fabs (d.x - c.x), fabs (d.y - c.y))];
+  [path setWindingRule: NSEvenOddWindingRule];
+  [path fill];
+}
+
+/* The icons, from Adwaita's window-close-symbolic, window-minimize-symbolic,
+   window-maximize-symbolic and window-restore-symbolic. */
+- (void) drawIconInRect: (NSRect)icon
+{
+  switch ([self tag])
+    {
+      case NSWindowCloseButton:
+        {
+          /* The X, with the icon's square ends and rounded joins: lines
+             (a point) and curves (two control points and a point). */
+          static const struct { char op; CGFloat v[6]; } steps[] = {
+            {'M', {4, 4}}, {'L', {5.03125, 4}},
+            {'C', {5.285156, 4.011719, 5.542969, 4.128906, 5.71875, 4.3125}},
+            {'L', {8, 6.59375}}, {'L', {10.3125, 4.3125}},
+            {'C', {10.578125, 4.082031, 10.757812, 4.007812, 11, 4}},
+            {'L', {12, 4}}, {'L', {12, 5}},
+            {'C', {12, 5.285156, 11.964844, 5.550781, 11.75, 5.75}},
+            {'L', {9.46875, 8.03125}}, {'L', {11.71875, 10.28125}},
+            {'C', {11.90625, 10.46875, 12, 10.734375, 12, 11}},
+            {'L', {12, 12}}, {'L', {11, 12}},
+            {'C', {10.734375, 12, 10.46875, 11.90625, 10.28125, 11.71875}},
+            {'L', {8, 9.4375}}, {'L', {5.71875, 11.71875}},
+            {'C', {5.53125, 11.90625, 5.265625, 12, 5, 12}},
+            {'L', {4, 12}}, {'L', {4, 11}},
+            {'C', {4, 10.734375, 4.09375, 10.46875, 4.28125, 10.28125}},
+            {'L', {6.5625, 8.03125}}, {'L', {4.28125, 5.75}},
+            {'C', {4.070312, 5.554688, 3.976562, 5.28125, 4, 5}}
+          };
+          NSBezierPath *path = [NSBezierPath bezierPath];
+          NSUInteger i;
+
+          for (i = 0; i < sizeof (steps) / sizeof (steps[0]); i++)
+            {
+              const CGFloat *v = steps[i].v;
+
+              switch (steps[i].op)
+                {
+                  case 'M':
+                    [path moveToPoint: [self iconPoint: icon x: v[0] y: v[1]]];
+                    break;
+                  case 'L':
+                    [path lineToPoint: [self iconPoint: icon x: v[0] y: v[1]]];
+                    break;
+                  default:
+                    [path curveToPoint: [self iconPoint: icon x: v[4] y: v[5]]
+                         controlPoint1: [self iconPoint: icon x: v[0] y: v[1]]
+                         controlPoint2: [self iconPoint: icon x: v[2] y: v[3]]];
+                    break;
+                }
+            }
+          [path closePath];
+          [path fill];
+          break;
+        }
+      case NSWindowMiniaturizeButton:
+        {
+          NSPoint a = [self iconPoint: icon x: 4.0 y: 10.0];
+          NSPoint b = [self iconPoint: icon x: 12.0 y: 12.0];
+
+          NSRectFill (NSMakeRect (a.x, MIN (a.y, b.y), b.x - a.x, 2.0));
+          break;
+        }
+      case NSWindowZoomButton:
+        if ([[self window] isZoomed])
+          {
+            [self fillSquareOutline: icon at: 5.0 size: 6.0 stroke: 2.0];
+          }
+        else
+          {
+            [self fillSquareOutline: icon at: 4.0 size: 8.0 stroke: 2.0];
+          }
+        break;
+      default:
+        break;
+    }
+}
+
+- (void) drawRect: (NSRect)rect
+{
+  NSRect bounds = [self bounds];
+  NSColor *background = [NSColor windowBackgroundColor];
+  NSColor *text = GnomeThemeHeaderBarTextColor ([self window]);
+  CGFloat fill = GnomeThemeWindowButtonFill;
+  NSRect circle = NSMakeRect (floor (NSMidX (bounds) - GnomeThemeWindowButtonCircle / 2.0),
+                              floor (NSMidY (bounds) - GnomeThemeWindowButtonCircle / 2.0),
+                              GnomeThemeWindowButtonCircle, GnomeThemeWindowButtonCircle);
+
+  if ([[self cell] isHighlighted])
+    {
+      fill = GnomeThemeWindowButtonPressedFill;
+    }
+  else if (_hover)
+    {
+      fill = GnomeThemeWindowButtonHoverFill;
+    }
+  [[background blendedColorWithFraction: fill ofColor: text] set];
+  [[NSBezierPath bezierPathWithOvalInRect: circle] fill];
+
+  [text set];
+  [self drawIconInRect: NSInsetRect (circle, 4.0, 4.0)];
+}
+
+@end
+
+@interface GnomeThemeHeaderBarDecorationView : GSStandardWindowDecorationView
+{
+  NSButton *_zoomButton;
+  /* The primary menu's ☰, when the app uses it. */
+  NSView *_menuButton;
+  /* The frame to go back to from maximised. GNUstep's -zoom: only goes
+     back to a frame saved under the window's autosave name. */
+  NSRect _restoreFrame;
+  BOOL _hasRestoreFrame;
+  /* The ends of the buttons at the bar's start and end, for the title. */
+  CGFloat _startLimit;
+  CGFloat _endLimit;
+}
+@end
+
+@implementation GnomeThemeHeaderBarDecorationView
+
++ (void) offsets: (float *)l : (float *)r : (float *)t : (float *)b
+    forStyleMask: (NSUInteger)style
+{
+  *l = *r = *t = *b = 0.0;
+  if (style & (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask))
+    {
+      *l = *r = *t = *b = GnomeThemeWindowBorderWidth;
+    }
+  if (style & (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask))
+    {
+      *t = GnomeThemeHeaderBarHeight;
+    }
+}
+
++ (CGFloat) minFrameWidthWithTitle: (NSString *)aTitle
+                         styleMask: (NSUInteger)aStyle
+{
+  /* Room for the buttons; the title is shortened to fit. */
+  return 2.0 * GnomeThemeWindowButtonMargin
+    + 3.0 * GnomeThemeWindowButtonSize + 2.0 * GnomeThemeWindowButtonSpacing;
+}
+
+- (id) initWithFrame: (NSRect)frame
+              window: (NSWindow *)w
+{
+  self = [super initWithFrame: frame window: w];
+  if (self != nil && ([w styleMask] & NSResizableWindowMask) && hasTitleBar)
+    {
+      _zoomButton = [NSWindow standardWindowButton: NSWindowZoomButton forStyleMask: [w styleMask]];
+      [_zoomButton setTarget: self];
+      [_zoomButton setAction: @selector(toggleMaximized:)];
+      [self addSubview: _zoomButton];
+      [self updateRects];
+    }
+  return self;
+}
+
+- (void) dealloc
+{
+  RELEASE (_menuButton);
+  [super dealloc];
+}
+
+- (NSButton *) buttonNamed: (NSString *)name
+{
+  if ([name isEqualToString: @"close"])
+    {
+      return closeButton;
+    }
+  if ([name isEqualToString: @"minimize"])
+    {
+      return miniaturizeButton;
+    }
+  if ([name isEqualToString: @"maximize"])
+    {
+      return _zoomButton;
+    }
+  return nil;
+}
+
+- (void) layoutWindowButtons
+{
+  NSRect bounds = [self bounds];
+  NSArray *start = nil;
+  NSArray *end = nil;
+  NSArray *all = [NSArray arrayWithObjects: @"close", @"minimize", @"maximize", nil];
+  CGFloat y = NSMaxY (bounds) - GnomeThemeWindowButtonMargin - GnomeThemeWindowButtonSize;
+  CGFloat x;
+  NSEnumerator *enumerator;
+  NSString *name;
+
+  GnomeThemeParseButtonLayout ([GnomeThemeCurrentSettings () buttonLayout] ?: @"appmenu:close", &start, &end);
+
+  enumerator = [all objectEnumerator];
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      [[self buttonNamed: name] setHidden: [start containsObject: name] == NO && [end containsObject: name] == NO];
+    }
+
+  x = NSMinX (bounds) + GnomeThemeWindowButtonMargin;
+  _startLimit = x - GnomeThemeWindowButtonMargin;
+  enumerator = [start objectEnumerator];
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      NSButton *button = [self buttonNamed: name];
+
+      if (button != nil)
+        {
+          [button setFrame: NSMakeRect (x, y, GnomeThemeWindowButtonSize, GnomeThemeWindowButtonSize)];
+          _startLimit = x + GnomeThemeWindowButtonSize;
+          x += GnomeThemeWindowButtonSize + GnomeThemeWindowButtonSpacing;
+        }
+    }
+
+  x = NSMaxX (bounds) - GnomeThemeWindowButtonMargin - GnomeThemeWindowButtonSize;
+  _endLimit = x + GnomeThemeWindowButtonSize + GnomeThemeWindowButtonMargin;
+  enumerator = [end reverseObjectEnumerator];
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      NSButton *button = [self buttonNamed: name];
+
+      if (button != nil)
+        {
+          [button setFrame: NSMakeRect (x, y, GnomeThemeWindowButtonSize, GnomeThemeWindowButtonSize)];
+          _endLimit = x;
+          x -= GnomeThemeWindowButtonSize + GnomeThemeWindowButtonSpacing;
+        }
+    }
+
+  /* The primary menu's ☰ goes before the buttons at the end, 6px from
+     them (or from the window's edge), as libadwaita packs it. The button
+     view keeps a 6px margin at its right. */
+  if (GnomeThemeUsesPrimaryMenu () && [window menu] != nil)
+    {
+      CGFloat width = GnomeThemeWindowButtonSize + GnomeThemeWindowButtonMargin;
+
+      if (_menuButton == nil)
+        {
+          _menuButton = GnomeThemeNewHeaderBarMenuButton ();
+          [self addSubview: _menuButton];
+        }
+      [_menuButton setFrame: NSMakeRect (_endLimit - width, NSMaxY (bounds) - GnomeThemeHeaderBarHeight,
+                                         width, GnomeThemeHeaderBarHeight)];
+      _endLimit -= width;
+    }
+  else if (_menuButton != nil)
+    {
+      [_menuButton removeFromSuperview];
+      DESTROY (_menuButton);
+    }
+}
+
+/* GSWindowDecorationView puts a menu bar 1pt above the content area, over
+   the border it expects there; here that would be the header bar's last
+   row. */
+- (void) layout
+{
+  NSEnumerator *enumerator;
+  NSView *subview;
+
+  [super layout];
+  enumerator = [[self subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if ([subview isKindOfClass: [NSMenuView class]] && NSMaxY ([subview frame]) > NSMaxY (contentRect))
+        {
+          NSRect frame = [subview frame];
+
+          /* An empty one (the primary menu's) moves down instead. */
+          frame.origin.y = MIN (NSMinY (frame), NSMaxY (contentRect));
+          frame.size.height = NSMaxY (contentRect) - NSMinY (frame);
+          [subview setFrame: frame];
+        }
+    }
+}
+
+- (void) updateRects
+{
+  NSRect bounds = [self bounds];
+
+  if (hasTitleBar)
+    {
+      titleBarRect = NSMakeRect (NSMinX (bounds), NSMaxY (bounds) - GnomeThemeHeaderBarHeight,
+                                 NSWidth (bounds), GnomeThemeHeaderBarHeight);
+      [self layoutWindowButtons];
+    }
+  resizeBarRect = NSZeroRect;
+  [[self window] invalidateCursorRectsForView: self];
+}
+
+/* The title, shortened with an ellipsis to fit between the buttons. */
+- (NSString *) fittedTitle: (NSString *)title
+                attributes: (NSDictionary *)attributes
+                     width: (CGFloat)width
+{
+  NSString *ellipsis = [NSString stringWithFormat: @"%C", (unichar)0x2026];
+  NSUInteger length = [title length];
+
+  if ([title sizeWithAttributes: attributes].width <= width)
+    {
+      return title;
+    }
+  while (length > 0)
+    {
+      NSString *shortened;
+
+      length--;
+      shortened = [[[title substringToIndex: length]
+                     stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]]
+                    stringByAppendingString: ellipsis];
+      if ([shortened sizeWithAttributes: attributes].width <= width)
+        {
+          return shortened;
+        }
+    }
+  return @"";
+}
+
+- (void) drawTitleInRect: (NSRect)bar
+{
+  NSString *title = [window title];
+  NSFont *font = [GnomeThemeCurrentSettings () boldInterfaceFont] ?: [NSFont boldSystemFontOfSize: 0.0];
+  NSDictionary *attributes;
+  CGFloat minX = _startLimit + GnomeThemeHeaderBarTitleSpacing;
+  CGFloat maxX = _endLimit - GnomeThemeHeaderBarTitleSpacing;
+  NSSize size;
+  CGFloat x;
+  CGFloat baseline;
+
+  if (isTitled == NO || [title length] == 0 || maxX <= minX)
+    {
+      return;
+    }
+  attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                               font, NSFontAttributeName,
+                               GnomeThemeHeaderBarTextColor (window), NSForegroundColorAttributeName,
+                               nil];
+  title = [self fittedTitle: title attributes: attributes width: maxX - minX];
+  size = [title sizeWithAttributes: attributes];
+
+  /* Centred on the window, as GTK centres it, unless the buttons at one
+     end are in the way. Vertically GTK centres the font's ascent and
+     descent, not the line with its leading. */
+  x = floor (NSMidX (bar) - size.width / 2.0);
+  x = MAX (minX, MIN (x, maxX - size.width));
+  baseline = NSMaxY (bar) - floor ((NSHeight (bar) - ([font ascender] - [font descender])) / 2.0 + [font ascender]);
+  [title drawAtPoint: NSMakePoint (x, baseline + [font descender] - (size.height - ([font ascender] - [font descender])))
+      withAttributes: attributes];
+}
+
+- (void) drawRect: (NSRect)rect
+{
+  NSRect bounds = [self bounds];
+  NSColor *background = [NSColor windowBackgroundColor];
+
+  if (hasTitleBar && NSIntersectsRect (rect, titleBarRect))
+    {
+      [background set];
+      NSRectFill (titleBarRect);
+      [self drawTitleInRect: titleBarRect];
+    }
+  if (NSEqualRects (contentRect, bounds) == NO)
+    {
+      [[background blendedColorWithFraction: GnomeThemeWindowBorderShade ofColor: [NSColor controlTextColor]] set];
+      NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
+    }
+  if (NSIntersectsRect (rect, contentRect))
+    {
+      /* As GSWindowDecorationView: the outermost view clears the content
+         area in case the window's background isn't opaque. */
+      NSRectFillUsingOperation (contentRect, NSCompositeClear);
+      [[GSTheme theme] drawWindowBackground: contentRect view: self];
+    }
+}
+
+- (void) setInputState: (int)state
+{
+  [super setInputState: state];
+  /* The buttons dim with the title. */
+  [closeButton setNeedsDisplay: YES];
+  [miniaturizeButton setNeedsDisplay: YES];
+  [_zoomButton setNeedsDisplay: YES];
+  [_menuButton setNeedsDisplay: YES];
+}
+
+/* The edges a point is on, for resizing. */
+- (NSUInteger) resizeEdgesForPoint: (NSPoint)p
+{
+  NSRect bounds = [self bounds];
+  BOOL left = p.x < NSMinX (bounds) + GnomeThemeResizeEdge;
+  BOOL right = p.x >= NSMaxX (bounds) - GnomeThemeResizeEdge;
+  BOOL bottom = p.y < NSMinY (bounds) + GnomeThemeResizeEdge;
+  BOOL top = p.y >= NSMaxY (bounds) - GnomeThemeResizeEdge;
+  NSUInteger edges = 0;
+
+  if (([window styleMask] & NSResizableWindowMask) == 0 || [window isZoomed]
+    || NSPointInRect (p, bounds) == NO)
+    {
+      return 0;
+    }
+  if (left || right)
+    {
+      edges |= left ? GnomeThemeResizeLeft : GnomeThemeResizeRight;
+      if (p.y < NSMinY (bounds) + GnomeThemeResizeCorner)
+        {
+          edges |= GnomeThemeResizeBottom;
+        }
+      else if (p.y >= NSMaxY (bounds) - GnomeThemeResizeCorner)
+        {
+          edges |= GnomeThemeResizeTop;
+        }
+    }
+  if (top || bottom)
+    {
+      edges |= bottom ? GnomeThemeResizeBottom : GnomeThemeResizeTop;
+      if (p.x < NSMinX (bounds) + GnomeThemeResizeCorner)
+        {
+          edges |= GnomeThemeResizeLeft;
+        }
+      else if (p.x >= NSMaxX (bounds) - GnomeThemeResizeCorner)
+        {
+          edges |= GnomeThemeResizeRight;
+        }
+    }
+  return edges;
+}
+
+/* The edges are over the content view's edge: take clicks there before
+   the content does. */
+- (NSView *) hitTest: (NSPoint)point
+{
+  NSPoint p = [self convertPoint: point fromView: nil];
+
+  if ([self resizeEdgesForPoint: p] != 0)
+    {
+      return self;
+    }
+  return [super hitTest: point];
+}
+
+- (void) resetCursorRects
+{
+  NSRect bounds = [self bounds];
+  CGFloat edge = GnomeThemeResizeEdge;
+  CGFloat corner = GnomeThemeResizeCorner;
+  CGFloat minX = NSMinX (bounds), maxX = NSMaxX (bounds);
+  CGFloat minY = NSMinY (bounds), maxY = NSMaxY (bounds);
+
+  [super resetCursorRects];
+  if (([window styleMask] & NSResizableWindowMask) == 0 || [window isZoomed])
+    {
+      return;
+    }
+  [self addCursorRect: NSMakeRect (minX, minY + corner, edge, NSHeight (bounds) - 2.0 * corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeLeft)];
+  [self addCursorRect: NSMakeRect (maxX - edge, minY + corner, edge, NSHeight (bounds) - 2.0 * corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeRight)];
+  [self addCursorRect: NSMakeRect (minX + corner, minY, NSWidth (bounds) - 2.0 * corner, edge)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeBottom)];
+  [self addCursorRect: NSMakeRect (minX + corner, maxY - edge, NSWidth (bounds) - 2.0 * corner, edge)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeTop)];
+  [self addCursorRect: NSMakeRect (minX, minY, corner, corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeLeft | GnomeThemeResizeBottom)];
+  [self addCursorRect: NSMakeRect (maxX - corner, minY, corner, corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeRight | GnomeThemeResizeBottom)];
+  [self addCursorRect: NSMakeRect (minX, maxY - corner, corner, corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeLeft | GnomeThemeResizeTop)];
+  [self addCursorRect: NSMakeRect (maxX - corner, maxY - corner, corner, corner)
+               cursor: GnomeThemeResizeCursor (GnomeThemeResizeRight | GnomeThemeResizeTop)];
+}
+
+static NSRect
+GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize minSize, NSSize maxSize)
+{
+  NSRect result = frame;
+
+  if (maxSize.width <= 0.0)
+    {
+      maxSize.width = 1e7;
+    }
+  if (maxSize.height <= 0.0)
+    {
+      maxSize.height = 1e7;
+    }
+  if (edges & GnomeThemeResizeLeft)
+    {
+      result.size.width = MAX (minSize.width, MIN (maxSize.width, NSWidth (frame) - delta.x));
+      result.origin.x = NSMaxX (frame) - NSWidth (result);
+    }
+  else if (edges & GnomeThemeResizeRight)
+    {
+      result.size.width = MAX (minSize.width, MIN (maxSize.width, NSWidth (frame) + delta.x));
+    }
+  if (edges & GnomeThemeResizeBottom)
+    {
+      result.size.height = MAX (minSize.height, MIN (maxSize.height, NSHeight (frame) - delta.y));
+      result.origin.y = NSMaxY (frame) - NSHeight (result);
+    }
+  else if (edges & GnomeThemeResizeTop)
+    {
+      result.size.height = MAX (minSize.height, MIN (maxSize.height, NSHeight (frame) + delta.y));
+    }
+  return result;
+}
+
+- (void) resizeWindowFromEdges: (NSUInteger)edges event: (NSEvent *)event
+{
+  NSUInteger mask = NSLeftMouseDraggedMask | NSLeftMouseUpMask;
+  NSEvent *current = event;
+  NSPoint start = [self mouseLocationOnScreenOutsideOfEventStream];
+  NSRect frame = [window frame];
+  NSSize minSize = [window minSize];
+  NSSize maxSize = [window maxSize];
+  NSCursor *cursor = GnomeThemeResizeCursor (edges);
+
+  [cursor push];
+  [window _captureMouse: nil];
+  while (current != nil && [current type] != NSLeftMouseUp)
+    {
+      NSPoint point;
+
+      /* Only the latest drag matters. */
+      current = [window nextEventMatchingMask: mask
+                                    untilDate: [NSDate distantFuture]
+                                       inMode: NSEventTrackingRunLoopMode
+                                      dequeue: YES];
+      while ([current type] == NSLeftMouseDragged)
+        {
+          NSEvent *next = [window nextEventMatchingMask: mask
+                                              untilDate: [NSDate distantPast]
+                                                 inMode: NSEventTrackingRunLoopMode
+                                                dequeue: YES];
+          if (next == nil)
+            {
+              break;
+            }
+          current = next;
+        }
+      point = [self mouseLocationOnScreenOutsideOfEventStream];
+      [window setFrame: GnomeThemeResizedFrame (frame, edges, NSMakePoint (point.x - start.x, point.y - start.y),
+                                                minSize, maxSize)
+               display: YES];
+    }
+  [window _releaseMouse: nil];
+  [cursor pop];
+}
+
+/* Maximise, or go back to the frame the window had before. */
+- (void) toggleMaximized: (id)sender
+{
+  if ([window isZoomed] && _hasRestoreFrame)
+    {
+      _hasRestoreFrame = NO;
+      [window setFrame: _restoreFrame display: YES];
+    }
+  else if ([window isZoomed] == NO)
+    {
+      _restoreFrame = [window frame];
+      _hasRestoreFrame = YES;
+      [window zoom: sender];
+    }
+  /* The maximise button shows restore, and resizing is off. */
+  [self setNeedsDisplay: YES];
+  [window invalidateCursorRectsForView: self];
+}
+
+- (void) performDoubleClickAction
+{
+  NSString *action = [GnomeThemeCurrentSettings () titlebarDoubleClickAction] ?: @"toggle-maximize";
+  NSUInteger style = [window styleMask];
+
+  if (([action isEqualToString: @"toggle-maximize"]
+       || [action isEqualToString: @"toggle-maximize-horizontally"]
+       || [action isEqualToString: @"toggle-maximize-vertically"])
+    && (style & NSResizableWindowMask))
+    {
+      [self toggleMaximized: self];
+    }
+  else if ([action isEqualToString: @"minimize"] && (style & NSMiniaturizableWindowMask))
+    {
+      [window miniaturize: self];
+    }
+  /* "lower", "menu" and "none": nothing GNUstep can do from here. */
+}
+
+- (void) mouseDown: (NSEvent *)event
+{
+  NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
+  NSUInteger edges = [self resizeEdgesForPoint: p];
+
+  if (edges != 0)
+    {
+      [self resizeWindowFromEdges: edges event: event];
+      return;
+    }
+  if (hasTitleBar && NSPointInRect (p, titleBarRect))
+    {
+      if ([event clickCount] == 2)
+        {
+          [self performDoubleClickAction];
+        }
+      else
+        {
+          [self moveWindowStartingWithEvent: event];
+        }
+      return;
+    }
+  [super mouseDown: event];
+}
+
+@end
+
+@implementation GnomeTheme (HeaderBar)
+
+- (id<GSWindowDecorator>) windowDecorator
+{
+  if (GnomeThemeUsesHeaderBar ())
+    {
+      return [GnomeThemeHeaderBarDecorationView self];
+    }
+  return [super windowDecorator];
+}
+
+- (NSButton *) standardWindowButton: (NSWindowButton)button
+                       forStyleMask: (NSUInteger)mask
+{
+  NSButton *newButton;
+
+  if (GnomeThemeUsesHeaderBar () == NO
+    || (button != NSWindowCloseButton && button != NSWindowMiniaturizeButton && button != NSWindowZoomButton))
+    {
+      return [super standardWindowButton: button forStyleMask: mask];
+    }
+  newButton = AUTORELEASE ([[GnomeThemeWindowButton alloc] initWithFrame: NSZeroRect]);
+  [newButton setRefusesFirstResponder: YES];
+  [newButton setButtonType: NSMomentaryChangeButton];
+  [newButton setBordered: NO];
+  [newButton setTag: button];
+  switch (button)
+    {
+      case NSWindowCloseButton:
+        [newButton setAction: @selector(performClose:)];
+        [newButton setToolTip: @"Close"];
+        break;
+      case NSWindowMiniaturizeButton:
+        [newButton setAction: @selector(miniaturize:)];
+        [newButton setToolTip: @"Minimize"];
+        break;
+      default:
+        [newButton setAction: @selector(zoom:)];
+        [newButton setToolTip: @"Maximize"];
+        break;
+    }
+  return newButton;
+}
+
+@end

@@ -37,6 +37,8 @@ typedef enum
   GnomeThemeColorScheme _colorScheme;
   BOOL _highContrast;
   BOOL _compactMetrics;
+  NSString *_buttonLayout;
+  NSString *_titlebarDoubleClickAction;
 }
 
 - (void) reload;
@@ -55,6 +57,12 @@ typedef enum
    otherwise apps with a main nib, storyboard or markup file get compact
    metrics. */
 - (BOOL) compactMetrics;
+
+/* org.gnome.desktop.wm.preferences: button-layout (for example
+   "appmenu:minimize,maximize,close") and action-double-click-titlebar (for
+   example "toggle-maximize"), with GNOME's defaults when unset. */
+- (NSString *) buttonLayout;
+- (NSString *) titlebarDoubleClickAction;
 
 - (NSFont *) interfaceFont;
 - (NSFont *) boldInterfaceFont;

@@ -91,7 +91,7 @@ GnomeThemeResolvedFontScale(void)
 }
 
 static GSettings *
-GnomeThemeCreateDesktopSettings(GSettingsSchema **schemaOut)
+GnomeThemeCreateDesktopSettings(const char *schemaID, GSettingsSchema **schemaOut)
 {
   GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
   GSettingsSchema *schema = NULL;
@@ -99,9 +99,7 @@ GnomeThemeCreateDesktopSettings(GSettingsSchema **schemaOut)
 
   if (source != NULL)
     {
-      schema = g_settings_schema_source_lookup (source,
-                                                "org.gnome.desktop.interface",
-                                                TRUE);
+      schema = g_settings_schema_source_lookup (source, schemaID, TRUE);
     }
 
   if (schema != NULL)
@@ -214,6 +212,10 @@ GnomeThemeResolveFont(NSString *preferredName,
   return font;
 }
 
+@interface GnomeThemeSettings (Private)
+- (void) reloadWindowManagerPreferences;
+@end
+
 @implementation GnomeThemeSettings
 
 - (id) init
@@ -231,13 +233,15 @@ GnomeThemeResolveFont(NSString *preferredName,
   RELEASE (_interfaceFontName);
   RELEASE (_monospaceFontName);
   RELEASE (_gtkThemeName);
+  RELEASE (_buttonLayout);
+  RELEASE (_titlebarDoubleClickAction);
   [super dealloc];
 }
 
 - (void) reload
 {
   GSettingsSchema *schema = NULL;
-  GSettings *settings = GnomeThemeCreateDesktopSettings (&schema);
+  GSettings *settings = GnomeThemeCreateDesktopSettings ("org.gnome.desktop.interface", &schema);
   NSString *fontName = nil;
   NSString *monoName = nil;
   NSString *fontSpec = nil;
@@ -359,6 +363,59 @@ GnomeThemeResolveFont(NSString *preferredName,
   ASSIGNCOPY (_gtkThemeName, gtkThemeName);
   _colorScheme = colorScheme;
   _highContrast = highContrast;
+
+  [self reloadWindowManagerPreferences];
+}
+
+/* The window buttons' order and the title bar double-click action, which
+   GTK takes from the window manager's preferences for its header bars. */
+- (void) reloadWindowManagerPreferences
+{
+  GSettingsSchema *schema = NULL;
+  GSettings *settings = GnomeThemeCreateDesktopSettings ("org.gnome.desktop.wm.preferences", &schema);
+  NSString *buttonLayout = nil;
+  NSString *doubleClick = nil;
+
+  if (settings != NULL && schema != NULL)
+    {
+      if (g_settings_schema_has_key (schema, "button-layout"))
+        {
+          gchar *value = g_settings_get_string (settings, "button-layout");
+          if (value != NULL)
+            {
+              buttonLayout = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
+      if (g_settings_schema_has_key (schema, "action-double-click-titlebar"))
+        {
+          gchar *value = g_settings_get_string (settings, "action-double-click-titlebar");
+          if (value != NULL)
+            {
+              doubleClick = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
+      g_object_unref (settings);
+    }
+  if (schema != NULL)
+    {
+      g_settings_schema_unref (schema);
+    }
+
+  /* GNOME's defaults. */
+  ASSIGNCOPY (_buttonLayout, [buttonLayout length] > 0 ? buttonLayout : @"appmenu:close");
+  ASSIGNCOPY (_titlebarDoubleClickAction, [doubleClick length] > 0 ? doubleClick : @"toggle-maximize");
+}
+
+- (NSString *) buttonLayout
+{
+  return _buttonLayout;
+}
+
+- (NSString *) titlebarDoubleClickAction
+{
+  return _titlebarDoubleClickAction;
 }
 
 - (NSString *) interfaceFontName
