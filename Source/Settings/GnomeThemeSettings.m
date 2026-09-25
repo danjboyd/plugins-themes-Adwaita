@@ -360,6 +360,28 @@ GnomeThemeResolveFont(NSString *preferredName,
                                 NO);
 }
 
+/* The bold face of the interface font, or nil when its family has none (the
+   theme then leaves GNUstep's own bold font in place). Cantarell's bold face
+   comes from a variable font and is named "Cantarell_700wght", so it is found
+   through the font manager rather than by name. */
+- (NSFont *) boldInterfaceFont
+{
+  NSFontManager *fontManager = [NSFontManager sharedFontManager];
+  NSFont *font = [self interfaceFont];
+  NSFont *boldFont = nil;
+
+  if (font == nil || fontManager == nil)
+    {
+      return nil;
+    }
+  boldFont = [fontManager convertFont: font toHaveTrait: NSBoldFontMask];
+  if (boldFont == nil || ([fontManager traitsOfFont: boldFont] & NSBoldFontMask) == 0)
+    {
+      return nil;
+    }
+  return boldFont;
+}
+
 - (NSFont *) menuFont
 {
   NSArray *fallbacks = [NSArray arrayWithObjects:

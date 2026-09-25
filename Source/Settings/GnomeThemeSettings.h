@@ -49,6 +49,7 @@ typedef enum
 - (BOOL) highContrastEnabled;
 
 - (NSFont *) interfaceFont;
+- (NSFont *) boldInterfaceFont;
 - (NSFont *) menuFont;
 - (NSFont *) menuBarFont;
 - (NSFont *) fixedPitchFont;

@@ -310,12 +310,14 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
 {
   NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
   NSFont *interfaceFont = [_settings interfaceFont];
+  NSFont *boldInterfaceFont = [_settings boldInterfaceFont];
   NSFont *menuFont = [_settings menuFont];
   NSFont *menuBarFont = [_settings menuBarFont];
   NSFont *fixedPitchFont = [_settings fixedPitchFont];
   CGFloat baseFontSize = [_settings interfaceFontSize];
 
   [self addFont: interfaceFont forKey: @"NSFont" toDictionary: dictionary];
+  [self addFont: boldInterfaceFont forKey: @"NSBoldFont" toDictionary: dictionary];
   [self addFont: interfaceFont forKey: @"NSUserFont" toDictionary: dictionary];
   [self addFont: interfaceFont forKey: @"NSControlContentFont" toDictionary: dictionary];
   [self addFont: interfaceFont forKey: @"NSLabelFont" toDictionary: dictionary];
