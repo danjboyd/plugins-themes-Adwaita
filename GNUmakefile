@@ -61,7 +61,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -75,6 +75,13 @@ check-quirks:
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install
+
+# The Gorm palette of controls at GNOME's sizes (see the README).
+palette:
+	$(MAKE) -C Palettes/Adwaita
+
+installpalette:
+	$(MAKE) -C Palettes/Adwaita install
 
 adwaita-demo:
 	python3 Reference/AdwaitaDemo/adwaita_demo.py
