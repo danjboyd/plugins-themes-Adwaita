@@ -205,6 +205,53 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
   [self updateMenu: mainMenu forWindow: window];
 }
 
+/* GNUstep hides tool tips and drag images by shrinking their window to
+   NSZeroRect and then ordering it out. Under Mutter with Xwayland, resizing a
+   mapped window freezes its content until Mutter next paints it, which never
+   happens once the window is unmapped: the tool tip or drag image then shows
+   only the first time (GNOME/mutter#5080, gnustep/libs-gui#964). On Wayland,
+   order them out without shrinking. Elsewhere the shrink stays, since libs-gui
+   added it to avoid "ugly rectangles in some desktops". */
+static BOOL
+GnomeThemeKeepsHiddenWindowSize(void)
+{
+  return getenv ("WAYLAND_DISPLAY") != NULL;
+}
+
+- (void) _overrideGSTTPanelMethod_setFrame: (NSRect)frameRect
+                                   display: (BOOL)flag
+{
+  typedef void (*SetFrameIMP)(id, SEL, NSRect, BOOL);
+  SetFrameIMP originalIMP = (SetFrameIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSTTPanel"));
+
+  if (NSIsEmptyRect (frameRect) && GnomeThemeKeepsHiddenWindowSize ())
+    {
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, frameRect, flag);
+    }
+}
+
+- (void) _overrideGSDragViewMethod__clearupWindow
+{
+  typedef void (*ClearupIMP)(id, SEL);
+  ClearupIMP originalIMP;
+
+  if (GnomeThemeKeepsHiddenWindowSize ())
+    {
+      /* The drag view is the content view of the drag window. */
+      [[(NSView *)self window] orderOut: nil];
+      return;
+    }
+  originalIMP = (ClearupIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSDragView"));
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+}
+
 - (NSColorList *) colors
 {
   if (_palette == nil)
