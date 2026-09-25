@@ -34,9 +34,11 @@ static const NSTimeInterval QuirkProbeSettleDelay = 0.8;
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
+  NSInteger minX;
   NSInteger width;
   NSInteger height;
   NSUInteger count;
+  NSUInteger darkest;   /* lowest red + green + blue among accepted pixels */
 } QuirkProbeInk;
 
 typedef BOOL (*QuirkProbePixelTest)(NSUInteger red, NSUInteger green, NSUInteger blue);
@@ -47,6 +49,14 @@ static BOOL
 QuirkProbeIsTextInk (NSUInteger red, NSUInteger green, NSUInteger blue)
 {
   return (red + green + blue) < 306;
+}
+
+/* Anything visibly darker than a white background: dim text, grid lines,
+   borders. */
+static BOOL
+QuirkProbeIsNotWhite (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return (red + green + blue) < 705;
 }
 
 /* The toolbar test image is magenta, a colour the theme never draws. */
@@ -66,10 +76,12 @@ QuirkProbeRender (NSView *view)
   return rep;
 }
 
+/* Measures the accepted pixels in `area` (in pixels, top-left origin), or
+   in the whole image when `area` is empty. */
 static QuirkProbeInk
-QuirkProbeMeasure (NSBitmapImageRep *rep, QuirkProbePixelTest test)
+QuirkProbeMeasureIn (NSBitmapImageRep *rep, QuirkProbePixelTest test, NSRect area)
 {
-  QuirkProbeInk ink = { 0, 0, 0 };
+  QuirkProbeInk ink = { 0, 0, 0, 0, NSUIntegerMax };
   NSInteger samples = [rep samplesPerPixel];
   NSInteger bits = [rep bitsPerSample];
   NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
@@ -80,14 +92,23 @@ QuirkProbeMeasure (NSBitmapImageRep *rep, QuirkProbePixelTest test)
   NSInteger minX = NSIntegerMax, minY = NSIntegerMax, maxX = -1, maxY = -1;
   NSUInteger pixel[5];
   NSInteger x, y;
+  NSInteger startX = 0, startY = 0;
+  NSInteger endX = [rep pixelsWide], endY = [rep pixelsHigh];
 
   if (samples < 3 || samples > 5)
     {
       return ink;
     }
-  for (y = 0; y < [rep pixelsHigh]; y++)
+  if (NSIsEmptyRect (area) == NO)
     {
-      for (x = 0; x < [rep pixelsWide]; x++)
+      startX = MAX (0, (NSInteger)NSMinX (area));
+      startY = MAX (0, (NSInteger)NSMinY (area));
+      endX = MIN (endX, (NSInteger)NSMaxX (area));
+      endY = MIN (endY, (NSInteger)NSMaxY (area));
+    }
+  for (y = startY; y < endY; y++)
+    {
+      for (x = startX; x < endX; x++)
         {
           NSUInteger red, green, blue;
 
@@ -103,6 +124,7 @@ QuirkProbeMeasure (NSBitmapImageRep *rep, QuirkProbePixelTest test)
           if (test (red, green, blue))
             {
               ink.count++;
+              ink.darkest = MIN (ink.darkest, red + green + blue);
               minX = MIN (minX, x);
               maxX = MAX (maxX, x);
               minY = MIN (minY, y);
@@ -112,10 +134,17 @@ QuirkProbeMeasure (NSBitmapImageRep *rep, QuirkProbePixelTest test)
     }
   if (ink.count > 0)
     {
+      ink.minX = minX;
       ink.width = maxX - minX + 1;
       ink.height = maxY - minY + 1;
     }
   return ink;
+}
+
+static QuirkProbeInk
+QuirkProbeMeasure (NSBitmapImageRep *rep, QuirkProbePixelTest test)
+{
+  return QuirkProbeMeasureIn (rep, test, NSZeroRect);
 }
 
 static QuirkProbeInk
@@ -353,7 +382,43 @@ QuirkProbeFindText (NSView *view, NSString *text)
   return [self toolbarAllowedItemIdentifiers: toolbar];
 }
 
+#pragma mark Table data source
+
+- (NSInteger) numberOfRowsInTableView: (NSTableView *)tableView
+{
+  return 4;
+}
+
+- (id) tableView: (NSTableView *)tableView
+objectValueForTableColumn: (NSTableColumn *)column
+             row: (NSInteger)row
+{
+  return [NSString stringWithFormat: @"Library %ld", (long)row + 1];
+}
+
 #pragma mark Windows
+
+- (NSTableView *) addTableAt: (NSRect)frame inView: (NSView *)view
+{
+  NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame: frame];
+  NSTableView *tableView = [[NSTableView alloc] initWithFrame:
+    NSMakeRect (0, 0, NSWidth (frame), NSHeight (frame))];
+  NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier: @"name"];
+
+  [[column headerCell] setStringValue: @"Name"];
+  [column setWidth: NSWidth (frame) - 10];
+  [tableView addTableColumn: column];
+  [tableView setDataSource: self];
+  [scrollView setDocumentView: tableView];
+  [scrollView setBorderType: NSBezelBorder];
+  [scrollView setHasVerticalScroller: NO];
+  [scrollView setHasHorizontalScroller: NO];
+  [view addSubview: scrollView];
+  [tableView reloadData];
+  RELEASE (column);
+  RELEASE (scrollView);
+  return AUTORELEASE (tableView);
+}
 
 - (void) addButtonTitled: (NSString *)title
                     type: (NSButtonType)type
@@ -429,6 +494,15 @@ QuirkProbeFindText (NSView *view, NSString *text)
   [_toolbarWindow setToolbar: toolbar];
   RELEASE (toolbar);
   [_toolbarWindow orderFront: nil];
+
+  /* Two tables: one left at GNUstep's default grid setting, one whose app
+     asked for horizontal grid lines. */
+  _tableWindow = [self windowWithFrame: NSMakeRect (960, 40, 300, 330) title: @"QuirkProbe Tables"];
+  view = [_tableWindow contentView];
+  _defaultGridTable = [self addTableAt: NSMakeRect (20, 170, 260, 140) inView: view];
+  _explicitGridTable = [self addTableAt: NSMakeRect (20, 10, 260, 140) inView: view];
+  [_explicitGridTable setGridStyleMask: NSTableViewSolidHorizontalGridLineMask];
+  [_tableWindow orderFront: nil];
 }
 
 #pragma mark Checks
@@ -544,6 +618,95 @@ QuirkProbeFindText (NSView *view, NSString *text)
     }
 }
 
+/* Pixels on the boundary lines between rows 0-1, 1-2 and 2-3 that are
+   darker than the white row background, in the right half of the table
+   (clear of the rows' text and its descenders). */
+- (NSUInteger) gridPixelsInTable: (NSTableView *)tableView
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (tableView);
+  NSUInteger count = 0;
+  NSInteger row;
+
+  for (row = 0; row < 3; row++)
+    {
+      NSInteger y = (NSInteger)NSMaxY ([tableView rectOfRow: row]) - 1;
+
+      count += QuirkProbeMeasureIn (rep, QuirkProbeIsNotWhite,
+                                    NSMakeRect ([rep pixelsWide] / 2, y, [rep pixelsWide] / 2, 1)).count;
+    }
+  return count;
+}
+
+- (void) checkTables
+{
+  NSUInteger defaultGrid = [self gridPixelsInTable: _defaultGridTable];
+  NSUInteger explicitGrid = [self gridPixelsInTable: _explicitGridTable];
+  NSInteger width = (NSInteger)NSWidth ([_defaultGridTable bounds]);
+  NSScrollView *scrollView = [_defaultGridTable enclosingScrollView];
+  NSBitmapImageRep *scrollRep = QuirkProbeRender (scrollView);
+  NSInteger scrollWidth = [scrollRep pixelsWide];
+  NSInteger scrollHeight = [scrollRep pixelsHigh];
+  NSUInteger framePixels = 0;
+  NSTableHeaderView *headerView = [_defaultGridTable headerView];
+  QuirkProbeInk headerInk = QuirkProbeMeasure (QuirkProbeRender (headerView), QuirkProbeIsNotWhite);
+  QuirkProbeInk rowInk = QuirkProbeMeasure (QuirkProbeRender (_defaultGridTable), QuirkProbeIsNotWhite);
+  NSString *detail;
+
+  detail = [NSString stringWithFormat: @"%lu grid pixels on 3 half-row boundaries",
+    (unsigned long)defaultGrid];
+  if (defaultGrid == 0)
+    {
+      [self pass: @"table-grid-default" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-grid-default"
+          detail: [detail stringByAppendingString: @" (GNUstep's default grid should draw none)"]];
+    }
+
+  detail = [NSString stringWithFormat: @"%lu grid pixels on 3 half-row boundaries of %ldpt",
+    (unsigned long)explicitGrid, (long)width / 2];
+  if (explicitGrid >= (NSUInteger)width * 3 / 4)
+    {
+      [self pass: @"table-grid-explicit" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-grid-explicit"
+          detail: [detail stringByAppendingString: @" (asked-for grid lines missing)"]];
+    }
+
+  /* The scroll view's outermost ring of pixels. */
+  framePixels += QuirkProbeMeasureIn (scrollRep, QuirkProbeIsNotWhite, NSMakeRect (0, 0, scrollWidth, 1)).count;
+  framePixels += QuirkProbeMeasureIn (scrollRep, QuirkProbeIsNotWhite, NSMakeRect (0, scrollHeight - 1, scrollWidth, 1)).count;
+  framePixels += QuirkProbeMeasureIn (scrollRep, QuirkProbeIsNotWhite, NSMakeRect (0, 0, 1, scrollHeight)).count;
+  framePixels += QuirkProbeMeasureIn (scrollRep, QuirkProbeIsNotWhite, NSMakeRect (scrollWidth - 1, 0, 1, scrollHeight)).count;
+  detail = [NSString stringWithFormat: @"%lu frame pixels around a bezel-bordered table", (unsigned long)framePixels];
+  if (framePixels == 0)
+    {
+      [self pass: @"table-no-frame" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-no-frame" detail: detail];
+    }
+
+  detail = [NSString stringWithFormat: @"header text starts at %ldpt, rows at %ldpt; darkest header %lu, rows %lu",
+    (long)headerInk.minX, (long)rowInk.minX,
+    (unsigned long)headerInk.darkest, (unsigned long)rowInk.darkest];
+  if (headerInk.count > 0 && rowInk.count > 0
+    && ABS (headerInk.minX - rowInk.minX) <= 2
+    && headerInk.darkest >= rowInk.darkest + 120)
+    {
+      [self pass: @"table-header" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-header"
+          detail: [detail stringByAppendingString: @" (want left-aligned with the rows, and dimmer)"]];
+    }
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -566,9 +729,11 @@ QuirkProbeFindText (NSView *view, NSString *text)
 {
   [self saveWindow: _controlsWindow named: @"controls"];
   [self saveWindow: _toolbarWindow named: @"toolbar"];
+  [self saveWindow: _tableWindow named: @"tables"];
   [self checkSizedButtons];
   [self checkLabels];
   [self checkToolbar];
+  [self checkTables];
   [self checkFonts];
 
   _lateWindow = [self windowWithFrame: NSMakeRect (480, 560, 300, 100) title: @"QuirkProbe Late Window"];

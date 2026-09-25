@@ -66,12 +66,14 @@ set +u
 set -u
 
 LOG="$(mktemp --suffix=.quirk-probe.log)"
+SETTINGS_DIR="$(mktemp -d --suffix=.quirk-probe)"
 
 cleanup() {
   if [ -n "$XVFB_PID" ]; then
     kill "$XVFB_PID" >/dev/null 2>&1 || true
     wait "$XVFB_PID" 2>/dev/null || true
   fi
+  rm -rf "$SETTINGS_DIR"
 }
 trap cleanup EXIT
 
@@ -112,6 +114,17 @@ else
   export DISPLAY=":$n"
 fi
 
+# The checks assume GNOME's default look (light, Cantarell 11), whatever this
+# desktop uses: give the probe its own GSettings with those values.
+mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
+cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<'KEYFILE'
+[org/gnome/desktop/interface]
+color-scheme='default'
+gtk-theme='Adwaita'
+font-name='Cantarell 11'
+monospace-font-name='Noto Sans Mono 11'
+KEYFILE
+
 PROBE_ARGS=(-GSTheme "$THEME" -NSMenuInterfaceStyle NSWindows95InterfaceStyle)
 if [ -n "$OUTPUT" ]; then
   mkdir -p "$OUTPUT"
@@ -120,7 +133,8 @@ fi
 
 RESULTS="$(mktemp --suffix=.quirk-probe.out)"
 set +e
-timeout 60 "$PROBE" "${PROBE_ARGS[@]}" >"$RESULTS" 2>>"$LOG"
+GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$SETTINGS_DIR" \
+  timeout 60 "$PROBE" "${PROBE_ARGS[@]}" >"$RESULTS" 2>>"$LOG"
 STATUS=$?
 set -e
 cat "$RESULTS"

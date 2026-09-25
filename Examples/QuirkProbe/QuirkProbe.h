@@ -25,13 +25,16 @@
    the result, so it doesn't depend on reference screenshots. Results go to
    stdout as PASS/FAIL/KNOWN/SKIP lines; the exit status is the number of
    failures. Run it through Tests/Scripts/run-quirk-probe.sh. */
-@interface QuirkProbe : NSObject <NSToolbarDelegate>
+@interface QuirkProbe : NSObject <NSToolbarDelegate, NSTableViewDataSource>
 {
   NSString *_outputDirectory;
   NSMutableArray *_windows;
   NSWindow *_controlsWindow;
   NSWindow *_toolbarWindow;
   NSWindow *_lateWindow;
+  NSWindow *_tableWindow;
+  NSTableView *_defaultGridTable;
+  NSTableView *_explicitGridTable;
   NSMutableArray *_sizedButtons;
   NSButton *_toolbarViewButton;
   NSTextField *_wrappingLabel;
