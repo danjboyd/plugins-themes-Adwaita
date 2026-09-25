@@ -384,11 +384,21 @@ GnomeThemeResizeCursor(NSUInteger edges)
 
 @implementation GnomeThemeHeaderBarDecorationView
 
+/* NSDocModalWindowMask marks a dialog drawn as libadwaita's alert
+   dialogs are: a border and no bar (see -initWithContentRect:... for
+   GSAlertPanel below). */
 + (void) offsets: (float *)l : (float *)r : (float *)t : (float *)b
     forStyleMask: (NSUInteger)style
 {
   *l = *r = *t = *b = 0.0;
-  if (style & (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask))
+  /* Fullscreen: neither bar nor border. (GNUstep has no -setStyleMask:,
+     so a window is created fullscreen or not at all.) */
+  if (style & NSFullScreenWindowMask)
+    {
+      return;
+    }
+  if (style & (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask | NSResizableWindowMask
+               | NSDocModalWindowMask))
     {
       *l = *r = *t = *b = GnomeThemeWindowBorderWidth;
     }
@@ -410,6 +420,15 @@ GnomeThemeResizeCursor(NSUInteger edges)
               window: (NSWindow *)w
 {
   self = [super initWithFrame: frame window: w];
+  if (self != nil && ([w styleMask] & NSFullScreenWindowMask))
+    {
+      [closeButton removeFromSuperview];
+      [miniaturizeButton removeFromSuperview];
+      closeButton = miniaturizeButton = nil;
+      hasTitleBar = isTitled = NO;
+      titleBarRect = NSZeroRect;
+      return self;
+    }
   if (self != nil && ([w styleMask] & NSResizableWindowMask) && hasTitleBar)
     {
       _zoomButton = [NSWindow standardWindowButton: NSWindowZoomButton forStyleMask: [w styleMask]];
@@ -649,6 +668,14 @@ GnomeThemeResizeCursor(NSUInteger edges)
   [_menuButton setNeedsDisplay: YES];
 }
 
+/* Resizable from the edges: not while maximised or fullscreen. */
+- (BOOL) resizable
+{
+  NSUInteger style = [window styleMask];
+
+  return (style & NSResizableWindowMask) && (style & NSFullScreenWindowMask) == 0 && [window isZoomed] == NO;
+}
+
 /* The edges a point is on, for resizing. */
 - (NSUInteger) resizeEdgesForPoint: (NSPoint)p
 {
@@ -659,8 +686,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   BOOL top = p.y >= NSMaxY (bounds) - GnomeThemeResizeEdge;
   NSUInteger edges = 0;
 
-  if (([window styleMask] & NSResizableWindowMask) == 0 || [window isZoomed]
-    || NSPointInRect (p, bounds) == NO)
+  if ([self resizable] == NO || NSPointInRect (p, bounds) == NO)
     {
       return 0;
     }
@@ -713,7 +739,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   CGFloat minY = NSMinY (bounds), maxY = NSMaxY (bounds);
 
   [super resetCursorRects];
-  if (([window styleMask] & NSResizableWindowMask) == 0 || [window isZoomed])
+  if ([self resizable] == NO)
     {
       return;
     }
@@ -877,6 +903,25 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 @end
 
 @implementation GnomeTheme (HeaderBar)
+
+/* Alerts have no header bar, as AdwAlertDialog, whether shown alone or as
+   a sheet: GSAlertPanel's title bar becomes a border. An NSPanel can
+   become key without a title bar, so Return and Escape still work. */
+- (id) _overrideGSAlertPanelMethod_initWithContentRect: (NSRect)contentRect
+                                             styleMask: (NSUInteger)style
+                                               backing: (NSBackingStoreType)backing
+                                                 defer: (BOOL)flag
+{
+  typedef id (*InitIMP)(id, SEL, NSRect, NSUInteger, NSBackingStoreType, BOOL);
+  InitIMP originalIMP = (InitIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSAlertPanel"));
+
+  if (GnomeThemeUsesHeaderBar () && (style & NSTitledWindowMask))
+    {
+      style = (style & ~(NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask))
+        | NSDocModalWindowMask;
+    }
+  return originalIMP != NULL ? originalIMP (self, _cmd, contentRect, style, backing, flag) : self;
+}
 
 - (id<GSWindowDecorator>) windowDecorator
 {

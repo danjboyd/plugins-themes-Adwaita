@@ -257,10 +257,54 @@ GnomeThemeCopyPrimaryMenu(void)
   return YES;
 }
 
+/* Escape closes the menu, as it closes GNOME's popovers. GNUstep's menu
+   tracking ignores keys, so a timer in the tracking mode looks for it:
+   with nothing highlighted, a mouse up ends tracking without running an
+   item. It posts two: libs-gui 0.32 stops at the first, while master
+   (commit a84b42471) ignores a first release when the pointer hasn't
+   been over the menu; a spare release does nothing. Other keys stay
+   queued for the window. */
+- (void) closeMenuOnEscape: (NSTimer *)timer
+{
+  NSEvent *key = [NSApp nextEventMatchingMask: NSKeyDownMask
+                                    untilDate: [NSDate distantPast]
+                                       inMode: NSEventTrackingRunLoopMode
+                                      dequeue: NO];
+  NSMenu *menu = [timer userInfo];
+  NSEvent *release;
+
+  if (key == nil || [[key charactersIgnoringModifiers] isEqualToString: [NSString stringWithFormat: @"%C", (unichar)0x1b]] == NO)
+    {
+      return;
+    }
+  [NSApp nextEventMatchingMask: NSKeyDownMask
+                     untilDate: [NSDate distantPast]
+                        inMode: NSEventTrackingRunLoopMode
+                       dequeue: YES];
+  while (menu != nil)
+    {
+      [[menu menuRepresentation] setHighlightedItemIndex: -1];
+      menu = [menu attachedMenu];
+    }
+  release = [NSEvent mouseEventWithType: NSLeftMouseUp
+                               location: NSZeroPoint
+                          modifierFlags: 0
+                              timestamp: [key timestamp]
+                           windowNumber: 0
+                                context: nil
+                            eventNumber: 0
+                             clickCount: 1
+                               pressure: 0.0];
+  [NSApp postEvent: release atStart: YES];
+  [NSApp postEvent: release atStart: NO];
+  [timer invalidate];
+}
+
 /* Shows the primary menu under the button and tracks it until a click
    picks an item or lands outside it. Tracking starts from a fresh press:
-   since libs-gui 0.32 (commit 82717eefe) any mouse up ends menu tracking,
+   in libs-gui 0.32 (commit 82717eefe) any mouse up ends menu tracking,
    so the release of the click that opened the menu would close it again.
+   (Fixed on master by a84b42471, not yet released.)
    Between clicks the menu follows the pointer, submenus included. */
 - (void) showPrimaryMenu
 {
@@ -270,6 +314,7 @@ GnomeThemeCopyPrimaryMenu(void)
   NSPoint corner = [[self window] convertBaseToScreen: NSMakePoint (NSMaxX (button), NSMinY (button))];
   NSWindow *menuWindow;
   NSEvent *press;
+  NSTimer *escape;
 
   if ([primary numberOfItems] == 0)
     {
@@ -290,7 +335,14 @@ GnomeThemeCopyPrimaryMenu(void)
                           eventNumber: 0
                            clickCount: 1
                              pressure: 1.0];
+  escape = [NSTimer timerWithTimeInterval: 0.05
+                                   target: self
+                                 selector: @selector(closeMenuOnEscape:)
+                                 userInfo: primary
+                                  repeats: YES];
+  [[NSRunLoop currentRunLoop] addTimer: escape forMode: NSEventTrackingRunLoopMode];
   [menuView mouseDown: press];
+  [escape invalidate];
   [primary closeTransient];
 }
 
