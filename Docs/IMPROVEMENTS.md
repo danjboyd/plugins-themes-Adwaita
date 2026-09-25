@@ -22,6 +22,10 @@ it was found. Compare against the libadwaita reference with
 | Every table drew horizontal grid lines | grid lines only when the app asks (`setGridStyleMask:`/`setDrawsGrid:`, including tables decoded from a nib or Gorm file); GNUstep's own default of drawing a grid is treated as none, the GNOME and Cocoa default |
 | Table scroll views had a bezel frame and lines between content and scrollers | no frame; the space is filled with the table's background, so the list reads as one plain area (other scroll views keep their frame) |
 | Scrollers drew a grey track with a faint knob | overlay-style indicator: no track, a thin dim slider along the outer edge, thicker and darker while dragged; hidden when nothing overflows |
+| A dark grey line under every toolbar | toolbars sit on the window background with a light bottom edge (the palette's `toolbarBackgroundColor`/`toolbarBorderColor`; GSTheme looked for them in a ThemeExtra colour list and fell back to dark grey) |
+| Toolbar buttons had no hover or pressed look (pressed labels turned white) | libadwaita flat-button backgrounds: the text colour at 7% under the pointer, 16% pressed, 6pt corners; hover comes from tracking rects the theme adds in `-[GSToolbarButton layout]` |
+| The menu bar started with the app's name, greyed when its menu was empty ("OneDriveServiceManager") | an empty app menu is removed; a non-empty one is drawn as GNOME's main-menu icon (☰) |
+| `NSMenuItemCell` overrides used the exact-class lookup, and pop-up buttons' layout depended on it failing | they use `GnomeThemeOriginalMethod()`; pop-up button cells get their geometry explicitly, so an upstream fix to `-overriddenMethod:for:` can't move pop-up titles |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -34,14 +38,13 @@ and in OneDriveServiceManager's main window.
 1. **Row height and cell padding.** libadwaita rows are about 34px with 6px of
    text inset and wide column spacing; the theme's are about 28px with 3–4px.
    Density affects every app's layout, so change it deliberately.
-2. **Menu bar app item.** With `NSWindows95InterfaceStyle`, the first item is
-   the application name, drawn greyed ("OneDriveServiceManager"). GNOME apps have
-   no app-name menu: hide that item, or fold the whole menu into a primary
-   ("hamburger") menu button, as the GNOME HIG does.
-3. **Toolbar as header bar.** GNOME uses flat, icon-only buttons with tooltips and
-   hover highlight, on the window background, with no separator line. GNUstep's
-   icon-above-label items look dated; the theme could draw items flat, with a
-   hover state, and a lighter bottom edge.
+2. **Icon-only toolbar items.** GNOME header bar buttons are icon-only with
+   tooltips; GNUstep toolbars default to icon above label. The theme keeps the
+   display mode the app sets; an app that wants the GNOME look can use
+   `NSToolbarDisplayModeIconOnly` and set tooltips.
+3. **Main menu at the end of the bar.** GNOME puts the main menu button at the
+   right. The theme's ☰ stays first, because GSTheme moves the app item back to
+   the front whenever it organises the menu.
 4. **Alerts like `AdwAlertDialog`.** Centred bold heading and body, no app icon
    or separator line, equal-width buttons in a row (stacked when narrow), and
    rounded corners.
@@ -61,11 +64,6 @@ and in OneDriveServiceManager's main window.
   scrollers needs `-[NSScrollView tile]` changes. The indicator stays visible
   while content overflows, in a strip of its own.
 
-- **`NSMenuItemCell` overrides still use the exact-class lookup.** Their only
-  subclass is `NSPopUpButtonCell`, whose layout (`GnomeThemePhase67…`) was tuned
-  to the original method being unreachable. Switching them to
-  `GnomeThemeOriginalMethod()` moved long pop-up titles about 50pt right (stress
-  page). Revisit together with the pop-up layout.
 - **Install after merging.** Apps load `~/GNUstep/Library/Themes/Adwaita.theme`.
   On 2026-09-24 that copy was from Jul 27, and all of OneDriveServiceManager's
   quirks (clipped titles, invisible toolbar items, one-line labels and alerts)
@@ -74,8 +72,10 @@ and in OneDriveServiceManager's main window.
 - **Remove workarounds when upstream fixes land.** The probe's
   `toolbar-view-item-image` check reports PASS instead of KNOWN once libs-gui
   stops clearing view images. Also drop `GnomeThemeOriginalMethod()`'s fallback
-  when `-overriddenMethod:for:` walks superclasses, and `-windowNeedsMainMenu:`
-  when libs-gui attaches the menu to late windows.
+  when `-overriddenMethod:for:` walks superclasses, `-windowNeedsMainMenu:`
+  when libs-gui attaches the menu to late windows, and the toolbar button
+  tracking rects if libs-gui starts tracking for
+  `showsBorderOnlyWhileMouseInside`.
 
 ## GNUstep issues to report upstream
 

@@ -150,7 +150,8 @@ other apps with `make install GNUSTEP_INSTALLATION_DOMAIN=USER`.
 theme. The probe renders controls offscreen and measures them (sized button and
 checkbox titles, wrapping labels and alert text, toolbar image items, the bold
 font, the menu bar in a window created after launch, table grid lines,
-frames and headers), prints one
+frames and headers, the menu bar's app item, toolbar edges and hover, and
+pop-up titles), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
 Add `--output DIR` to save a PNG of each probe window.

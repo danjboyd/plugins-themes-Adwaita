@@ -122,6 +122,19 @@ Tables and outline views now look like libadwaita lists:
 - **Scrollbars** are thin indicators with no track, and hidden when nothing
   overflows.
 
+## Toolbar and menu bar (theme change, 2026-09-25, sprint 3)
+
+- **The greyed "OneDriveServiceManager" item is gone.** GNUstep adds an item
+  named after the app to the start of a Win95-style menu bar and moves loose
+  menu items (ones without a submenu) into it. When there are none it was
+  drawn disabled; the theme now removes it. If the app has such items (About,
+  Quit at the top level), the item stays, drawn as GNOME's ☰ main-menu icon.
+- **Toolbar buttons get hover and pressed backgrounds**, like GNOME header bar
+  buttons, and the toolbar has a light bottom edge instead of a dark line.
+  This works for image items (`setImage:`); view items draw themselves.
+- Toolbars keep the display mode you set. For the GNOME look, use
+  `NSToolbarDisplayModeIconOnly` with a tooltip on each item.
+
 ## Where to report theme problems
 
 Add them to plugins-themes-adwaita's `Docs/IMPROVEMENTS.md` or tell the theme
