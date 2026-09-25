@@ -59,10 +59,16 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
+
+probe:
+	$(MAKE) -C Examples/QuirkProbe
+
+check-quirks:
+	bash Tests/Scripts/run-quirk-probe.sh
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install

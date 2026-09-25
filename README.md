@@ -135,13 +135,29 @@ The fastest practical review loop is:
 ```sh
 make
 make -C Examples/ThemeDemo
-make install GNUSTEP_INSTALLATION_DOMAIN=USER
 bash Tests/Scripts/run-theme-demo.sh --page controls
+make check-quirks
 ```
+
+The demo and capture scripts load the theme bundle built in this checkout
+(`Adwaita.theme`, by absolute path), not the installed copy: `-GSTheme Adwaita`
+finds `~/GNUstep/Library/Themes/Adwaita.theme`, which may be older. Pass
+`--theme PATH` (or set `ADWAITA_THEME`) to check another build. Install for
+other apps with `make install GNUSTEP_INSTALLATION_DOMAIN=USER`.
+
+`make check-quirks` runs `Tests/Scripts/run-quirk-probe.sh`: it builds
+`Examples/QuirkProbe` and runs it on a private Xvfb display against the built
+theme. The probe renders controls offscreen and measures them (sized button and
+checkbox titles, wrapping labels and alert text, toolbar image items, the bold
+font, the menu bar in a window created after launch), prints one
+PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
+KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
+Add `--output DIR` to save a PNG of each probe window.
 
 Useful helpers:
 
 - `bash Tests/Scripts/run-theme-demo.sh`
+- `bash Tests/Scripts/run-quirk-probe.sh --output /tmp/quirk-probe`
 - `bash Tests/Scripts/run-adwaita-demo.sh`
 - `bash Tests/Scripts/capture-theme-demo.sh --page controls --output /tmp/theme-controls.png`
 - `bash Tests/Scripts/capture-adwaita-demo.sh --page controls --output /tmp/adwaita-controls.png`
