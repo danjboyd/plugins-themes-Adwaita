@@ -27,6 +27,7 @@ it was found. Compare against the libadwaita reference with
 | The menu bar started with the app's name, greyed when its menu was empty ("OneDriveServiceManager") | an empty app menu is removed; a non-empty one is drawn as GNOME's main-menu icon (☰) |
 | `NSMenuItemCell` overrides used the exact-class lookup, and pop-up buttons' layout depended on it failing | they use `GnomeThemeOriginalMethod()`; pop-up button cells get their geometry explicitly, so an upstream fix to `-overriddenMethod:for:` can't move pop-up titles |
 | Under GNOME Wayland, tool tips and drag images showed only the first time (GNOME/mutter#5080, upstream items 5 and 6) | on Wayland the tool tip panel and the drag window are ordered out without first being shrunk to `NSZeroRect`; elsewhere GNUstep's shrink is kept |
+| A focused push button (OneDriveServiceManager's Cancel, the first key view in its panels) had a ring around its title and blue fragments in its corners | NSCell's inner ring is no longer drawn for buttons, and the button's own ring runs just inside its edge, like libadwaita's (a ring outside the frame was clipped to the corners); as in GTK (focus-visible), rings on buttons, checkboxes, radios and sliders show only after a key press and hide on a pointer press, while text fields keep theirs whenever focused |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

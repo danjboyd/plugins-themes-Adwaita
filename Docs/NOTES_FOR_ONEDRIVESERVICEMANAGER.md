@@ -135,6 +135,15 @@ Tables and outline views now look like libadwaita lists:
 - Toolbars keep the display mode you set. For the GNOME look, use
   `NSToolbarDisplayModeIconOnly` with a tooltip on each item.
 
+## Focus rings on buttons (theme change, 2026-09-25)
+
+The Cancel button in the Resync, sign-in and wizard panels is the first key
+view, so it has focus when the panel opens. It drew a ring around its title
+and blue marks in its corners. Now, as in GNOME, a panel opened with the
+mouse shows no ring on its buttons. After a key press (Tab, Return, Escape,
+anything) the focused button gets a ring just inside its edge; the next click
+hides it again. No change needed on your side.
+
 ## Where to report theme problems
 
 Add them to plugins-themes-adwaita's `Docs/IMPROVEMENTS.md` or tell the theme
