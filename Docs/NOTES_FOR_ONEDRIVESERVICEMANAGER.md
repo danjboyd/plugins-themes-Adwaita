@@ -105,6 +105,23 @@ the view: frame, line break mode, and how and when it's added.
 fell back to DejaVu Sans Bold. `userFixedPitchFontOfSize: 0` gives the GNOME
 monospace font (Noto Sans Mono here). No change needed on your side.
 
+## Tables and lists (theme change, 2026-09-24, sprint 2)
+
+Tables and outline views now look like libadwaita lists:
+
+- **No grid lines unless you ask.** GNUstep draws a grid on every table by
+  default; the theme now draws none unless the app calls `setGridStyleMask:`
+  or `setDrawsGrid:` (or the table comes from a nib or Gorm file with a grid).
+  If a table needs row lines, call
+  `[table setGridStyleMask: NSTableViewSolidHorizontalGridLineMask]`.
+- **No frame** around a scroll view holding a table, even with
+  `NSBezelBorder`. The list is a plain area on the window background, so
+  leave some margin around it.
+- **Headers** are small, dim and bold. Centred titles (GNUstep's default)
+  start at the leading edge; titles you align left or right keep that.
+- **Scrollbars** are thin indicators with no track, and hidden when nothing
+  overflows.
+
 ## Where to report theme problems
 
 Add them to plugins-themes-adwaita's `Docs/IMPROVEMENTS.md` or tell the theme

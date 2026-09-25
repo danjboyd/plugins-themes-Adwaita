@@ -149,7 +149,8 @@ other apps with `make install GNUSTEP_INSTALLATION_DOMAIN=USER`.
 `Examples/QuirkProbe` and runs it on a private Xvfb display against the built
 theme. The probe renders controls offscreen and measures them (sized button and
 checkbox titles, wrapping labels and alert text, toolbar image items, the bold
-font, the menu bar in a window created after launch), prints one
+font, the menu bar in a window created after launch, table grid lines,
+frames and headers), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
 Add `--output DIR` to save a PNG of each probe window.

@@ -18,6 +18,10 @@ it was found. Compare against the libadwaita reference with
 | Bold text (`boldSystemFontOfSize:`, title bar, table headers) drew in DejaVu Sans Bold | the theme sets `NSBoldFont` to the interface font's bold face (`Cantarell_700wght`) |
 | With `NSWindows95InterfaceStyle`, windows created after launch had no menu bar (GNUstep bug, upstream issue 2) | the theme attaches the main menu when a window that can become main, and has no menu, becomes key or main |
 | Demo and capture scripts tested the installed theme (`-GSTheme Adwaita`), which was from Jul 27 | they pass the built bundle by absolute path (`--theme`/`ADWAITA_THEME` to override) and no longer save `GSTheme` in ThemeDemo's defaults |
+| Table headers were bold, centred, on a grey band with separators | libadwaita style: small bold text in a dim colour (full colour for a clicked or sorted column), on the list's background, no separators; GNUstep's default centred titles start at the leading edge, lined up with the rows' text |
+| Every table drew horizontal grid lines | grid lines only when the app asks (`setGridStyleMask:`/`setDrawsGrid:`, including tables decoded from a nib or Gorm file); GNUstep's own default of drawing a grid is treated as none, the GNOME and Cocoa default |
+| Table scroll views had a bezel frame and lines between content and scrollers | no frame; the space is filled with the table's background, so the list reads as one plain area (other scroll views keep their frame) |
+| Scrollers drew a grey track with a faint knob | overlay-style indicator: no track, a thin dim slider along the outer edge, thicker and darker while dragged; hidden when nothing overflows |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -27,35 +31,35 @@ Regression checks for these live in `Examples/QuirkProbe`; run
 Seen side by side with the libadwaita reference (Data Views and Controls pages)
 and in OneDriveServiceManager's main window.
 
-1. **List and table headers.** libadwaita: small, dim, regular weight,
-   left-aligned, no header border or column separators. Theme: bold, centred,
-   framed, with vertical separators.
-2. **No grid lines by default.** libadwaita column/list views have no row or
-   column lines; the theme draws horizontal grid lines. Keep them only when the
-   app asks for grid lines explicitly.
-3. **No frame around table scroll views.** The reference shows the list as a
-   plain view area; the theme adds a blue-grey frame.
-4. **Overlay scrollbars.** GNOME scrollbars are thin and appear on hover or
-   scroll; the theme shows a permanent horizontal scroller track even when
-   nothing overflows.
-5. **Menu bar app item.** With `NSWindows95InterfaceStyle`, the first item is
+1. **Row height and cell padding.** libadwaita rows are about 34px with 6px of
+   text inset and wide column spacing; the theme's are about 28px with 3–4px.
+   Density affects every app's layout, so change it deliberately.
+2. **Menu bar app item.** With `NSWindows95InterfaceStyle`, the first item is
    the application name, drawn greyed ("OneDriveServiceManager"). GNOME apps have
    no app-name menu: hide that item, or fold the whole menu into a primary
    ("hamburger") menu button, as the GNOME HIG does.
-6. **Toolbar as header bar.** GNOME uses flat, icon-only buttons with tooltips and
+3. **Toolbar as header bar.** GNOME uses flat, icon-only buttons with tooltips and
    hover highlight, on the window background, with no separator line. GNUstep's
    icon-above-label items look dated; the theme could draw items flat, with a
    hover state, and a lighter bottom edge.
-7. **Alerts like `AdwAlertDialog`.** Centred bold heading and body, no app icon
+4. **Alerts like `AdwAlertDialog`.** Centred bold heading and body, no app icon
    or separator line, equal-width buttons in a row (stacked when narrow), and
    rounded corners.
-8. **Tab views.** GNOME uses flat tabs with an accent underline on the selected
+5. **Tab views.** GNOME uses flat tabs with an accent underline on the selected
    one (GtkNotebook) or a view switcher. The theme's pill tabs with a blue top
    bar read as custom.
-9. **Checkbox and radio spacing.** GTK uses about a 6–8pt gap between indicator
+6. **Checkbox and radio spacing.** GTK uses about a 6–8pt gap between indicator
    and label (theme: 10) and packs option groups tighter.
 
 ## Theme follow-ups
+
+- **Scrollbars that hide until needed.** libadwaita shows its overlay
+  indicators only after the pointer moves or the view scrolls, widens them
+  under the pointer, and lets content run underneath. GNUstep's
+  `NSTrackingArea` is declared but not wired into `NSView`, so hover needs
+  legacy tracking rects kept up to date by hand, and content under the
+  scrollers needs `-[NSScrollView tile]` changes. The indicator stays visible
+  while content overflows, in a strip of its own.
 
 - **`NSMenuItemCell` overrides still use the exact-class lookup.** Their only
   subclass is `NSPopUpButtonCell`, whose layout (`GnomeThemePhase67…`) was tuned
