@@ -21,6 +21,7 @@
 #import "QuirkProbe.h"
 #import <GNUstepGUI/GSTheme.h>
 #import <GNUstepGUI/GSDragView.h>
+#import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -58,6 +59,13 @@ static BOOL
 QuirkProbeIsNotWhite (NSUInteger red, NSUInteger green, NSUInteger blue)
 {
   return (red + green + blue) < 705;
+}
+
+/* White, or nearly: a text background rather than an Adwaita entry. */
+static BOOL
+QuirkProbeIsWhite (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return (red + green + blue) > 750;
 }
 
 /* Every pixel: for finding the darkest in an area. */
@@ -278,6 +286,78 @@ QuirkProbeFindText (NSView *view, NSString *text)
         }
     }
   return nil;
+}
+
+/* A toolbar delegate whose items select a view, like Gorm's document
+   toolbar. */
+@interface QuirkProbeSwitcherDelegate : NSObject
+@end
+
+@implementation QuirkProbeSwitcherDelegate
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: identifier];
+  return item;
+}
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Objects", @"Classes", nil];
+}
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+- (NSArray *) toolbarSelectableItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+@end
+
+/* Ink per row, top to bottom, over the rows that have any: the text's
+   vertical profile. */
+static NSArray *
+QuirkProbeInkRows (NSBitmapImageRep *rep, NSRect area)
+{
+  NSMutableArray *rows = [NSMutableArray array];
+  NSInteger y;
+
+  for (y = (NSInteger)NSMinY (area); y < (NSInteger)NSMaxY (area) && y < [rep pixelsHigh]; y++)
+    {
+      QuirkProbeInk row = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk,
+                                               NSMakeRect (NSMinX (area), y, NSWidth (area), 1));
+
+      if (row.count > 0 || [rows count] > 0)
+        {
+          [rows addObject: [NSNumber numberWithUnsignedInteger: row.count]];
+        }
+    }
+  while ([rows count] > 0 && [[rows lastObject] unsignedIntegerValue] == 0)
+    {
+      [rows removeLastObject];
+    }
+  return rows;
+}
+
+/* How far apart two profiles are, the second read top down or (reversed)
+   bottom up. */
+static NSUInteger
+QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
+{
+  NSUInteger count = MIN ([a count], [b count]);
+  NSUInteger i, distance = 0;
+
+  for (i = 0; i < count; i++)
+    {
+      NSInteger x = [[a objectAtIndex: i] integerValue];
+      NSInteger y = [[b objectAtIndex: reversed ? [b count] - 1 - i : i] integerValue];
+
+      distance += (NSUInteger)labs (x - y);
+    }
+  return distance + (MAX ([a count], [b count]) - count) * 10;
 }
 
 @interface QuirkProbe ()
@@ -1164,6 +1244,171 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* A Cocoa-style main menu: an untitled first item holding the application
+   menu. The theme names it after the app (so it becomes the ☰ menu instead
+   of a blank item) and leaves out Hide, Hide Others and Show All. */
+- (void) checkCocoaApplicationMenu
+{
+  NSMenu *original = RETAIN ([NSApp mainMenu]);
+  NSMenu *cocoa = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Main"]);
+  NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Apple"]);
+  NSMenu *fileMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"File"]);
+  NSString *name = [[NSProcessInfo processInfo] processName];
+  NSMenuItem *first;
+  NSMutableArray *titles = [NSMutableArray array];
+  NSEnumerator *enumerator;
+  NSMenuItem *item;
+  BOOL hasHide = NO, hasAbout = NO;
+  NSString *detail;
+
+  [appMenu addItemWithTitle: @"About QuirkProbe" action: @selector(orderFrontStandardAboutPanel:) keyEquivalent: @""];
+  [appMenu addItem: [NSMenuItem separatorItem]];
+  [appMenu addItemWithTitle: @"Hide QuirkProbe" action: @selector(hide:) keyEquivalent: @"h"];
+  [appMenu addItemWithTitle: @"Hide Others" action: @selector(hideOtherApplications:) keyEquivalent: @""];
+  [appMenu addItemWithTitle: @"Show All" action: @selector(unhideAllApplications:) keyEquivalent: @""];
+  [appMenu addItem: [NSMenuItem separatorItem]];
+  [appMenu addItemWithTitle: @"Quit QuirkProbe" action: @selector(terminate:) keyEquivalent: @"q"];
+  [fileMenu addItemWithTitle: @"Open" action: NULL keyEquivalent: @""];
+  [cocoa setSubmenu: appMenu forItem: [cocoa addItemWithTitle: @"" action: NULL keyEquivalent: @""]];
+  [cocoa setSubmenu: fileMenu forItem: [cocoa addItemWithTitle: @"File" action: NULL keyEquivalent: @""]];
+  [NSApp setMainMenu: cocoa];
+
+  enumerator = [[cocoa itemArray] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      [titles addObject: [NSString stringWithFormat: @"\"%@\"", [item title]]];
+    }
+  first = (NSMenuItem *)[cocoa itemAtIndex: 0];
+  enumerator = [[[first submenu] itemArray] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      hasHide |= sel_isEqual ([item action], @selector(hide:));
+      hasAbout |= sel_isEqual ([item action], @selector(orderFrontStandardAboutPanel:));
+    }
+  [NSApp setMainMenu: original];
+  RELEASE (original);
+
+  detail = [NSString stringWithFormat: @"menu bar %@; app menu %@ About, %@ Hide",
+    [titles componentsJoinedByString: @" "], hasAbout ? @"has" : @"lacks", hasHide ? @"has" : @"no"];
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      [self skip: @"menubar-cocoa-app-menu" detail: @"needs -NSMenuInterfaceStyle NSWindows95InterfaceStyle"];
+    }
+  else if ([titles count] == 2 && [[first title] isEqualToString: name] && hasAbout && hasHide == NO)
+    {
+      [self pass: @"menubar-cocoa-app-menu" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menubar-cocoa-app-menu" detail: detail];
+    }
+}
+
+/* Checks from putting Gorm through its paces: its inspectors use switches
+   with the box to the right of the title, boxes whose title cell is an
+   NSTextFieldCell, NSForms, grooved boxes, and a view-switcher toolbar. */
+- (void) checkGormControls
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (700, 500, 420, 120) title: @"QuirkProbe Gorm"];
+  NSView *view = [window contentView];
+  NSButton *trailing = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10, 80, 140, 24)]);
+  NSBox *box = AUTORELEASE ([[NSBox alloc] initWithFrame: NSMakeRect (160, 50, 120, 60)]);
+  NSTextFieldCell *titleCell = AUTORELEASE ([[NSTextFieldCell alloc] initTextCell: @"Fy"]);
+  NSTextField *reference = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (300, 80, 100, 24)]);
+  NSForm *form = AUTORELEASE ([[NSForm alloc] initWithFrame: NSMakeRect (10, 10, 260, 24)]);
+  NSToolbar *switcher = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeSwitcher"]);
+  QuirkProbeSwitcherDelegate *switcherDelegate = AUTORELEASE ([QuirkProbeSwitcherDelegate new]);
+  NSColor *highlight = [[NSColor controlHighlightColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSBitmapImageRep *rep;
+  QuirkProbeInk text, indicator;
+  NSArray *boxRows, *referenceRows;
+  NSUInteger upright, flipped;
+  NSRect entry;
+  NSUInteger white;
+  NSString *detail;
+
+  [trailing setButtonType: NSSwitchButton];
+  [trailing setTitle: @"Command"];
+  [trailing setImagePosition: NSImageRight];
+  [trailing setAlignment: NSRightTextAlignment];
+  [view addSubview: trailing];
+
+  [titleCell setFont: [NSFont systemFontOfSize: 12]];
+  object_setIvar (box, class_getInstanceVariable ([NSBox class], "_cell"), RETAIN (titleCell));
+  [box setBorderType: NSGrooveBorder];
+  [box setTitlePosition: NSAtTop];
+  [view addSubview: box];
+  [reference setStringValue: @"Fy"];
+  [reference setFont: [NSFont systemFontOfSize: 12]];
+  [reference setBezeled: NO];
+  [reference setDrawsBackground: NO];
+  [view addSubview: reference];
+
+  [form addEntry: @"Title:"];
+  [form setBezeled: YES];
+  [view addSubview: form];
+  [window orderFront: nil];
+  [window display];
+  [self saveWindow: window named: @"gorm-controls"];
+
+  /* Switch with its box on the right. */
+  rep = QuirkProbeRender (trailing);
+  text = QuirkProbeMeasure (rep, QuirkProbeIsTextInk);
+  indicator = QuirkProbeMeasureIn (rep, QuirkProbeIsNotWhite,
+                                   NSMakeRect (text.minX + text.width + 1, 0, [rep pixelsWide], [rep pixelsHigh]));
+  detail = [NSString stringWithFormat: @"title ink x %ld-%ld, box from x %ld",
+    (long)text.minX, (long)(text.minX + text.width), (long)indicator.minX];
+  if (text.count > 0 && indicator.count > 0 && indicator.minX > text.minX + text.width)
+    [self pass: @"switch-box-on-right" detail: detail];
+  else
+    [self fail: @"switch-box-on-right" detail: detail];
+
+  /* Box title upright: its ink profile matches a label's, not the label's
+     turned upside down. */
+  rep = QuirkProbeRender (box);
+  boxRows = QuirkProbeInkRows (rep, NSMakeRect (0, 0, [rep pixelsWide], 20));
+  rep = QuirkProbeRender (reference);
+  referenceRows = QuirkProbeInkRows (rep, NSMakeRect (0, 0, [rep pixelsWide], [rep pixelsHigh]));
+  upright = QuirkProbeProfileDistance (boxRows, referenceRows, NO);
+  flipped = QuirkProbeProfileDistance (boxRows, referenceRows, YES);
+  detail = [NSString stringWithFormat: @"%lu rows of ink; differs from a label by %lu upright, %lu upside down",
+    (unsigned long)[boxRows count], (unsigned long)upright, (unsigned long)flipped];
+  if ([boxRows count] > 0 && upright < flipped)
+    [self pass: @"box-title-upright" detail: detail];
+  else
+    [self fail: @"box-title-upright" detail: detail];
+
+  /* Bevel highlights are neutral, not the accent colour. */
+  detail = [NSString stringWithFormat: @"controlHighlightColor %.2f %.2f %.2f",
+    [highlight redComponent], [highlight greenComponent], [highlight blueComponent]];
+  if (fabs ([highlight blueComponent] - [highlight redComponent]) < 0.1)
+    [self pass: @"bevel-highlight-neutral" detail: detail];
+  else
+    [self fail: @"bevel-highlight-neutral" detail: detail];
+
+  /* A form's entry is an Adwaita entry, not a white box. */
+  rep = QuirkProbeRender (form);
+  entry = NSMakeRect ([[form cellAtIndex: 0] titleWidth] + 10, 8, 60, 8);
+  white = QuirkProbeMeasureIn (rep, QuirkProbeIsWhite, entry).count;
+  detail = [NSString stringWithFormat: @"%lu of %lu entry pixels white",
+    (unsigned long)white, (unsigned long)QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, entry).count];
+  if (white == 0)
+    [self pass: @"form-entry-adwaita" detail: detail];
+  else
+    [self fail: @"form-entry-adwaita" detail: detail];
+  [window orderOut: nil];
+
+  /* A view switcher keeps its labels. */
+  [switcher setDelegate: switcherDelegate];
+  detail = [NSString stringWithFormat: @"display mode %d (icon and label %d)",
+    (int)[switcher displayMode], (int)NSToolbarDisplayModeIconAndLabel];
+  if ([switcher displayMode] == NSToolbarDisplayModeIconAndLabel)
+    [self pass: @"toolbar-view-switcher-labels" detail: detail];
+  else
+    [self fail: @"toolbar-view-switcher-labels" detail: detail];
+  [switcher setDelegate: nil];
+}
+
 - (void) checkFonts
 {
   NSFont *system = [NSFont systemFontOfSize: 0];
@@ -1262,6 +1507,8 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self checkTabView];
   [self checkToolbarDisplayMode];
   [self checkApplicationMenuPosition];
+  [self checkCocoaApplicationMenu];
+  [self checkGormControls];
   [self checkFonts];
   [self checkHiddenWindows];
 
