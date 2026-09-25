@@ -12,28 +12,50 @@ With `GSX11HandlesWindowDecorations NO`, GNUstep draws the title bar itself
 `-[GSTheme windowDecorator]`. The Adwaita theme
 (plugins-themes-adwaita) uses this to draw libadwaita's header bar: title,
 window buttons and the app's main menu button in one row, as GNOME apps
-have. That works today, including moving by the bar, resizing from the
-edges and a double-click to maximise, all done by GNUstep in its own event
-loop.
+have.
 
-What GNOME's own client-side decorated windows get from Mutter, and GNUstep
-windows can't yet, needs the backend:
+The theme also hands moves, resizes, maximising and the window menu to the
+window manager, as GTK does, by sending the EWMH and GTK messages itself
+through `-[GSDisplayServer serverDevice]` and `-windowDevice:` with Xlib
+(Source/Adapters/GnomeThemeWindowManager.m in the theme). Under Mutter that
+gives GNUstep windows snapping, tiling, dragging off screen, Super-drag,
+Mutter's maximise and its window menu. It needs one workaround for a
+libs-back bug (item 0).
 
-1. edge snapping, tiling (Super+arrows, dragging to an edge), and moves and
-   resizes that Mutter drives (constraints, the resize cursor feedback,
-   Super-drag);
-2. a shadow round the window and rounded top corners;
-3. knowing when the window manager has maximised, tiled or fullscreened the
-   window, so the decorations can change (no shadow and square corners when
-   maximised; the maximise button shows "restore").
+What still needs the backend:
 
-A theme also can't turn GNUstep-drawn decorations on by itself (item 4).
+- item 0, a bug: the Motif hints of windows GNUstep decorates forbid every
+  window manager function;
+- item 2, a shadow round the window and rounded top corners;
+- item 4, letting a theme turn GNUstep-drawn decorations on.
 
-These are the four changes we'd like to propose. We can write the patches;
-we'd like to know first whether this direction is welcome, and which API
-shapes you'd prefer.
+Items 1 and 3 would still be worth having in libs-back, so that
+`GSStandardWindowDecorationView` and other themes get the same behaviour
+without Xlib code of their own; the theme's implementation can serve as the
+reference. We can write the patches; we'd like to know first whether this
+direction is welcome, and which API shapes you'd prefer.
 
-### 1. Window-manager-driven move and resize (`_NET_WM_MOVERESIZE`)
+### 0. Motif hints forbid all functions (bug)
+
+With `GSX11HandlesWindowDecorations NO`, `setWindowHintsForStyle()`
+(XGServerWindow.m around line 312) sets `_MOTIF_WM_HINTS` with
+`MWM_HINTS_FUNCTIONS` and `functions = 0` for every window, not only
+borderless ones. That asks for no decorations, which is right, but also
+tells the window manager that the window may not be moved, resized,
+minimised, maximised or closed. Mutter follows it: `_NET_WM_ALLOWED_ACTIONS`
+lists no move, maximise, minimise or close, so `_NET_WM_MOVERESIZE`,
+`_NET_WM_STATE` maximise requests, Super-drag and the window menu's
+entries all do nothing. (GNUstep's own title bar moves the window with
+`XMoveWindow`, which the hints don't restrict, so this went unnoticed.)
+
+GTK sets only `MWM_HINTS_DECORATIONS` with no decorations. Suggested fix:
+for a styled window that GNUstep decorates, keep `decorations = 0` and set
+the functions from the style mask as the decorated branch already does
+(move; close, minimise, resize and maximise as the style allows). The
+theme does this after the window is created
+(`GnomeThemeWindowManagerAllowFunctions`).
+
+### 1. Window-manager-driven move and resize (`_NET_WM_MOVERESIZE`) (done in the theme)
 
 libs-back sends no `_NET_WM_MOVERESIZE`. A decoration view that gets a press
 on its title bar or an edge could hand the drag to the window manager:
@@ -88,7 +110,7 @@ shape:
 This is the largest of the four and touches every drawing path, so we'd like
 your view on it before starting.
 
-### 3. Window states (`_NET_WM_STATE`)
+### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 
 libs-back sets `_NET_WM_STATE` for skip-taskbar, sticky and modal, but
 doesn't read the maximised, tiled or fullscreen states, and `-zoom:` resizes

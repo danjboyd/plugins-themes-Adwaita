@@ -162,14 +162,23 @@ centred, round window buttons in the order of GNOME's `button-layout`, and
 the primary menu's ☰ before them. Drag the bar to move the window; resize
 from any edge or corner; double-click the bar for GNOME's
 `action-double-click-titlebar` action (maximise by default); right-click it
-for the window menu (Hide, Maximize, Always on Top, Close). It follows the
+for the window menu. On X11 (GNUstep apps on GNOME run under Xwayland) the
+window manager does the moving, resizing and maximising, as for GTK's
+windows: under Mutter that brings snapping, tiling, dragging past the
+screen's edge, Super-drag and Mutter's own window menu. Without a window
+manager that supports it, the header bar does these itself. It follows the
 scale factor (`GSScaleFactor`), mirrors in right-to-left languages, and has
 libadwaita's high contrast details. Alerts have no bar, as GNOME's. The
 theme can't set the flag itself: GNUstep's backend reads it before any theme
 loads.
 
-Not yet: Mutter's snapping and tiling, the shadow and rounded top corners
-(these need changes in libs-back), and toolbar items in the header bar row.
+Not yet: the shadow and rounded top corners (these need changes in
+libs-back, see `Docs/PROPOSAL_LIBS_BACK_CSD.md`), and toolbar items in the
+header bar row.
+
+`make check-mutter` checks the header bar with Mutter as the window manager:
+GNOME Shell on a private Xvfb display, with its own D-Bus session and no
+gvfs (see `Tests/Scripts/run-mutter-check.sh`).
 
 ### Designing a GNOME-style app in Gorm
 

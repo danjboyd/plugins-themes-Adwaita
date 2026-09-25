@@ -245,7 +245,37 @@ high contrast). Left as is: the title and icon colour is the theme's text
 colour (#1f1f1f), where libadwaita uses 80% black (#323236); that is a
 palette-wide choice.
 
-Next: phase 2 (libs-back). The proposal to send to libs-back's maintainers
+Phase 2a (2026-09-25), the window manager's part done in the theme on X11:
+`Source/Adapters/GnomeThemeWindowManager.m` sends `_NET_WM_MOVERESIZE`
+(moves after GTK's 8px drag threshold; resizes on the press),
+`_NET_WM_STATE` maximise toggles and `_GTK_SHOW_WINDOW_MENU`, and reads
+`_NET_WM_STATE` for the restore icon, all through Xlib on
+`-[GSDisplayServer serverDevice]`/`-windowDevice:`. Each call checks the
+backend is X11 and the message is in `_NET_SUPPORTED`, else the header bar
+does it itself. The decisive fix: libs-back's `_MOTIF_WM_HINTS` for windows
+it doesn't decorate allow no functions, so Mutter refused everything; the
+header bar rewrites them in `-setWindowNumber:`.
+
+Verified under Mutter (`make check-mutter`, GNOME Shell 48 on a private
+Xvfb): allowed actions, maximise and restore by double-click, a move
+handed to Mutter taking the window past the screen's edge, a resize from
+the right edge; Mutter's window menu on right-click by eye. The request
+names the button the X server reports held (`XQueryPointer`), not
+`-[NSEvent buttonNumber]`: libs-back 0.32 returns the X number there (left
+is 1) and master since b037ebf AppKit's (left is 0), and Mutter declines a
+move whose button isn't down. (That mismatch first looked like xdotool not
+reaching Mutter on Xvfb; it wasn't.) Drag to the top to maximise didn't
+trigger with xdotool; try it by hand.
+
+Warning for test sessions: a GNOME Shell session started for testing runs
+gvfs, which mounts plugged-in devices (Dan's phone is always plugged in: it
+is the network) under the session's runtime directory. Start such sessions
+with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
+never delete their directories across file systems (the check script's
+cleanup shows how).
+
+Next: phase 2b (libs-back: shadow and rounded corners, the theme turning the
+header bar on; `Docs/PROPOSAL_LIBS_BACK_CSD.md`), then phase 3. The proposal to send to libs-back's maintainers
 is `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
 
 ## Testing
