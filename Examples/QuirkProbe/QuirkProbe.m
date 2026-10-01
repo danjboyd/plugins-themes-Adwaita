@@ -491,6 +491,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
     {
       _windows = [NSMutableArray new];
       _sizedButtons = [NSMutableArray new];
+      _fixedButtons = [NSMutableArray new];
       _alertText = RETAIN (@"The files stay on this computer and in OneDrive. "
         @"OneDriveServiceManager stops syncing this folder, removes its service, "
         @"and forgets its settings. You can add the library again later.");
@@ -503,6 +504,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
   RELEASE (_outputDirectory);
   RELEASE (_windows);
   RELEASE (_sizedButtons);
+  RELEASE (_fixedButtons);
   RELEASE (_toolbarViewButton);
   RELEASE (_alertText);
   [super dealloc];
@@ -739,6 +741,31 @@ objectValueForTableColumn: (NSTableColumn *)column
   RELEASE (wide);
 }
 
+/* A push button of a size the app chose, too small for the theme's full
+   padding but with room for its title, beside a wide copy as the reference
+   (in a column of their own at x 700). */
+- (void) addFixedButtonTitled: (NSString *)title
+                        frame: (NSRect)frame
+                       inView: (NSView *)view
+{
+  NSButton *fixed = [[NSButton alloc] initWithFrame: frame];
+  NSButton *wide = [[NSButton alloc] initWithFrame: NSMakeRect (700, 140 - 40 * [_fixedButtons count],
+                                                               180, NSHeight (frame))];
+  NSEnumerator *enumerator = [[NSArray arrayWithObjects: fixed, wide, nil] objectEnumerator];
+  NSButton *button;
+
+  while ((button = [enumerator nextObject]) != nil)
+    {
+      [button setButtonType: NSMomentaryPushInButton];
+      [button setBezelStyle: NSRoundedBezelStyle];
+      [button setTitle: title];
+      [view addSubview: button];
+    }
+  [_fixedButtons addObject: [NSArray arrayWithObjects: fixed, wide, nil]];
+  RELEASE (fixed);
+  RELEASE (wide);
+}
+
 - (void) buildWindows
 {
   NSView *view;
@@ -754,6 +781,10 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self addButtonTitled: @"Errors only" type: NSSwitchButton at: NSMakePoint (10, 370) inView: view];
   [self addButtonTitled: @"Start at login" type: NSSwitchButton at: NSMakePoint (150, 370) inView: view];
   [self addButtonTitled: @"Download everything" type: NSRadioButton at: NSMakePoint (10, 335) inView: view];
+  /* ScreenshotTool's quick-width buttons (plugins-themes-Adwaita#3). */
+  [self addFixedButtonTitled: @"12" frame: NSMakeRect (250, 130, 64, 28) inView: view];
+  [self addFixedButtonTitled: @"20" frame: NSMakeRect (330, 130, 44, 28) inView: view];
+  [self addFixedButtonTitled: @"Apply" frame: NSMakeRect (250, 90, 64, 28) inView: view];
 
   _wrappingLabel = [self labelWithText: @"This note is long enough that it needs to wrap onto a second line in this label."
                                  frame: NSMakeRect (10, 220, 220, 80)];
@@ -841,6 +872,39 @@ objectValueForTableColumn: (NSTableColumn *)column
       else
         {
           [self fail: ident detail: [detail stringByAppendingString: @" (clipped or wrapped)"]];
+        }
+    }
+}
+
+/* A button narrower than the theme's padding wants still draws its whole
+   title when there's room for it. */
+- (void) checkFixedButtons
+{
+  NSEnumerator *enumerator = [_fixedButtons objectEnumerator];
+  NSArray *pair;
+
+  while ((pair = [enumerator nextObject]) != nil)
+    {
+      NSButton *fixed = [pair objectAtIndex: 0];
+      QuirkProbeInk fixedInk = QuirkProbeTextInk (fixed);
+      QuirkProbeInk wideInk = QuirkProbeTextInk ([pair objectAtIndex: 1]);
+      NSString *ident = [NSString stringWithFormat: @"fixed-width-title \"%@\"", [fixed title]];
+      NSString *detail = [NSString stringWithFormat: @"title ink %ldx%ld in %gx%gpt, %ldx%ld with room to spare",
+        (long)fixedInk.width, (long)fixedInk.height, NSWidth ([fixed frame]), NSHeight ([fixed frame]),
+        (long)wideInk.width, (long)wideInk.height];
+
+      if (wideInk.count == 0)
+        {
+          [self fail: ident detail: @"reference button drew no title"];
+        }
+      else if (fixedInk.width + 1 >= wideInk.width
+        && ABS (fixedInk.height - wideInk.height) <= 1)
+        {
+          [self pass: ident detail: detail];
+        }
+      else
+        {
+          [self fail: ident detail: [detail stringByAppendingString: @" (clipped)"]];
         }
     }
 }
@@ -2260,6 +2324,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self saveWindow: _toolbarWindow named: @"toolbar"];
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkSizedButtons];
+  [self checkFixedButtons];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];

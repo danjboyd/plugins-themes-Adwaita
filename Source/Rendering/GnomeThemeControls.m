@@ -1526,21 +1526,64 @@ GnomeThemeDrawButtonLabel(NSButtonCell *cell,
   [cell drawTitle: title withFrame: titleRect inView: controlView];
 }
 
+/* What a title needs beyond its measured width: a title even a pixel short
+   of its width wraps its last word onto a clipped second line. */
+static const CGFloat GnomeThemeButtonTitleSlack = 4.0;
+
+/* The least padding a bordered button's title keeps when the app made the
+   button too narrow for the full padding. */
+static const CGFloat GnomeThemeButtonMinimumPadding = 4.0;
+
+static NSSize GnomeThemeButtonLabelSize(NSButtonCell *cell);
+
 static NSRect
 GnomeThemeButtonTitleRect(NSButtonCell *cell, NSRect cellFrame)
 {
   NSRect titleRect = [cell drawingRectForBounds: cellFrame];
-  CGFloat leftInset = ([cell isBordered] || [cell isBezeled]) ? 10.0 : 4.0;
-  CGFloat rightInset = leftInset;
+  CGFloat padding, extra, needed;
 
   if ([cell isKindOfClass: [NSPopUpButtonCell class]])
     {
-      leftInset = 14.0;
-      rightInset = GnomeThemeComboBoxButtonWidth (cellFrame) + 10.0;
+      CGFloat leftInset = 14.0;
+      CGFloat rightInset = GnomeThemeComboBoxButtonWidth (cellFrame) + 10.0;
+
+      titleRect.origin.x += leftInset;
+      titleRect.size.width = MAX (0.0, titleRect.size.width - leftInset - rightInset);
+      return titleRect;
+    }
+  if ([cell isBordered] == NO && [cell isBezeled] == NO)
+    {
+      return NSInsetRect (titleRect, 4.0, 0.0);
     }
 
-  titleRect.origin.x += leftInset;
-  titleRect.size.width = MAX (0.0, titleRect.size.width - leftInset - rightInset);
+  /* The rounded styles' margins (-buttonMarginsForCell:style:state:) are
+     already GTK's text button padding; the other bezels' are only their
+     border, so the title keeps 10pt more. */
+  switch ([cell bezelStyle])
+    {
+      case NSRoundedBezelStyle:
+      case NSRoundRectBezelStyle:
+      case NSTexturedRoundedBezelStyle:
+        extra = [[GnomeThemeActiveTheme () metrics] buttonHorizontalPadding] > 0.0 ? 0.0 : 10.0;
+        break;
+
+      default:
+        extra = 10.0;
+        break;
+    }
+  padding = NSMinX (titleRect) - NSMinX (cellFrame) + extra;
+
+  /* GTK grows a button to fit its label; an app's fixed frame can't grow, so
+     the padding gives way before the title does ("12" in a 64pt button). */
+  needed = GnomeThemeButtonLabelSize (cell).width + GnomeThemeButtonTitleSlack;
+  if (NSWidth (cellFrame) - 2.0 * padding < needed)
+    {
+      padding = MAX (MIN (padding, GnomeThemeButtonMinimumPadding),
+                     floor ((NSWidth (cellFrame) - needed) / 2.0));
+    }
+
+  titleRect.origin.x = NSMinX (cellFrame) + padding;
+  titleRect.size.width = MAX (0.0, NSWidth (cellFrame) - 2.0 * padding);
 
   return titleRect;
 }
@@ -3409,13 +3452,12 @@ GnomeThemeDrawTabLabel(NSString *label,
   BOOL checkbox = GnomeThemeButtonCellIsCheckbox (cell);
   BOOL radio = GnomeThemeButtonCellIsRadio (cell);
   /* Measure with the geometry the drawing code uses, on a generous probe frame:
-     what the bezel takes (drawingRectForBounds:) plus the theme's own insets. A
-     title even a pixel short of its width wraps its last word onto a clipped
-     second line, so "Sign In" would draw as "Sign". */
+     what the bezel takes (drawingRectForBounds:) plus the theme's own insets,
+     and the slack that keeps "Sign In" from drawing as "Sign". */
   NSRect probe = NSMakeRect (0.0, 0.0, 600.0, MAX (size.height, 34.0));
   NSRect drawing = [cell drawingRectForBounds: probe];
   CGFloat bezel = probe.size.width - drawing.size.width;
-  static const CGFloat slack = 4.0;
+  CGFloat slack = GnomeThemeButtonTitleSlack;
 
   if (checkbox || radio)
     {
