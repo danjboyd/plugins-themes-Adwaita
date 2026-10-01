@@ -39,6 +39,9 @@
   NSPopUpButton *_popUpButton;
   NSMutableArray *_sizedButtons;
   NSMutableArray *_fixedButtons;
+  NSStepper *_tallStepper;
+  NSStepper *_maxedStepper;
+  NSStepper *_wideStepper;
   NSButton *_toolbarViewButton;
   NSTextField *_wrappingLabel;
   NSTextField *_newlineLabel;

@@ -946,7 +946,8 @@ static void
 GnomeThemeDrawStepperGlyph(NSRect rect, BOOL increment, NSColor *color)
 {
   CGFloat span = floor (MIN (rect.size.width, rect.size.height) * 0.28);
-  NSPoint center = NSMakePoint (NSMidX (rect), NSMidY (rect));
+  /* On a pixel's centre, so the strokes stay sharp. */
+  NSPoint center = NSMakePoint (floor (NSMidX (rect)) + 0.5, floor (NSMidY (rect)) + 0.5);
   NSBezierPath *path = [NSBezierPath bezierPath];
 
   [path moveToPoint: NSMakePoint (center.x - span, center.y)];
@@ -958,7 +959,7 @@ GnomeThemeDrawStepperGlyph(NSRect rect, BOOL increment, NSColor *color)
       [path lineToPoint: NSMakePoint (center.x, center.y + span)];
     }
 
-  [path setLineWidth: 1.3];
+  [path setLineWidth: 1.5];
   [path setLineCapStyle: NSRoundLineCapStyle];
   [color set];
   [path stroke];
@@ -2278,24 +2279,88 @@ GnomeThemeDrawTabLabel(NSString *label,
   GnomeThemeDrawModernScroller (self, scroller, rect, hitPart, isHorizontal);
 }
 
+/* GTK's spin button puts − and + side by side, each about 24pt wide, but
+   Cocoa steppers are about 19x27pt and laid out for an up half and a down
+   half. A stepper taller than it is wide gets the halves, with chevrons; a
+   wider one keeps − and +, as a spin button's end. */
+static BOOL
+GnomeThemeStepperIsVertical(NSRect frame)
+{
+  return NSHeight (frame) > NSWidth (frame);
+}
+
+static NSBezierPath *
+GnomeThemeStepperPath(NSRect frame)
+{
+  NSRect drawRect = NSInsetRect (frame, 0.5, 0.5);
+
+  if (GnomeThemeStepperIsVertical (frame))
+    {
+      return GnomeThemeRoundedPath (drawRect, MIN (6.0, floor (NSWidth (drawRect) / 3.0)));
+    }
+  return GnomeThemeSegmentedControlPath (drawRect, MIN (8.0, floor (drawRect.size.height / 2.0)), NO, YES);
+}
+
+/* A chevron pointing up or down, for the vertical stepper's halves. */
+static void
+GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
+{
+  CGFloat halfWidth = MIN (4.0, floor (NSWidth (rect) * 0.25));
+  CGFloat halfHeight = floor (halfWidth / 2.0 + 0.5);
+  NSPoint center = NSMakePoint (floor (NSMidX (rect)) + 0.5, floor (NSMidY (rect)) + 0.5);
+  CGFloat tip = up ? halfHeight : -halfHeight;
+  NSBezierPath *path = [NSBezierPath bezierPath];
+
+  [path moveToPoint: NSMakePoint (center.x - halfWidth, center.y - tip)];
+  [path lineToPoint: NSMakePoint (center.x, center.y + tip)];
+  [path lineToPoint: NSMakePoint (center.x + halfWidth, center.y - tip)];
+  [path setLineWidth: 1.5];
+  [path setLineCapStyle: NSRoundLineCapStyle];
+  [path setLineJoinStyle: NSRoundLineJoinStyle];
+  [color set];
+  [path stroke];
+}
+
 - (NSRect) stepperUpButtonRectWithFrame: (NSRect)frame
 {
-  CGFloat rightWidth = ceil (frame.size.width / 2.0);
+  if (GnomeThemeStepperIsVertical (frame))
+    {
+      CGFloat bottomHeight = floor (frame.size.height / 2.0);
 
-  return NSMakeRect (NSMaxX (frame) - rightWidth,
-                     frame.origin.y,
-                     rightWidth,
-                     frame.size.height);
+      return NSMakeRect (frame.origin.x,
+                         frame.origin.y + bottomHeight,
+                         frame.size.width,
+                         frame.size.height - bottomHeight);
+    }
+  else
+    {
+      CGFloat rightWidth = ceil (frame.size.width / 2.0);
+
+      return NSMakeRect (NSMaxX (frame) - rightWidth,
+                         frame.origin.y,
+                         rightWidth,
+                         frame.size.height);
+    }
 }
 
 - (NSRect) stepperDownButtonRectWithFrame: (NSRect)frame
 {
-  CGFloat leftWidth = floor (frame.size.width / 2.0);
+  if (GnomeThemeStepperIsVertical (frame))
+    {
+      return NSMakeRect (frame.origin.x,
+                         frame.origin.y,
+                         frame.size.width,
+                         floor (frame.size.height / 2.0));
+    }
+  else
+    {
+      CGFloat leftWidth = floor (frame.size.width / 2.0);
 
-  return NSMakeRect (frame.origin.x,
-                     frame.origin.y,
-                     leftWidth,
-                     frame.size.height);
+      return NSMakeRect (frame.origin.x,
+                         frame.origin.y,
+                         leftWidth,
+                         frame.size.height);
+    }
 }
 
 - (void) drawStepperBorder: (NSRect)frame
@@ -2314,9 +2379,7 @@ GnomeThemeDrawTabLabel(NSString *label,
                                           baseFill,
                                           0.76);
   NSColor *separatorColor = GnomeThemeBlend (strokeColor, baseFill, 0.72);
-  CGFloat radius = MIN (8.0, floor (drawRect.size.height / 2.0));
-  CGFloat separatorX = NSMinX (drawRect) + floor (drawRect.size.width / 2.0);
-  NSBezierPath *path = GnomeThemeSegmentedControlPath (drawRect, radius, NO, YES);
+  NSBezierPath *path = GnomeThemeStepperPath (frame);
 
   [baseFill set];
   [path fill];
@@ -2325,8 +2388,81 @@ GnomeThemeDrawTabLabel(NSString *label,
   [path stroke];
 
   [separatorColor set];
-  [NSBezierPath strokeLineFromPoint: NSMakePoint (separatorX, NSMinY (drawRect) + 6.0)
-                            toPoint: NSMakePoint (separatorX, NSMaxY (drawRect) - 6.0)];
+  if (GnomeThemeStepperIsVertical (frame))
+    {
+      CGFloat separatorY = NSMinY (frame) + floor (frame.size.height / 2.0) + 0.5;
+
+      [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMinX (drawRect) + 3.0, separatorY)
+                                toPoint: NSMakePoint (NSMaxX (drawRect) - 3.0, separatorY)];
+    }
+  else
+    {
+      CGFloat separatorX = NSMinX (drawRect) + floor (drawRect.size.width / 2.0);
+
+      [NSBezierPath strokeLineFromPoint: NSMakePoint (separatorX, NSMinY (drawRect) + 6.0)
+                                toPoint: NSMakePoint (separatorX, NSMaxY (drawRect) - 6.0)];
+    }
+}
+
+/* The pressed half: the stepper's shape, cut to the half. */
+static void
+GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
+{
+  NSColor *fillColor = GnomeThemeBlend ([NSColor controlColor],
+                                        [NSColor controlBackgroundColor],
+                                        0.34);
+  NSBezierPath *path = GnomeThemeStepperPath (NSInsetRect (frame, 1.0, 1.0));
+
+  [NSGraphicsContext saveGraphicsState];
+  NSRectClip (half);
+  [fillColor set];
+  [path fill];
+  [NSGraphicsContext restoreGraphicsState];
+}
+
+- (void) drawStepperCell: (NSCell *)cell
+               withFrame: (NSRect)cellFrame
+                  inView: (NSView *)controlView
+             highlightUp: (BOOL)highlightUp
+           highlightDown: (BOOL)highlightDown
+{
+  NSRect upRect = [self stepperUpButtonRectWithFrame: cellFrame];
+  NSRect downRect = [self stepperDownButtonRectWithFrame: cellFrame];
+  BOOL vertical = GnomeThemeStepperIsVertical (cellFrame);
+  BOOL canIncrement = [cell isEnabled];
+  BOOL canDecrement = canIncrement;
+  NSColor *textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
+  NSColor *dimColor = GnomeThemeColor (self, @"disabledControlTextColor", [NSColor disabledControlTextColor]);
+
+  /* As GTK's spin button: a button that can't change the value is dimmed. */
+  if ([cell isKindOfClass: [NSStepperCell class]] && [(NSStepperCell *)cell valueWraps] == NO)
+    {
+      NSStepperCell *stepper = (NSStepperCell *)cell;
+
+      canIncrement = canIncrement && [stepper doubleValue] < [stepper maxValue];
+      canDecrement = canDecrement && [stepper doubleValue] > [stepper minValue];
+    }
+
+  [self drawStepperBorder: cellFrame];
+  if (highlightUp)
+    {
+      GnomeThemeFillStepperHalf (cellFrame, upRect);
+    }
+  if (highlightDown)
+    {
+      GnomeThemeFillStepperHalf (cellFrame, downRect);
+    }
+
+  if (vertical)
+    {
+      GnomeThemeDrawStepperChevron (upRect, YES, canIncrement ? textColor : dimColor);
+      GnomeThemeDrawStepperChevron (downRect, NO, canDecrement ? textColor : dimColor);
+    }
+  else
+    {
+      GnomeThemeDrawStepperGlyph (upRect, YES, canIncrement ? textColor : dimColor);
+      GnomeThemeDrawStepperGlyph (downRect, NO, canDecrement ? textColor : dimColor);
+    }
 }
 
 - (void) drawStepperUpButton: (NSRect)aRect

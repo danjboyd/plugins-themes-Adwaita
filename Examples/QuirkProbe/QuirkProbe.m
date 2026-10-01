@@ -766,6 +766,17 @@ objectValueForTableColumn: (NSTableColumn *)column
   RELEASE (wide);
 }
 
+- (NSStepper *) stepperWithFrame: (NSRect)frame value: (double)value inView: (NSView *)view
+{
+  NSStepper *stepper = [[NSStepper alloc] initWithFrame: frame];
+
+  [stepper setMinValue: 0];
+  [stepper setMaxValue: 10];
+  [stepper setDoubleValue: value];
+  [view addSubview: stepper];
+  return AUTORELEASE (stepper);
+}
+
 - (void) buildWindows
 {
   NSView *view;
@@ -785,6 +796,12 @@ objectValueForTableColumn: (NSTableColumn *)column
   [self addFixedButtonTitled: @"12" frame: NSMakeRect (250, 130, 64, 28) inView: view];
   [self addFixedButtonTitled: @"20" frame: NSMakeRect (330, 130, 44, 28) inView: view];
   [self addFixedButtonTitled: @"Apply" frame: NSMakeRect (250, 90, 64, 28) inView: view];
+  /* Steppers: Cocoa's size, the same at its maximum, and a wide one
+     (plugins-themes-Adwaita#6). */
+  _tallStepper = [self stepperWithFrame: NSMakeRect (400, 100, 18, 24) value: 5 inView: view];
+  _maxedStepper = [self stepperWithFrame: NSMakeRect (430, 100, 18, 24) value: 10 inView: view];
+  [_maxedStepper setValueWraps: NO];
+  _wideStepper = [self stepperWithFrame: NSMakeRect (400, 60, 48, 24) value: 5 inView: view];
 
   _wrappingLabel = [self labelWithText: @"This note is long enough that it needs to wrap onto a second line in this label."
                                  frame: NSMakeRect (10, 220, 220, 80)];
@@ -906,6 +923,93 @@ objectValueForTableColumn: (NSTableColumn *)column
         {
           [self fail: ident detail: [detail stringByAppendingString: @" (clipped)"]];
         }
+    }
+}
+
+/* A glyph's antialiased strokes on a control's fill. */
+static BOOL
+QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return (red + green + blue) < 600;
+}
+
+/* Glyph ink in each half of a stepper, from the theme's own button rects
+   (as NSStepperCell hit-tests them), in the render's top-left pixels. */
+- (void) measureStepper: (NSStepper *)stepper up: (QuirkProbeInk *)up down: (QuirkProbeInk *)down
+{
+  GSTheme *theme = [GSTheme theme];
+  NSRect bounds = [stepper bounds];
+  NSBitmapImageRep *rep = QuirkProbeRender (stepper);
+  NSRect upRect = [theme stepperUpButtonRectWithFrame: bounds];
+  NSRect downRect = [theme stepperDownButtonRectWithFrame: bounds];
+
+  if ([stepper isFlipped] == NO)
+    {
+      upRect.origin.y = NSHeight (bounds) - NSMaxY (upRect);
+      downRect.origin.y = NSHeight (bounds) - NSMaxY (downRect);
+    }
+  *up = QuirkProbeMeasureIn (rep, QuirkProbeIsGlyphInk, upRect);
+  *down = QuirkProbeMeasureIn (rep, QuirkProbeIsGlyphInk, downRect);
+}
+
+- (void) checkSteppers
+{
+  GSTheme *theme = [GSTheme theme];
+  NSRect bounds = [_tallStepper bounds];
+  NSRect upRect = [theme stepperUpButtonRectWithFrame: bounds];
+  NSRect downRect = [theme stepperDownButtonRectWithFrame: bounds];
+  QuirkProbeInk up, down;
+  NSString *detail;
+  CGFloat middle = NSWidth (bounds) / 2.0;
+
+  /* A Cocoa-sized stepper: an up half above a down half, each with a glyph
+     in the middle. */
+  [self measureStepper: _tallStepper up: &up down: &down];
+  detail = [NSString stringWithFormat: @"%gx%g: up half %@ (ink %ldx%ld at x %ld), down half %@ (ink %ldx%ld at x %ld)",
+    NSWidth (bounds), NSHeight (bounds), NSStringFromRect (upRect),
+    (long)up.width, (long)up.height, (long)up.minX, NSStringFromRect (downRect),
+    (long)down.width, (long)down.height, (long)down.minX];
+  if (NSMinY (upRect) >= NSMaxY (downRect) && NSWidth (upRect) == NSWidth (bounds)
+    && up.count > 0 && down.count > 0
+    && ABS (up.minX + up.width / 2.0 - middle) <= 1.5
+    && ABS (down.minX + down.width / 2.0 - middle) <= 1.5)
+    {
+      [self pass: @"stepper-vertical" detail: detail];
+    }
+  else
+    {
+      [self fail: @"stepper-vertical" detail: detail];
+    }
+
+  /* At its maximum, the up half is dimmed, as GTK's spin button. */
+  [self measureStepper: _maxedStepper up: &up down: &down];
+  detail = [NSString stringWithFormat: @"at the maximum: darkest up glyph pixel %lu, down %lu (r+g+b)",
+    (unsigned long)up.darkest, (unsigned long)down.darkest];
+  if (down.count > 0 && (up.count == 0 || up.darkest > down.darkest + 100))
+    {
+      [self pass: @"stepper-dims-at-limit" detail: detail];
+    }
+  else
+    {
+      [self fail: @"stepper-dims-at-limit" detail: detail];
+    }
+
+  /* A wide stepper keeps − and + side by side. */
+  bounds = [_wideStepper bounds];
+  upRect = [theme stepperUpButtonRectWithFrame: bounds];
+  downRect = [theme stepperDownButtonRectWithFrame: bounds];
+  [self measureStepper: _wideStepper up: &up down: &down];
+  detail = [NSString stringWithFormat: @"%gx%g: up %@ (ink %ldx%ld), down %@ (ink %ldx%ld)",
+    NSWidth (bounds), NSHeight (bounds), NSStringFromRect (upRect), (long)up.width, (long)up.height,
+    NSStringFromRect (downRect), (long)down.width, (long)down.height];
+  if (NSMinX (upRect) >= NSMaxX (downRect) && up.count > 0 && down.count > 0
+    && up.height > down.height)
+    {
+      [self pass: @"stepper-wide-horizontal" detail: detail];
+    }
+  else
+    {
+      [self fail: @"stepper-wide-horizontal" detail: detail];
     }
 }
 
@@ -2325,6 +2429,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkSizedButtons];
   [self checkFixedButtons];
+  [self checkSteppers];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
