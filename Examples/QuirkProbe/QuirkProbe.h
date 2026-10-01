@@ -42,6 +42,7 @@
   NSStepper *_tallStepper;
   NSStepper *_maxedStepper;
   NSStepper *_wideStepper;
+  NSColorWell *_colorWell;
   NSButton *_toolbarViewButton;
   NSTextField *_wrappingLabel;
   NSTextField *_newlineLabel;

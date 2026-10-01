@@ -1920,6 +1920,76 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
+/* A bordered colour well is GTK's colour button: a flat button, pressed
+   while the colour panel is attached, holding a rounded swatch (drawn by
+   -drawWellInside:). Returns the swatch's rect. */
+- (NSRect) drawColorWellBorder: (NSColorWell *)well
+                    withBounds: (NSRect)bounds
+                      withClip: (NSRect)clipRect
+{
+  GSThemeControlState state = GSThemeNormalState;
+
+  if ([well isBordered] == NO)
+    {
+      return bounds;
+    }
+
+  if ([well isEnabled] == NO)
+    {
+      state = GSThemeDisabledState;
+    }
+  else if ([[well cell] isHighlighted])
+    {
+      state = GSThemeHighlightedState;
+    }
+  else if ([well isActive])
+    {
+      state = GSThemeSelectedState;
+    }
+  [self drawButton: bounds
+                in: [well cell]
+              view: well
+             style: NSRoundedBezelStyle
+             state: state];
+
+  return NSInsetRect (bounds,
+                      MIN (6.0, floor (NSWidth (bounds) / 4.0)),
+                      MIN (5.0, floor (NSHeight (bounds) / 4.0)));
+}
+
+/* The swatch: rounded, with a faint inner border so a colour close to the
+   button's still shows its edge (libadwaita's colorswatch), and faded when
+   the well is disabled. */
+- (void) _overrideNSColorWellMethod_drawWellInside: (NSRect)insideRect
+{
+  NSColorWell *well = (NSColorWell *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  CGFloat radius = MIN (4.0, floor (MIN (NSWidth (insideRect), NSHeight (insideRect)) / 2.0));
+  NSBezierPath *path = GnomeThemeRoundedPath (insideRect, radius);
+  NSBezierPath *edge = GnomeThemeRoundedPath (NSInsetRect (insideRect, 0.5, 0.5), MAX (0.0, radius - 0.5));
+
+  if (NSIsEmptyRect (insideRect))
+    {
+      return;
+    }
+
+  [NSGraphicsContext saveGraphicsState];
+  [path addClip];
+  [[well color] drawSwatchInRect: insideRect];
+  if ([well isEnabled] == NO)
+    {
+      [[GnomeThemeColor (theme, @"windowBackgroundColor", [NSColor windowBackgroundColor])
+         colorWithAlphaComponent: 0.5] set];
+      NSRectFillUsingOperation (insideRect, NSCompositeSourceOver);
+    }
+  [NSGraphicsContext restoreGraphicsState];
+
+  [[GnomeThemeColor (theme, @"controlShadowColor", [NSColor controlShadowColor])
+     colorWithAlphaComponent: 0.35] set];
+  [edge setLineWidth: 1.0];
+  [edge stroke];
+}
+
 - (void) drawSegmentedControlSegment: (NSCell *)cell
                            withFrame: (NSRect)cellFrame
                               inView: (NSView *)controlView

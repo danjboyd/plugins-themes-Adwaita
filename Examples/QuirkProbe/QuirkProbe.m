@@ -802,6 +802,10 @@ objectValueForTableColumn: (NSTableColumn *)column
   _maxedStepper = [self stepperWithFrame: NSMakeRect (430, 100, 18, 24) value: 10 inView: view];
   [_maxedStepper setValueWraps: NO];
   _wideStepper = [self stepperWithFrame: NSMakeRect (400, 60, 48, 24) value: 5 inView: view];
+  /* A colour well (plugins-themes-Adwaita#2). */
+  _colorWell = AUTORELEASE ([[NSColorWell alloc] initWithFrame: NSMakeRect (480, 140, 52, 30)]);
+  [_colorWell setColor: [NSColor colorWithCalibratedRed: 0.9 green: 0.1 blue: 0.1 alpha: 1.0]];
+  [view addSubview: _colorWell];
 
   _wrappingLabel = [self labelWithText: @"This note is long enough that it needs to wrap onto a second line in this label."
                                  frame: NSMakeRect (10, 220, 220, 80)];
@@ -926,6 +930,12 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+static BOOL
+QuirkProbeIsRed (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return red > 180 && green < 80 && blue < 80;
+}
+
 /* A glyph's antialiased strokes on a control's fill. */
 static BOOL
 QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
@@ -1010,6 +1020,37 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
   else
     {
       [self fail: @"stepper-wide-horizontal" detail: detail];
+    }
+}
+
+/* A colour well as GTK's colour button: the colour in a rounded swatch inset
+   in a flat button, not NeXT's dark bevel. */
+- (void) checkColorWell
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (_colorWell);
+  NSRect bounds = [_colorWell bounds];
+  QuirkProbeInk swatch = QuirkProbeMeasure (rep, QuirkProbeIsRed);
+  QuirkProbeInk corner, edge;
+  NSString *detail;
+
+  if (swatch.count == 0)
+    {
+      [self fail: @"colorwell-adwaita" detail: @"no swatch drawn"];
+      return;
+    }
+  corner = QuirkProbeMeasureIn (rep, QuirkProbeIsRed, NSMakeRect (swatch.minX, swatch.minY, 2, 2));
+  edge = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (0, 0, swatch.minX, NSHeight (bounds)));
+  detail = [NSString stringWithFormat: @"swatch %ldx%ld at %ld,%ld in %gx%g; %lu red pixels in its corner; "
+    @"darkest pixel left of it %lu",
+    (long)swatch.width, (long)swatch.height, (long)swatch.minX, (long)swatch.minY,
+    NSWidth (bounds), NSHeight (bounds), (unsigned long)corner.count, (unsigned long)edge.darkest];
+  if (swatch.minX >= 4 && swatch.minY >= 3 && corner.count < 4 && edge.darkest > 450)
+    {
+      [self pass: @"colorwell-adwaita" detail: detail];
+    }
+  else
+    {
+      [self fail: @"colorwell-adwaita" detail: detail];
     }
 }
 
@@ -2430,6 +2471,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self checkSizedButtons];
   [self checkFixedButtons];
   [self checkSteppers];
+  [self checkColorWell];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
