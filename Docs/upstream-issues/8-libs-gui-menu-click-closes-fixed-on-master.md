@@ -38,3 +38,21 @@ the pointer hasn't been over the menu. Both pass the probe's
 `primary-menu-opens` and `primary-menu-escape` checks. On master a click
 outside the menu, with the pointer never over it, is ignored once, as for
 GNUstep's other transient menus.
+
+The menu bar's titles (File, Edit, and the ☰ the application menu becomes)
+have the same workaround since 2026-10-01 (plugins-themes-Adwaita#5):
+`-[NSMenuView mouseDown:]` holds the press, with the title highlighted,
+until the release or a drag past 8px. A drag is GNUstep's own press, drag
+and release; a click starts tracking from a fresh press when it's released,
+with the same Escape timer. Items without a submenu act on the release, as
+before. The probe's `menubar-click-opens`, `menubar-click-opens-app-menu`,
+`menubar-click-escape` and `menubar-click-picks` checks cover it (they move
+the pointer, so they run only on the probe's own Xvfb).
+
+On master (ff49ac8, in the `libs-gui-csd` build) on 2026-10-01, the probe
+opened menus, and picked items, with the workaround. Escape worked only
+with it. After a click on a title, moving the pointer into the window and
+clicking there left the menu showing, with or without the workaround:
+tracking ends with the title still highlighted and keeps its menu
+attached. Check this by hand before the next release; it may be master's
+behaviour or an artefact of the probe's synthetic clicks.

@@ -1769,6 +1769,11 @@ static NSMutableArray *QuirkProbePrimaryTitles = nil;
 /* Set when the Escape check had to close the menu with a click. */
 static BOOL QuirkProbeEscapeNeededClick = NO;
 static NSRect QuirkProbePrimaryFrame;
+/* The menus a menu bar click showed, seen from inside its tracking loop. */
+static NSString *QuirkProbeMenuBarOpen = nil;
+static BOOL QuirkProbeMenuBarItemPicked = NO;
+static NSWindow *QuirkProbeMenuBarItemWindow = nil;
+static NSValue *QuirkProbeMenuBarItemPoint = nil;
 
 static NSView *
 QuirkProbePrimaryButtonIn (NSView *view)
@@ -1802,6 +1807,273 @@ QuirkProbePrimaryButtonIn (NSView *view)
 
   QuirkProbeEscapeNeededClick = YES;
   [NSApp postEvent: up atStart: NO];
+}
+
+/* The titles of the vertical menus showing, as "File: New, Open | ...". */
+static NSString *
+QuirkProbeVisibleMenus (void)
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSMutableArray *menus = [NSMutableArray array];
+  NSWindow *window;
+
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSMenuView *menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([window contentView], [NSMenuView class]);
+
+      if ([window isVisible] && menuView != nil && [menuView isHorizontal] == NO)
+        {
+          [menus addObject: [[menuView menu] title]];
+        }
+    }
+  return [menus componentsJoinedByString: @", "];
+}
+
+/* Fires while a menu bar menu is tracking: note what's showing, move the
+   pointer off the bar, then click there. */
+- (void) inspectMenuBarMenu: (NSTimer *)timer
+{
+  ASSIGN (QuirkProbeMenuBarOpen, QuirkProbeVisibleMenus ());
+  [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: NSMakePoint (850, 20)]
+                              onScreen: [[_controlsWindow screen] screenNumber]];
+  [self after: 0.2 perform: @selector(clickOffMenuBar:) mode: NSEventTrackingRunLoopMode];
+}
+
+- (void) clickOffMenuBar: (NSTimer *)timer
+{
+  NSPoint point = NSMakePoint (850, 20);
+  NSEvent *down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                    timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                  eventNumber: 0 clickCount: 1 pressure: 1];
+  NSEvent *up = [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                                  timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                eventNumber: 0 clickCount: 1 pressure: 0];
+
+  [NSApp postEvent: down atStart: NO];
+  [NSApp postEvent: up atStart: NO];
+}
+
+/* Clicks a menu bar title, as a click with the pointer on it: the release
+   is already queued when the press is handled. */
+- (void) clickMenuBar: (NSMenuView *)bar item: (NSInteger)index
+{
+  NSRect title = [bar convertRect: [bar rectOfItemAtIndex: index] toView: nil];
+  NSPoint point = NSMakePoint (NSMidX (title), NSMidY (title));
+  NSEvent *down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                    timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                  eventNumber: 0 clickCount: 1 pressure: 1];
+  NSEvent *up = [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                                  timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                eventNumber: 0 clickCount: 1 pressure: 0];
+
+  [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: point]
+                              onScreen: [[_controlsWindow screen] screenNumber]];
+  [NSApp postEvent: up atStart: NO];
+  [bar mouseDown: down];
+}
+
+/* A click on a menu bar title opens its menu and the menu stays open
+   (libs-gui 0.32 closed it on the release: upstream item 8,
+   plugins-themes-Adwaita#5); a click elsewhere or Escape closes it. Moves
+   the pointer, so only on the probe's own display. */
+- (void) checkMenuBarClick
+{
+  NSMenuView *bar = nil;
+  NSEnumerator *enumerator;
+  NSView *view;
+  NSInteger index;
+  NSString *detail;
+  NSString *afterClose;
+
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
+    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    {
+      [self skip: @"menubar-click-opens" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
+      return;
+    }
+  if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeOwnsDisplay"] == NO)
+    {
+      [self skip: @"menubar-click-opens" detail: @"moves the pointer: only on the probe's own Xvfb"];
+      return;
+    }
+  enumerator = [[[[_controlsWindow contentView] superview] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil && bar == nil)
+    {
+      NSMenuView *found = (NSMenuView *)QuirkProbeFindViewOfClass (view, [NSMenuView class]);
+
+      if (found != nil && [found isHorizontal])
+        {
+          bar = found;
+        }
+    }
+  index = [[NSApp mainMenu] indexOfItemWithTitle: @"File"];
+  if (bar == nil || index < 0)
+    {
+      [self fail: @"menubar-click-opens" detail: @"no menu bar with a File menu"];
+      return;
+    }
+
+  ASSIGN (QuirkProbeMenuBarOpen, @"");
+  [self after: 0.3 perform: @selector(inspectMenuBarMenu:) mode: NSEventTrackingRunLoopMode];
+  [self clickMenuBar: bar item: index];
+  afterClose = QuirkProbeVisibleMenus ();
+  detail = [NSString stringWithFormat: @"0.3s after a click on File: showing \"%@\"; after a click elsewhere: \"%@\"",
+    QuirkProbeMenuBarOpen, afterClose];
+  if ([QuirkProbeMenuBarOpen isEqualToString: @"File"] && [afterClose length] == 0)
+    {
+      [self pass: @"menubar-click-opens" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menubar-click-opens" detail: detail];
+    }
+
+  /* The same for the application menu, drawn as ☰ at the bar's end. */
+  {
+    NSString *name = [[NSProcessInfo processInfo] processName];
+    NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: name]);
+    NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: name action: NULL keyEquivalent: @""]);
+
+    [appMenu addItemWithTitle: @"Info" action: NULL keyEquivalent: @""];
+    [appItem setSubmenu: appMenu];
+    [[NSApp mainMenu] insertItem: appItem atIndex: 0];
+    [bar sizeToFit];
+    ASSIGN (QuirkProbeMenuBarOpen, @"");
+    [self after: 0.3 perform: @selector(inspectMenuBarMenu:) mode: NSEventTrackingRunLoopMode];
+    [self clickMenuBar: bar item: 0];
+    afterClose = QuirkProbeVisibleMenus ();
+    detail = [NSString stringWithFormat: @"0.3s after a click on ☰ at x %g: showing \"%@\"; after a click elsewhere: \"%@\"",
+      NSMinX ([bar rectOfItemAtIndex: 0]), QuirkProbeMenuBarOpen, afterClose];
+    [[NSApp mainMenu] removeItem: appItem];
+    [bar sizeToFit];
+    if ([QuirkProbeMenuBarOpen isEqualToString: name] && [afterClose length] == 0)
+      {
+        [self pass: @"menubar-click-opens-app-menu" detail: detail];
+      }
+    else
+      {
+        [self fail: @"menubar-click-opens-app-menu" detail: detail];
+      }
+  }
+
+  /* Escape closes it. */
+  {
+    NSTimer *fallback = [NSTimer timerWithTimeInterval: 1.5 target: self selector: @selector(closeMenuAfterEscape:)
+                                              userInfo: nil repeats: NO];
+
+    QuirkProbeEscapeNeededClick = NO;
+    [[NSRunLoop currentRunLoop] addTimer: fallback forMode: NSEventTrackingRunLoopMode];
+    ASSIGN (QuirkProbeMenuBarOpen, @"");
+    [self after: 0.3 perform: @selector(pressEscapeOnMenuBar:) mode: NSEventTrackingRunLoopMode];
+    [self clickMenuBar: bar item: index];
+    [fallback invalidate];
+    afterClose = QuirkProbeVisibleMenus ();
+    detail = [NSString stringWithFormat: @"showing \"%@\" before Escape; after it: %@, showing \"%@\"",
+      QuirkProbeMenuBarOpen,
+      QuirkProbeEscapeNeededClick ? @"still tracking (closed by a click)" : @"tracking ended", afterClose];
+    if ([QuirkProbeMenuBarOpen isEqualToString: @"File"] && QuirkProbeEscapeNeededClick == NO
+      && [afterClose length] == 0)
+      {
+        [self pass: @"menubar-click-escape" detail: detail];
+      }
+    else
+      {
+        [self fail: @"menubar-click-escape" detail: detail];
+      }
+  }
+
+  /* A click on an item of the open menu runs it. Escape's spare release
+     (for libs-gui master) is still queued: dispatch it, as the main loop
+     would. */
+  {
+    NSEvent *pending;
+
+    while ((pending = [NSApp nextEventMatchingMask: NSAnyEventMask untilDate: [NSDate distantPast]
+                                            inMode: NSDefaultRunLoopMode dequeue: YES]) != nil)
+      {
+        [NSApp sendEvent: pending];
+      }
+  }
+  {
+    NSMenu *fileMenu = [[[NSApp mainMenu] itemAtIndex: index] submenu];
+    NSMenuItem *probeItem = [fileMenu addItemWithTitle: @"Probe Item"
+                                                action: @selector(menuBarItemPicked:)
+                                         keyEquivalent: @""];
+
+    [probeItem setTarget: self];
+    QuirkProbeMenuBarItemPicked = NO;
+    [self after: 0.3 perform: @selector(clickProbeItem:) mode: NSEventTrackingRunLoopMode];
+    [self clickMenuBar: bar item: index];
+    afterClose = QuirkProbeVisibleMenus ();
+    [fileMenu removeItem: probeItem];
+    detail = [NSString stringWithFormat: @"a click on File, then on its item: %@; showing \"%@\" after",
+      QuirkProbeMenuBarItemPicked ? @"the item ran" : @"the item didn't run", afterClose];
+    if (QuirkProbeMenuBarItemPicked && [afterClose length] == 0)
+      {
+        [self pass: @"menubar-click-picks" detail: detail];
+      }
+    else
+      {
+        [self fail: @"menubar-click-picks" detail: detail];
+      }
+  }
+  [GSCurrentServer () setMouseLocation: NSMakePoint (0, 0) onScreen: [[_controlsWindow screen] screenNumber]];
+}
+
+- (void) pressEscapeOnMenuBar: (NSTimer *)timer
+{
+  ASSIGN (QuirkProbeMenuBarOpen, QuirkProbeVisibleMenus ());
+  [self pressEscape: timer];
+}
+
+- (void) menuBarItemPicked: (id)sender
+{
+  QuirkProbeMenuBarItemPicked = YES;
+}
+
+/* Fires while File is open from a click: point at its probe item, then
+   click it. */
+- (void) clickProbeItem: (NSTimer *)timer
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSWindow *window;
+
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSMenuView *menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([window contentView], [NSMenuView class]);
+      NSInteger item = [[menuView menu] indexOfItemWithTitle: @"Probe Item"];
+
+      if ([window isVisible] && menuView != nil && [menuView isHorizontal] == NO && item >= 0)
+        {
+          NSRect rect = [menuView convertRect: [menuView rectOfItemAtIndex: item] toView: nil];
+          NSPoint point = NSMakePoint (NSMidX (rect), NSMidY (rect));
+
+          [GSCurrentServer () setMouseLocation: [window convertBaseToScreen: point]
+                                      onScreen: [[window screen] screenNumber]];
+          ASSIGN (QuirkProbeMenuBarItemWindow, window);
+          ASSIGN (QuirkProbeMenuBarItemPoint, [NSValue valueWithPoint: point]);
+          [self after: 0.2 perform: @selector(clickPointedItem:) mode: NSEventTrackingRunLoopMode];
+          return;
+        }
+    }
+  /* Not open: end the tracking. */
+  [self clickOffMenuBar: timer];
+}
+
+- (void) clickPointedItem: (NSTimer *)timer
+{
+  NSPoint point = [QuirkProbeMenuBarItemPoint pointValue];
+  NSInteger number = [QuirkProbeMenuBarItemWindow windowNumber];
+
+  [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                      timestamp: 0 windowNumber: number context: nil
+                                    eventNumber: 0 clickCount: 1 pressure: 1]
+           atStart: NO];
+  [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                                      timestamp: 0 windowNumber: number context: nil
+                                    eventNumber: 0 clickCount: 1 pressure: 0]
+           atStart: NO];
+  DESTROY (QuirkProbeMenuBarItemWindow);
 }
 
 /* Fires while the ☰'s menu is tracking: note the vertical menu that's
@@ -2550,6 +2822,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self checkToolbar];
   [self checkTables];
   [self checkMenuBar];
+  [self checkMenuBarClick];
   [self checkToolbarEdges];
   [self checkToolbarHover];
   [self checkPopUpButton];

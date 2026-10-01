@@ -154,6 +154,10 @@ if [ -n "${QUIRK_PROBE_ARGS:-}" ]; then
   read -r -a EXTRA_ARGS <<< "$QUIRK_PROBE_ARGS"
   PROBE_ARGS+=("${EXTRA_ARGS[@]}")
 fi
+# The probe may move the pointer only on a display of its own.
+if [ -n "$XVFB_PID" ]; then
+  PROBE_ARGS+=(-ProbeOwnsDisplay YES)
+fi
 if [ "${QUIRK_PROBE_STYLE:-}" = high-contrast ]; then
   PROBE_ARGS+=(-ProbeHighContrast YES)
 fi

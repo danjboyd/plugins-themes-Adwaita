@@ -566,10 +566,59 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
     }
 }
 
+/* A click on a menu bar title opens its menu, which stays open until a
+   click picks an item or lands elsewhere, as GTK's menu bar. In libs-gui
+   0.32 the click's own release ends menu tracking (upstream item 8), so the
+   press is held here, with the title highlighted, until the release or a
+   drag past GTK's 8px threshold. A drag is GNUstep's press, drag and
+   release; a click starts tracking from a fresh press, as ☰ does. Master
+   (a84b42471) ignores a first release itself, and handles the fresh press
+   the same way, so this needs no version check. Items without a submenu
+   act on the release, as before. */
+static BOOL
+GnomeThemeMenuBarTitleClicked(NSMenuView *menuView, NSEvent *event)
+{
+  NSWindow *window = [menuView window];
+  NSPoint start = [event locationInWindow];
+  NSInteger index = [menuView indexOfItemAtPoint: [menuView convertPoint: start fromView: nil]];
+  BOOL clicked = NO;
+
+  if (index < 0 || index >= [[menuView menu] numberOfItems]
+    || [[[menuView menu] itemAtIndex: index] submenu] == nil)
+    {
+      return NO;
+    }
+  [menuView setHighlightedItemIndex: index];
+  [window flushWindow];
+  while (YES)
+    {
+      NSEvent *next = [NSApp nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask
+                                         untilDate: [NSDate distantFuture]
+                                            inMode: NSEventTrackingRunLoopMode
+                                           dequeue: YES];
+      NSPoint point = [next locationInWindow];
+
+      if ([next type] == NSLeftMouseUp)
+        {
+          clicked = YES;
+          break;
+        }
+      if ([next window] == window && hypot (point.x - start.x, point.y - start.y) >= 8.0)
+        {
+          break;
+        }
+    }
+  /* Tracking highlights the item itself, and attaches its menu only when
+     the highlight changes. */
+  [menuView setHighlightedItemIndex: -1];
+  return clicked;
+}
+
 - (void) _overrideNSMenuViewMethod_mouseDown: (NSEvent *)event
 {
   typedef void (*MouseIMP)(id, SEL, NSEvent *);
   MouseIMP originalIMP = (MouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
 
   if (GnomeThemeUsesPrimaryMenu () && [(NSMenuView *)self isHorizontal]
     && [[(NSMenuView *)self window] menu] == [(NSMenuView *)self menu])
@@ -585,6 +634,31 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
               [subview mouseDown: event];
             }
         }
+      return;
+    }
+  if (originalIMP != NULL && [menuView isHorizontal] && [event type] == NSLeftMouseDown
+    && NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", menuView) == NSWindows95InterfaceStyle
+    && GnomeThemeMenuBarTitleClicked (menuView, event))
+    {
+      NSWindow *window = [menuView window];
+      NSEvent *press = [NSEvent mouseEventWithType: NSLeftMouseDown
+                                          location: [window mouseLocationOutsideOfEventStream]
+                                     modifierFlags: 0
+                                         timestamp: [[NSApp currentEvent] timestamp]
+                                      windowNumber: [window windowNumber]
+                                           context: nil
+                                       eventNumber: 0
+                                        clickCount: 1
+                                          pressure: 1.0];
+      NSTimer *escape = [NSTimer timerWithTimeInterval: 0.05
+                                                target: [GnomeThemeMenuEscape class]
+                                              selector: @selector(closeMenuOnEscape:)
+                                              userInfo: [menuView menu]
+                                               repeats: YES];
+
+      [[NSRunLoop currentRunLoop] addTimer: escape forMode: NSEventTrackingRunLoopMode];
+      originalIMP (self, _cmd, press);
+      [escape invalidate];
       return;
     }
   if (originalIMP != NULL)

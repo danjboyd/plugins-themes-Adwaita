@@ -59,6 +59,7 @@ it was found. Compare against the libadwaita reference with
 | Steppers at Cocoa's size (about 19x27pt) drew "−" and "+" side by side in 9pt each (plugins-themes-Adwaita#6) | a stepper taller than it is wide has an up half above a down half, with chevrons; wider ones keep GTK's spin button "−" and "+"; a button that can't change the value is dimmed, as in GTK |
 | Colour wells drew NeXT's bevelled well (plugins-themes-Adwaita#2) | GTK's colour button: the theme's push button (pressed while the colour panel is attached) holding a rounded swatch with a faint inner border |
 | Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); the corners stay square (see below) |
+| Clicking a menu bar title (and the bar's ☰) opened its menu and the release closed it again (libs-gui 0.32, upstream item 8; plugins-themes-Adwaita#5) | as for the primary menu's ☰: the title is highlighted on the press and its menu opens on the release, staying open until a click picks an item or lands elsewhere; Escape closes it; press, drag and release still work |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -123,8 +124,9 @@ window, compared with the GNUstep theme). Still open:
   `showsBorderOnlyWhileMouseInside`. Drop the `GSTTPanel` and
   `GSDragView` overrides once Mutter thaws unmapped windows (GNOME/mutter#5080)
   or libs-gui stops shrinking them (libs-gui#964). When a libs-gui release
-  has a84b42471 (upstream item 8), ☰ can open on the press again and track
-  with GNUstep's own first-release rule.
+  has a84b42471 (upstream item 8), ☰ and the menu bar's titles can open on
+  the press again and track with GNUstep's own first-release rule (keep
+  the Escape timer: GNUstep's menu tracking ignores keys).
 - **High contrast as current GNOME does it.** The theme's high contrast
   palette is white on black, chosen by a `gtk-theme` name containing
   "HighContrast" (GNOME 3's). GNOME now sets
