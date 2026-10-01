@@ -55,6 +55,10 @@ it was found. Compare against the libadwaita reference with
 | The header bar in high contrast looked as in the normal palette | libadwaita's high contrast details: a 1px ring round each window button's circle and a darker window border |
 | Clicking ☰ opened its menu and the release closed it again (libs-gui 0.32, upstream item 8) | the menu opens on the click's release and stays open until a click picks an item or lands outside it; Escape closes it |
 | With `GSX11HandlesWindowDecorations NO`, GNUstep drew a NeXT title bar (black, round miniaturise and close buttons, resizable only from a bottom bar) | libadwaita's header bar, measured against libadwaita 1.7 renders (`Reference/HeaderBar`): 46pt including a 1px window border, bold centred title (shifted clear of the buttons when they're in the way, shortened with an ellipsis), round 34pt window buttons with Adwaita's icons in `button-layout` order, ☰ before them with the primary menu, title and icons dimmed when the window isn't key; moving by the bar, resizing from every edge and corner (5pt strips inside the border), and the `action-double-click-titlebar` action, with maximise going back to the frame before. The theme can't turn this on itself: the backend reads the flag before the theme loads. Alerts (alone or as sheets) have no bar, as AdwAlertDialog: a border only. Panels get the bar with a close button; windows with buttons and no title get the bar without one; borderless windows and `NSFullScreenWindowMask` get neither bar nor border |
+| Push buttons narrower than their padding clipped short titles (ScreenshotTool's 64pt "12" drew as "1", a 44pt "20" drew nothing: plugins-themes-Adwaita#3) | rounded buttons are padded once (GTK's 17px, from the bezel margins), not again by the title rect; in a frame too narrow for it the padding shrinks to 4pt before the title is cut; `sizeToFit` buttons are about 15pt narrower |
+| Steppers at Cocoa's size (about 19x27pt) drew "−" and "+" side by side in 9pt each (plugins-themes-Adwaita#6) | a stepper taller than it is wide has an up half above a down half, with chevrons; wider ones keep GTK's spin button "−" and "+"; a button that can't change the value is dimmed, as in GTK |
+| Colour wells drew NeXT's bevelled well (plugins-themes-Adwaita#2) | GTK's colour button: the theme's push button (pressed while the colour panel is attached) holding a rounded swatch with a faint inner border |
+| Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); the corners stay square (see below) |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -71,6 +75,11 @@ spacing) are in the Fixed table. Still different from GNOME:
   wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
 - **Alerts keep a title bar.** `AdwAlertDialog` has none; GNUstep's panel
   has the window manager's.
+- **Tool tips have square corners.** libadwaita's are rounded and
+  translucent. GNUstep's tool tip window is opaque (libs-back gives
+  ARGB visuals only to windows it draws a shadow for, and only with the
+  phase 2b patches), so the theme paints the colour libadwaita's 80% black
+  makes over the window background.
 
 ## Gorm and other nib-based apps
 

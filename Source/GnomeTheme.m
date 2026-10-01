@@ -317,6 +317,58 @@ GnomeThemeKeepsHiddenWindowSize(void)
   return getenv ("WAYLAND_DISPLAY") != NULL;
 }
 
+/* libadwaita's tool tip padding. GSToolTips sizes its window for the text
+   plus 2pt on each side; the window grows by the rest. */
+static const CGFloat GnomeThemeToolTipPaddingX = 10.0;
+static const CGFloat GnomeThemeToolTipPaddingY = 6.0;
+static const CGFloat GnomeThemeGSToolTipsInset = 2.0;
+
+/* The tip window whose next frame needs the padding (its text was just
+   set), and the one last padded, with how far its frame moved from where
+   GSToolTips put it: GSToolTips keeps the tip at its own offset from the
+   pointer as the pointer moves. Not retained: identity only. */
+static NSWindow *GnomeThemeToolTipPendingWindow = nil;
+static NSWindow *GnomeThemeToolTipPaddedWindow = nil;
+static NSPoint GnomeThemeToolTipShift = { 0.0, 0.0 };
+
+- (void) _overrideGSTTViewMethod_setText: (NSAttributedString *)text
+{
+  typedef void (*SetTextIMP)(id, SEL, NSAttributedString *);
+  SetTextIMP originalIMP = (SetTextIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSTTView"));
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, text);
+    }
+  GnomeThemeToolTipPendingWindow = (text != nil) ? [(NSView *)self window] : nil;
+}
+
+/* libadwaita's tool tip: a dark box with light text, padded, without
+   GNUstep's black border (a white one in high contrast, where the box is
+   as black as the windows). The corners stay square: the tip's window is
+   opaque. */
+- (void) _overrideGSTTViewMethod_drawRect: (NSRect)dirtyRect
+{
+  NSView *view = (NSView *)self;
+  Ivar textIvar = class_getInstanceVariable ([view class], "_text");
+  NSAttributedString *text = textIvar != NULL ? object_getIvar (view, textIvar) : nil;
+  NSRect bounds = [view bounds];
+  GnomeTheme *theme = (GnomeTheme *)[GSTheme theme];
+
+  if (text == nil)
+    {
+      return;
+    }
+  [[NSColor toolTipColor] set];
+  NSRectFill (bounds);
+  if ([theme isKindOfClass: [GnomeTheme class]] && [[theme settings] highContrastEnabled])
+    {
+      [[NSColor toolTipTextColor] set];
+      NSFrameRect (bounds);
+    }
+  [text drawInRect: NSInsetRect (bounds, GnomeThemeToolTipPaddingX, GnomeThemeToolTipPaddingY)];
+}
+
 - (void) _overrideGSTTPanelMethod_setFrame: (NSRect)frameRect
                                    display: (BOOL)flag
 {
@@ -326,6 +378,34 @@ GnomeThemeKeepsHiddenWindowSize(void)
   if (NSIsEmptyRect (frameRect) && GnomeThemeKeepsHiddenWindowSize ())
     {
       return;
+    }
+  if (NSIsEmptyRect (frameRect) == NO && self == (id)GnomeThemeToolTipPendingWindow)
+    {
+      /* A new tip: grow it downwards (it sits below the pointer), then keep
+         it on the screen as GSToolTips did. */
+      NSRect padded = frameRect;
+      NSRect visible = [[NSScreen mainScreen] visibleFrame];
+
+      GnomeThemeToolTipPendingWindow = nil;
+      GnomeThemeToolTipPaddedWindow = (NSWindow *)self;
+      padded.size.width += 2.0 * (GnomeThemeToolTipPaddingX - GnomeThemeGSToolTipsInset);
+      padded.size.height += 2.0 * (GnomeThemeToolTipPaddingY - GnomeThemeGSToolTipsInset);
+      padded.origin.y -= padded.size.height - frameRect.size.height;
+      if (NSIsEmptyRect (visible) == NO)
+        {
+          padded.origin.x = MAX (NSMinX (visible), MIN (NSMinX (padded), NSMaxX (visible) - NSWidth (padded)));
+          padded.origin.y = MAX (NSMinY (visible), MIN (NSMinY (padded), NSMaxY (visible) - NSHeight (padded)));
+        }
+      GnomeThemeToolTipShift = NSMakePoint (NSMinX (padded) - NSMinX (frameRect),
+                                            NSMinY (padded) - NSMinY (frameRect));
+      frameRect = padded;
+    }
+  else if (NSIsEmptyRect (frameRect) == NO && self == (id)GnomeThemeToolTipPaddedWindow
+    && NSEqualSizes (frameRect.size, [(NSWindow *)self frame].size))
+    {
+      /* -setFrameOrigin: as the tip follows the pointer. */
+      frameRect.origin.x += GnomeThemeToolTipShift.x;
+      frameRect.origin.y += GnomeThemeToolTipShift.y;
     }
   if (originalIMP != NULL)
     {

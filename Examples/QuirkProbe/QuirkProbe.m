@@ -2425,6 +2425,80 @@ QuirkProbePrimaryButtonIn (NSView *view)
     }
 }
 
+/* A tool tip shown by GSToolTips itself: libadwaita's dark box with light
+   text and its padding, no black border, in the interface font's size, and
+   it stays put when it follows an unmoved pointer
+   (plugins-themes-Adwaita#1). */
+- (void) checkToolTip
+{
+  Class tipsClass = NSClassFromString (@"GSToolTips");
+  NSView *anchor = [[_controlsWindow contentView] viewWithTag: 1];
+  NSString *tipText = @"Zoom: Fit to Window";
+  NSTimer *fake;
+  id tips;
+  NSWindow *panel = nil;
+  NSEnumerator *enumerator;
+  NSWindow *window;
+  NSBitmapImageRep *rep;
+  QuirkProbeInk edge, light;
+  NSRect shown, followed;
+  NSString *detail;
+
+  if (tipsClass == Nil || anchor == nil)
+    {
+      [self skip: @"tooltip-adwaita" detail: @"GSToolTips not found"];
+      return;
+    }
+  [anchor setToolTip: tipText];
+  tips = [tipsClass performSelector: @selector(tipsForView:) withObject: anchor];
+  fake = [NSTimer timerWithTimeInterval: 1000 target: self selector: @selector(finish)
+                               userInfo: tipText repeats: NO];
+  [tips performSelector: @selector(_timedOut:) withObject: fake];
+
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      if ([window isKindOfClass: NSClassFromString (@"GSTTPanel")] && [window isVisible])
+        {
+          panel = window;
+        }
+    }
+  if (panel == nil)
+    {
+      [self fail: @"tooltip-adwaita" detail: @"no tool tip window shown"];
+      return;
+    }
+  shown = [panel frame];
+  [tips performSelector: @selector(mouseMoved:) withObject: nil];
+  followed = [panel frame];
+
+  rep = QuirkProbeRender ([panel contentView]);
+  QuirkProbeInkBackground = 0;
+  light = QuirkProbeMeasure (rep, QuirkProbeIsWhite);
+  edge = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (0, 0, 1, [rep pixelsHigh]));
+  QuirkProbeInkBackground = 750;
+  detail = [NSString stringWithFormat: @"%gx%g; text ink %ldx%ld at %ld,%ld; edge r+g+b %lu-%lu; "
+    @"%@ after following an unmoved pointer",
+    NSWidth (shown), NSHeight (shown), (long)light.width, (long)light.height,
+    (long)light.minX, (long)light.minY, (unsigned long)edge.darkest, (unsigned long)edge.lightest,
+    NSEqualRects (shown, followed) ? @"same frame" : NSStringFromRect (followed)];
+
+  if (light.count > 0 && light.minX >= 8 && light.minY >= 4
+    && light.minX + light.width <= NSWidth (shown) - 8
+    && light.height >= 10
+    && edge.lightest < 200 && edge.lightest - edge.darkest < 30
+    && NSEqualRects (shown, followed))
+    {
+      [self pass: @"tooltip-adwaita" detail: detail];
+    }
+  else
+    {
+      [self fail: @"tooltip-adwaita" detail: detail];
+    }
+  [tips performSelector: @selector(_endDisplay)];
+  [anchor setToolTip: nil];
+}
+
 - (void) checkHiddenWindows
 {
   Class panelClass = NSClassFromString (@"GSTTPanel");
@@ -2491,6 +2565,7 @@ QuirkProbePrimaryButtonIn (NSView *view)
   [self checkPrimaryMenu];
   [self checkHeaderBar];
   [self checkFonts];
+  [self checkToolTip];
   [self checkHiddenWindows];
 
   _lateWindow = [self windowWithFrame: NSMakeRect (480, 560, 300, 100) title: @"QuirkProbe Late Window"];

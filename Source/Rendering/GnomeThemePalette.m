@@ -96,6 +96,11 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#99c1f1") forKey: @"selectedTextBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"selectedTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"labelColor"];
+  /* libadwaita's tool tips are 80% black over whatever is behind them; our
+     tool tip windows are opaque, so this is that over the window
+     background. */
+  [colors setColor: GnomeThemeColorFromHex (@"#323232") forKey: @"toolTipColor"];
+  [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
 }
 
 static void
@@ -144,6 +149,8 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"selectedTextBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#0f1720") forKey: @"selectedTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"labelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#070707") forKey: @"toolTipColor"];
+  [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
 }
 
 static void
@@ -185,6 +192,8 @@ GnomeThemePopulateHighContrastPalette(NSColorList *colors)
   [colors setColor: [NSColor whiteColor] forKey: @"headerColor"];
   [colors setColor: [NSColor blackColor] forKey: @"headerTextColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"labelColor"];
+  [colors setColor: [NSColor blackColor] forKey: @"toolTipColor"];
+  [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
 }
 
 @implementation GnomeThemePalette
