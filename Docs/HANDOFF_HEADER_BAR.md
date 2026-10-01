@@ -274,8 +274,101 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-Next: phase 2b (libs-back: shadow and rounded corners, the theme turning the
-header bar on; `Docs/PROPOSAL_LIBS_BACK_CSD.md`), then phase 3. The proposal to send to libs-back's maintainers
+## Phase 2b in progress (stopped 2026-09-25 evening)
+
+Work in two new git worktrees, on local branches, **nothing committed or
+pushed**, nothing installed system-wide:
+
+- `~/git/gnustep/libs-gui-csd` (branch `csd-theme-decorations`, from
+  origin/master ff49ac830), built: `Source/obj/libgnustep-gui.so.0.32.0`
+  (built with `make ADDITIONAL_OBJCFLAGS=-Wno-error=format-security`).
+  Proposal item 4: `GSThemeInstallBackendDefaults()` in GSTheme.m (the
+  theme path lookup factored out of `+loadThemeNamed:` into
+  `GSThemePathForFileName()`), declared in GSThemePrivate.h, called in
+  `-[NSApplication _init]` just before the display server is created. It
+  reads `GSBackHandlesWindowDecorations` from the named theme's
+  `GSThemeDomain` without loading the theme, and installs it in the
+  GSThemeDomain volatile domain unless the user set
+  GSBackHandlesWindowDecorations or GSX11HandlesWindowDecorations.
+  Verified: with no user setting (isolated defaults, below), ThemeDemo gets
+  the header bar from the theme alone with this libs-gui, and none with the
+  installed one.
+- `~/git/gnustep/libs-back-csd` (branch `csd-header-bar`, from origin/master
+  5db2ae7), built: `Source/libgnustep-back-032.bundle`.
+  - Item 0: `setWindowHintsForStyle()` keeps the functions for windows the
+    gui decorates (decorations 0, functions from the style, plus move).
+  - Item 2, the shadow margin: `gswindow_device_t` gains `shadow[4]`
+    (left, right, top, bottom), `corner_radius`, `shadow_eligible`. A
+    styled window gets a margin of 30/30/24/36 px (measured from
+    libadwaita under Mutter) when the gui decorates, `GSBackWindowShadows`
+    is YES and a compositing manager owns `_NET_WM_CM_Sn`. Such windows
+    get a 32-bit ARGB visual of their own (`argb_visual()`; master's
+    `xlibimage.c` RCreateContext always uses the default 24-bit visual, so
+    nothing else has alpha). `-_offsets::::for:` returns minus the margin
+    when the gui decorates (else `-styleoffsets`), and is used by the
+    frame, window-rect and point conversions, `-setWindowdevice:forContext:`
+    and `-flushwindowrect::`; the WM hint conversions keep `-styleoffsets`
+    (hints use the X window's own origin). `-_updateShadowOf:` sets
+    `_GTK_FRAME_EXTENTS` and an XShape input region of the visible part
+    (clicks in the margin go through). `-_updateShadowSizeOf:` drops the
+    margin while `_NET_WM_STATE` is maximised (both) or fullscreen, or
+    `_GTK_EDGE_CONSTRAINTS` has a tiled bit; PropertyNotify on those calls
+    it and sends the gui the new frame; ConfigureNotify reshapes the input
+    region; Expose copies the margin from the backing store.
+  - XGCairoModernSurface keeps a separate shadow image
+    (`create_shadow()`: 0.19·e^(−d/10) at the sides, weaker above, a little
+    stronger below, following the corner radius) and `-handleExposeRect:`
+    copies the backing store through a rounded clip of the visible part
+    (`visible_path()`) and the shadow everywhere else, so nothing the gui
+    draws can un-round the corners.
+- Theme (this repo, uncommitted): `Resources/Info-gnustep.plist`
+  GSThemeDomain sets `GSBackHandlesWindowDecorations = NO`,
+  `GSBackWindowShadows = YES`, `GSBackWindowCornerRadius = 15`;
+  `GnomeThemeWindowManagerHasShadow()` reads `_GTK_FRAME_EXTENTS`, and the
+  header bar then paints its 1px border in the window background (the
+  shadow's outline is the edge, as in libadwaita). `make check-quirks`
+  passes (38, 42, 48, 52, 9, 9).
+
+Verified under Mutter (GNOME Shell on a private Xvfb, `:63`): the X window
+is 32-bit, `_GTK_FRAME_EXTENTS` = 30, 30, 24, 36, the visible window sits
+where the frame says, the shadow is there (about 18% at the edge, like
+libadwaita's) and all four corners are rounded with the shadow following
+them.
+
+Not yet tested (next steps, in order):
+
+1. Maximise and restore: the margin should drop to 0 (square corners, the
+   window filling the work area) and come back. Also tiling (Super+Left).
+2. Moves and resizes handed to Mutter with the margin (xdotool on `:63` as
+   in `make check-mutter`), and a click in the margin reaching the window
+   behind (input shape).
+3. `make check-mutter` against the patched libraries; extend it with
+   shadow checks (depth 32, frame extents, a shadow pixel, a rounded
+   corner pixel, extents 0 when maximised).
+4. Other window kinds with a shadow: panels, alerts (NSDocModalWindowMask
+   gets one), sheets, menus and tool tips (borderless: none).
+5. Try it on the real desktop (GNOME Wayland, Xwayland), then the style
+   pass for upstream (GNU style, ChangeLog entries) and a note in the
+   proposal that items 0, 2 and 4 now have patches.
+
+How to run against the patched libraries:
+
+- libs-gui: `LD_LIBRARY_PATH=$HOME/git/gnustep/libs-gui-csd/Source/obj:$LD_LIBRARY_PATH`.
+- libs-back: `ln -sfn ~/git/gnustep/libs-back-csd/Source/libgnustep-back-032.bundle
+  ~/GNUstep/Library/Bundles/libgnustep-backcsd-032.bundle` and launch with
+  `-GSBackend libgnustep-backcsd`; remove the link afterwards (it was
+  removed at the end of the session).
+- Mutter test session: GNOME Shell `--x11` on a private Xvfb with its own
+  D-Bus session, settings in memory, scratch XDG directories and
+  `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix`
+  (see `Tests/Scripts/run-mutter-check.sh`; never delete its directories
+  across file systems).
+- Isolated GNUstep defaults (Dan has `GSX11HandlesWindowDecorations NO` set
+  globally): a copy of `/etc/GNUstep/GNUstep.conf` with
+  `GNUSTEP_USER_DEFAULTS_DIR` pointing at an empty directory, mode 0600,
+  passed as `GNUSTEP_CONFIG_FILE`.
+
+Then phase 3. The proposal to send to libs-back's maintainers
 is `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
 
 ## Testing

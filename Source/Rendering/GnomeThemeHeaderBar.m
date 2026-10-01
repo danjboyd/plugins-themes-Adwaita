@@ -435,6 +435,9 @@ GnomeThemeResizeCursor(NSUInteger edges)
      back to a frame saved under the window's autosave name. */
   NSRect _restoreFrame;
   BOOL _hasRestoreFrame;
+  /* The backend draws a shadow round the window (and its outline): no
+     border of our own then. */
+  BOOL _hasShadow;
   /* The ends of the buttons at the bar's start and end, for the title. */
   CGFloat _startLimit;
   CGFloat _endLimit;
@@ -720,6 +723,9 @@ GnomeThemeResizeCursor(NSUInteger edges)
       [self layoutWindowButtons];
     }
   resizeBarRect = NSZeroRect;
+  /* The shadow comes and goes with the window manager's state
+     (maximised, tiled), which also changes the frame. */
+  _hasShadow = GnomeThemeWindowManagerHasShadow (window);
   [[self window] invalidateCursorRectsForView: self];
 }
 
@@ -794,7 +800,14 @@ GnomeThemeResizeCursor(NSUInteger edges)
       NSRectFill (titleBarRect);
       [self drawTitleInRect: titleBarRect];
     }
-  if (NSEqualRects (contentRect, bounds) == NO)
+  if (NSEqualRects (contentRect, bounds) == NO && _hasShadow)
+    {
+      /* The border area takes the window's background: the shadow's
+         outline is the edge, as in libadwaita. */
+      [background set];
+      NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
+    }
+  else if (NSEqualRects (contentRect, bounds) == NO)
     {
       CGFloat shade = [GnomeThemeCurrentSettings () highContrastEnabled]
         ? GnomeThemeHighContrastBorderShade : GnomeThemeWindowBorderShade;
@@ -819,6 +832,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   if (number > 0)
     {
       GnomeThemeWindowManagerAllowFunctions (window);
+      _hasShadow = GnomeThemeWindowManagerHasShadow (window);
     }
 }
 

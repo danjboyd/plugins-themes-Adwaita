@@ -62,6 +62,11 @@ BOOL GnomeThemeWindowManagerToggleMaximized(NSWindow *window);
 /* Asks the window manager to show its window menu at the pointer. */
 BOOL GnomeThemeWindowManagerShowWindowMenu(NSWindow *window);
 
+/* Whether the backend gave the window a shadow margin (_GTK_FRAME_EXTENTS,
+   with a libs-back that draws GNOME's shadow): the window then has no
+   border of its own, as libadwaita's. */
+BOOL GnomeThemeWindowManagerHasShadow(NSWindow *window);
+
 /* Whether the window manager has the window maximised; NO in `known` when
    it can't tell. */
 BOOL GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known);

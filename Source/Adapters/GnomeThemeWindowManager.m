@@ -250,6 +250,36 @@ GnomeThemeWindowManagerShowWindowMenu(NSWindow *window)
 }
 
 BOOL
+GnomeThemeWindowManagerHasShadow(NSWindow *window)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
+  Atom type;
+  int format;
+  unsigned long count, remaining;
+  unsigned char *data = NULL;
+  BOOL shadow = NO;
+
+  if (xwindow == None)
+    {
+      return NO;
+    }
+  if (XGetWindowProperty (display, xwindow, XInternAtom (display, "_GTK_FRAME_EXTENTS", False), 0, 4, False,
+                          XA_CARDINAL, &type, &format, &count, &remaining, &data) == Success && data != NULL)
+    {
+      unsigned long *extents = (unsigned long *)data;
+      unsigned long i;
+
+      for (i = 0; i < count; i++)
+        {
+          shadow = shadow || extents[i] != 0;
+        }
+      XFree (data);
+    }
+  return shadow;
+}
+
+BOOL
 GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known)
 {
   Display *display = GnomeThemeX11Display ();

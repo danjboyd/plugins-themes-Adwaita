@@ -14,5 +14,15 @@
     GSSuppressAppIcon = YES;
     GSScrollerButtonsOffset = 0;
     GSScrollerArrowsSameEnd = NO;
+    /* GNUstep draws the window decorations (the theme's header bar). Takes
+       effect with a libs-gui that reads it before the display server is
+       created (GSThemeInstallBackendDefaults); an explicit
+       GSBackHandlesWindowDecorations or GSX11HandlesWindowDecorations
+       default wins. */
+    GSBackHandlesWindowDecorations = NO;
+    /* With a libs-back that supports them: GNOME's window shadow and
+       rounded corners, when a compositing manager runs. */
+    GSBackWindowShadows = YES;
+    GSBackWindowCornerRadius = 15;
   };
 }
