@@ -32,6 +32,10 @@
   NSWindow *_controlsWindow;
   NSWindow *_toolbarWindow;
   NSWindow *_lateWindow;
+  NSWindow *_launchPrefsWindow;
+  NSWindow *_latePrefsWindow;
+  NSWindow *_optOutWindow;
+  NSWindow *_optInWindow;
   NSWindow *_tableWindow;
   NSWindow *_headerWindow;
   NSTableView *_defaultGridTable;

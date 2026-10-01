@@ -831,6 +831,19 @@ objectValueForTableColumn: (NSTableColumn *)column
 
   [_controlsWindow makeKeyAndOrderFront: nil];
 
+  /* A preferences window that exists when the menu is first attached
+     (plugins-themes-Adwaita#4), resizable as a main window. */
+  _launchPrefsWindow = [[NSWindow alloc] initWithContentRect: NSMakeRect (960, 420, 260, 100)
+                                                   styleMask: (NSTitledWindowMask | NSClosableWindowMask
+                                                               | NSMiniaturizableWindowMask | NSResizableWindowMask)
+                                                     backing: NSBackingStoreBuffered
+                                                       defer: NO];
+  [_launchPrefsWindow setTitle: @"Preferences"];
+  [_launchPrefsWindow setReleasedWhenClosed: NO];
+  [_windows addObject: _launchPrefsWindow];
+  RELEASE (_launchPrefsWindow);
+  [_launchPrefsWindow orderFront: nil];
+
   _toolbarWindow = [self windowWithFrame: NSMakeRect (40, 560, 400, 120) title: @"QuirkProbe Toolbar"];
   toolbar = [[NSToolbar alloc] initWithIdentifier: @"QuirkProbe"];
   [toolbar setDelegate: self];
@@ -2841,13 +2854,59 @@ QuirkProbeVisibleMenus (void)
   [self checkToolTip];
   [self checkHiddenWindows];
 
+  /* Auxiliary windows made after launch: a Settings window, a window whose
+     delegate turns the menu bar off, and a Preferences window whose
+     delegate keeps it. */
+  _latePrefsWindow = [self windowWithFrame: NSMakeRect (800, 560, 200, 80) title: @"Settings\u2026"];
+  [_latePrefsWindow makeKeyAndOrderFront: nil];
+  _optOutWindow = [self windowWithFrame: NSMakeRect (800, 680, 200, 80) title: @"Inspector"];
+  [_optOutWindow setDelegate: self];
+  [_optOutWindow makeKeyAndOrderFront: nil];
+  _optInWindow = [self windowWithFrame: NSMakeRect (1020, 560, 200, 80) title: @"Preferences"];
+  [_optInWindow setDelegate: self];
+  [_optInWindow makeKeyAndOrderFront: nil];
+
   _lateWindow = [self windowWithFrame: NSMakeRect (480, 560, 300, 100) title: @"QuirkProbe Late Window"];
   [_lateWindow makeKeyAndOrderFront: nil];
   [self after: QuirkProbeSettleDelay perform: @selector(checkLateWindow:)];
 }
 
+/* The menu bar answer for the windows the probe is the delegate of. */
+- (BOOL) windowShouldShowMenuBar: (NSWindow *)window
+{
+  return window != _optOutWindow;
+}
+
+/* GNOME apps keep their menus out of auxiliary windows. */
+- (void) checkAuxiliaryWindowMenus
+{
+  NSMenu *mainMenu = [NSApp mainMenu];
+  NSString *detail = [NSString stringWithFormat: @"menu bar on: Preferences at launch %@, Settings… later %@, "
+    @"delegate says no %@, Preferences whose delegate says yes %@",
+    [_launchPrefsWindow menu] == mainMenu ? @"yes" : @"no",
+    [_latePrefsWindow menu] == mainMenu ? @"yes" : @"no",
+    [_optOutWindow menu] == mainMenu ? @"yes" : @"no",
+    [_optInWindow menu] == mainMenu ? @"yes" : @"no"];
+
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      [self skip: @"auxiliary-window-no-menu" detail: @"needs -NSMenuInterfaceStyle NSWindows95InterfaceStyle"];
+    }
+  else if ([_launchPrefsWindow menu] == nil && [_latePrefsWindow menu] == nil
+    && [_optOutWindow menu] == nil && [_optInWindow menu] == mainMenu)
+    {
+      [self pass: @"auxiliary-window-no-menu" detail: detail];
+    }
+  else
+    {
+      [self fail: @"auxiliary-window-no-menu" detail: detail];
+    }
+}
+
 - (void) checkLateWindow: (NSTimer *)timer
 {
+  [self checkAuxiliaryWindowMenus];
+  [self saveWindow: _launchPrefsWindow named: @"preferences-window"];
   NSMenu *mainMenu = [NSApp mainMenu];
 
   [self saveWindow: _lateWindow named: @"late-window"];

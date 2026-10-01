@@ -60,6 +60,7 @@ it was found. Compare against the libadwaita reference with
 | Colour wells drew NeXT's bevelled well (plugins-themes-Adwaita#2) | GTK's colour button: the theme's push button (pressed while the colour panel is attached) holding a rounded swatch with a faint inner border |
 | Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); the corners stay square (see below) |
 | Clicking a menu bar title (and the bar's ☰) opened its menu and the release closed it again (libs-gui 0.32, upstream item 8; plugins-themes-Adwaita#5) | as for the primary menu's ☰: the title is highlighted on the press and its menu opens on the release, staying open until a click picks an item or lands elsewhere; Escape closes it; press, drag and release still work |
+| With the menu bar style, every window that could become main got the app's menus, Preferences windows included (ScreenshotTool's: plugins-themes-Adwaita#4) | windows titled Preferences or Settings get no menu bar or ☰ (unless they're the app's only window that can be main); a window delegate's `-windowShouldShowMenuBar:` decides instead when it's implemented (README, "Windows without the menu bar") |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

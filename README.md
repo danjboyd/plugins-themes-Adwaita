@@ -152,6 +152,21 @@ so an app can declare how it was designed):
   itself is unchanged, so key equivalents and validation work as before.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
+### Windows without the menu bar
+
+GNOME apps keep their menus in the main window. The theme leaves the menu
+bar (or ☰) out of a window titled "Preferences" or "Settings" (with or
+without "…"), unless it is the app's only window that can become main. An
+app decides for itself by giving the window a delegate that implements:
+
+```objc
+- (BOOL) windowShouldShowMenuBar: (NSWindow *)window;
+```
+
+Its answer wins over the title, both ways, so this also covers other
+auxiliary windows and titles in other languages. Key equivalents still
+work in a window without the menu bar: GNUstep sends them to the main menu.
+
 ### Header bar (in development)
 
 With `GSX11HandlesWindowDecorations NO` (a user default, for example

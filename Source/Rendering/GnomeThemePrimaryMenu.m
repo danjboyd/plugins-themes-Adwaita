@@ -58,6 +58,12 @@ static char GnomeThemePrimaryToolbarButtonKey;
 - (void) updateRects;
 @end
 
+/* An app's window delegate can say whether the window shows the menu bar
+   (and, in the primary menu style, ☰). */
+@interface NSObject (GnomeThemeMenuBar)
+- (BOOL) windowShouldShowMenuBar: (NSWindow *)window;
+@end
+
 @interface NSToolbar (GnomeThemePrimaryMenuPrivate)
 - (NSView *) _toolbarView;
 @end
@@ -504,14 +510,69 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
   return [given floatValue];
 }
 
+/* Whether a window is a preferences window by its title: "Preferences" or
+   "Settings", with or without an ellipsis. */
+static BOOL
+GnomeThemeIsPreferencesTitle(NSString *title)
+{
+  NSString *trimmed = [title stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+
+  if ([trimmed hasSuffix: @"..."])
+    {
+      trimmed = [trimmed substringToIndex: [trimmed length] - 3];
+    }
+  else if ([trimmed hasSuffix: [NSString stringWithFormat: @"%C", (unichar)0x2026]])
+    {
+      trimmed = [trimmed substringToIndex: [trimmed length] - 1];
+    }
+  return [trimmed isEqualToString: @"Preferences"] || [trimmed isEqualToString: @"Settings"];
+}
+
+/* GNOME apps keep their menus in the main window: preferences and other
+   auxiliary windows have none (plugins-themes-Adwaita#4). The window's
+   delegate decides with -windowShouldShowMenuBar: when it implements it.
+   Otherwise a window titled Preferences or Settings goes without, unless it
+   is the app's only window that could have the menu bar. Key equivalents
+   don't need the bar: NSApplication sends them to the main menu. */
+static BOOL
+GnomeThemeWindowHidesMenuBar(NSWindow *window)
+{
+  id delegate = [window delegate];
+  NSEnumerator *enumerator;
+  NSWindow *other;
+
+  if ([delegate respondsToSelector: @selector(windowShouldShowMenuBar:)])
+    {
+      return [delegate windowShouldShowMenuBar: window] == NO;
+    }
+  if (GnomeThemeIsPreferencesTitle ([window title]) == NO)
+    {
+      return NO;
+    }
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((other = [enumerator nextObject]) != nil)
+    {
+      if (other != window && [other canBecomeMainWindow]
+        && GnomeThemeIsPreferencesTitle ([other title]) == NO)
+        {
+          return YES;
+        }
+    }
+  return NO;
+}
+
 /* As GSTheme's, with the ☰ button added to the menu view, and the stored
    height dropped between taking the old menu view out and putting the new
-   one in. */
+   one in. The main menu isn't attached to auxiliary windows. */
 - (void) setMenu: (NSMenu *)menu
        forWindow: (NSWindow *)window
 {
   id windowView = [window windowView];
 
+  if (menu != nil && menu == [NSApp mainMenu] && GnomeThemeWindowHidesMenuBar (window))
+    {
+      menu = nil;
+    }
   if (GnomeThemeUsesPrimaryMenu () == NO)
     {
       [super setMenu: menu forWindow: window];
