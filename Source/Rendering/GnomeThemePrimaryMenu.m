@@ -145,12 +145,47 @@ GnomeThemeCopyPrimaryMenu(void)
   return AUTORELEASE (primary);
 }
 
-/* Escape closes a menu shown by GnomeThemeTrackMenu, as it closes GNOME's
-   popovers. GNUstep's menu tracking ignores keys, so a timer in the
-   tracking mode looks for it: with nothing highlighted, a mouse up ends
-   tracking without running an item. It posts two: libs-gui 0.32 stops at
-   the first, while master (commit a84b42471) ignores a first release when
-   the pointer hasn't been over the menu; a spare release does nothing.
+/* Ends menu tracking without running an item: with nothing highlighted, a
+   mouse up ends it. Two are posted: libs-gui 0.32 stops at the first,
+   while master (commit a84b42471) ignores a first release when the
+   pointer hasn't left the first item; a spare release does nothing. They
+   carry no window, which tells them from the user's. */
+static BOOL GnomeThemeMenuDismissed = NO;
+/* Posted releases not yet fetched: one is left over when the first ends
+   tracking, and is dropped rather than reach the next menu or a window. */
+static NSUInteger GnomeThemeSpareReleases = 0;
+/* Each outermost menu tracking, and the one the spares were posted for. */
+static NSUInteger GnomeThemeTrackingSession = 0;
+static NSUInteger GnomeThemeSpareSession = 0;
+
+static void
+GnomeThemeEndMenuTracking(NSMenu *menu, NSTimeInterval timestamp)
+{
+  NSEvent *release;
+
+  GnomeThemeMenuDismissed = YES;
+  while (menu != nil)
+    {
+      [[menu menuRepresentation] setHighlightedItemIndex: -1];
+      menu = [menu attachedMenu];
+    }
+  release = [NSEvent mouseEventWithType: NSLeftMouseUp
+                               location: NSZeroPoint
+                          modifierFlags: 0
+                              timestamp: timestamp
+                           windowNumber: 0
+                                context: nil
+                            eventNumber: 0
+                             clickCount: 1
+                               pressure: 0.0];
+  [NSApp postEvent: release atStart: YES];
+  [NSApp postEvent: release atStart: NO];
+  GnomeThemeSpareReleases = 2;
+  GnomeThemeSpareSession = GnomeThemeTrackingSession;
+}
+
+/* Escape closes a menu, as it closes GNOME's popovers. GNUstep's menu
+   tracking ignores keys, so a timer in the tracking mode looks for it.
    Other keys stay queued for the window. */
 @interface GnomeThemeMenuEscape : NSObject
 + (void) closeMenuOnEscape: (NSTimer *)timer;
@@ -165,7 +200,6 @@ GnomeThemeCopyPrimaryMenu(void)
                                        inMode: NSEventTrackingRunLoopMode
                                       dequeue: NO];
   NSMenu *menu = [timer userInfo];
-  NSEvent *release;
 
   if (key == nil || [[key charactersIgnoringModifiers] isEqualToString: [NSString stringWithFormat: @"%C", (unichar)0x1b]] == NO)
     {
@@ -175,22 +209,7 @@ GnomeThemeCopyPrimaryMenu(void)
                      untilDate: [NSDate distantPast]
                         inMode: NSEventTrackingRunLoopMode
                        dequeue: YES];
-  while (menu != nil)
-    {
-      [[menu menuRepresentation] setHighlightedItemIndex: -1];
-      menu = [menu attachedMenu];
-    }
-  release = [NSEvent mouseEventWithType: NSLeftMouseUp
-                               location: NSZeroPoint
-                          modifierFlags: 0
-                              timestamp: [key timestamp]
-                           windowNumber: 0
-                                context: nil
-                            eventNumber: 0
-                             clickCount: 1
-                               pressure: 0.0];
-  [NSApp postEvent: release atStart: YES];
-  [NSApp postEvent: release atStart: NO];
+  GnomeThemeEndMenuTracking (menu, [key timestamp]);
   [timer invalidate];
 }
 
@@ -202,7 +221,6 @@ GnomeThemeTrackMenu(NSMenu *menu, NSPoint corner, BOOL rightAligned)
   NSMenuView *menuView = [menu menuRepresentation];
   NSWindow *menuWindow;
   NSEvent *press;
-  NSTimer *escape;
 
   /* Shown as a context menu is, then moved to the corner. */
   [menu displayTransient];
@@ -223,14 +241,7 @@ GnomeThemeTrackMenu(NSMenu *menu, NSPoint corner, BOOL rightAligned)
                           eventNumber: 0
                            clickCount: 1
                              pressure: 1.0];
-  escape = [NSTimer timerWithTimeInterval: 0.05
-                                   target: [GnomeThemeMenuEscape class]
-                                 selector: @selector(closeMenuOnEscape:)
-                                 userInfo: menu
-                                  repeats: YES];
-  [[NSRunLoop currentRunLoop] addTimer: escape forMode: NSEventTrackingRunLoopMode];
   [menuView mouseDown: press];
-  [escape invalidate];
   [menu closeTransient];
 }
 
@@ -627,59 +638,231 @@ GnomeThemeWindowHidesMenuBar(NSWindow *window)
     }
 }
 
-/* A click on a menu bar title opens its menu, which stays open until a
-   click picks an item or lands elsewhere, as GTK's menu bar. In libs-gui
-   0.32 the click's own release ends menu tracking (upstream item 8), so the
-   press is held here, with the title highlighted, until the release or a
-   drag past GTK's 8px threshold. A drag is GNUstep's press, drag and
-   release; a click starts tracking from a fresh press, as ☰ does. Master
-   (a84b42471) ignores a first release itself, and handles the fresh press
-   the same way, so this needs no version check. Items without a submenu
-   act on the release, as before. */
-static BOOL
-GnomeThemeMenuBarTitleClicked(NSMenuView *menuView, NSEvent *event)
-{
-  NSWindow *window = [menuView window];
-  NSPoint start = [event locationInWindow];
-  NSInteger index = [menuView indexOfItemAtPoint: [menuView convertPoint: start fromView: nil]];
-  BOOL clicked = NO;
+/* Menus open on the press, as GTK's menu bar and context menus do, and stay
+   open when the press's own release lands where it started: a click opens
+   a menu, a press, drag and release picks an item. libs-gui master
+   (a84b42471) does this itself, ignoring that first release while nothing
+   else has happened. In 0.32 any release ends menu tracking (upstream item
+   8), so there the theme drops that release while menu tracking runs, as
+   master would ignore it; master, which has -[NSImage isTemplate] (added
+   after a84b42471, not in 0.32), is left alone. */
+static NSMenuView *GnomeThemeTrackingMenuView = nil;
+static NSInteger GnomeThemeTrackingFirstIndex = -1;
+static BOOL GnomeThemeTrackingIgnoresRelease = NO;
 
-  if (index < 0 || index >= [[menuView menu] numberOfItems]
-    || [[[menuView menu] itemAtIndex: index] submenu] == nil)
+/* A press outside the menus closes them and goes nowhere else, as with
+   GTK's menus (GNUstep would pass it to the window under it, and master
+   may keep the menu open if the pointer jumped there). The outermost menu
+   view tracking, and whether the press's release is still to come. */
+static NSMenuView *GnomeThemeTrackingRootView = nil;
+static BOOL GnomeThemeDropNextRelease = NO;
+
+static BOOL
+GnomeThemeEventIsOutsideMenus(NSEvent *event)
+{
+  NSWindow *window = [event window];
+  NSPoint point = window != nil ? [window convertBaseToScreen: [event locationInWindow]] : [event locationInWindow];
+  NSMenuView *root = GnomeThemeTrackingRootView;
+  NSMenu *menu = [root menu];
+
+  if ([root isHorizontal])
+    {
+      NSRect bar = [root convertRect: [root bounds] toView: nil];
+
+      bar.origin = [[root window] convertBaseToScreen: bar.origin];
+      if (NSPointInRect (point, bar))
+        {
+          return NO;
+        }
+      menu = [menu attachedMenu];
+    }
+  while (menu != nil)
+    {
+      NSWindow *menuWindow = [[menu menuRepresentation] window];
+
+      if (menuWindow != nil && [menuWindow isVisible] && NSPointInRect (point, [menuWindow frame]))
+        {
+          return NO;
+        }
+      menu = [menu attachedMenu];
+    }
+  return YES;
+}
+
+static BOOL
+GnomeThemeMenuTrackingEndsOnFirstRelease(void)
+{
+  static int ends = -1;
+
+  if (ends < 0)
+    {
+      ends = [NSImage instancesRespondToSelector: @selector(isTemplate)] ? 0 : 1;
+    }
+  return ends == 1;
+}
+
+/* The item under an event in the tracking menu view: where the event is
+   when it's in that view's window, else where the pointer is. */
+static NSInteger
+GnomeThemeTrackingIndexForEvent(NSEvent *event)
+{
+  NSMenuView *menuView = GnomeThemeTrackingMenuView;
+  NSWindow *window = [menuView window];
+  NSPoint location = (event != nil && [event window] == window)
+    ? [event locationInWindow] : [window mouseLocationOutsideOfEventStream];
+
+  return [menuView indexOfItemAtPoint: [menuView convertPoint: location fromView: nil]];
+}
+
+/* While a menu tracks in 0.32: a press, or the pointer onto another item,
+   is something happening, and the release after it ends tracking as
+   usual; a release still on the first item is dropped. */
+- (NSEvent *) _overrideNSApplicationMethod_nextEventMatchingMask: (NSUInteger)mask
+                                                       untilDate: (NSDate *)expiration
+                                                          inMode: (NSString *)mode
+                                                         dequeue: (BOOL)flag
+{
+  typedef NSEvent *(*NextIMP)(id, SEL, NSUInteger, NSDate *, NSString *, BOOL);
+  NextIMP originalIMP = (NextIMP)GnomeThemeOriginalMethod (_cmd, self, [NSApplication class]);
+  NSEvent *event = originalIMP (self, _cmd, mask, expiration, mode, flag);
+
+  while (event != nil && flag)
+    {
+      NSEventType type = [event type];
+
+      if (GnomeThemeSpareReleases > 0 && type == NSLeftMouseUp && [event windowNumber] == 0)
+        {
+          GnomeThemeSpareReleases--;
+          if (GnomeThemeTrackingRootView == nil || GnomeThemeSpareSession != GnomeThemeTrackingSession)
+            {
+              event = originalIMP (self, _cmd, mask, expiration, mode, flag);
+              continue;
+            }
+          break;
+        }
+      if (GnomeThemeDropNextRelease && [event windowNumber] != 0
+        && (type == NSLeftMouseUp || type == NSRightMouseUp || type == NSOtherMouseUp))
+        {
+          GnomeThemeDropNextRelease = NO;
+          event = originalIMP (self, _cmd, mask, expiration, mode, flag);
+          continue;
+        }
+      if (GnomeThemeTrackingRootView != nil
+        && (type == NSLeftMouseDown || type == NSRightMouseDown || type == NSOtherMouseDown)
+        && GnomeThemeEventIsOutsideMenus (event))
+        {
+          GnomeThemeTrackingIgnoresRelease = NO;
+          GnomeThemeDropNextRelease = YES;
+          GnomeThemeEndMenuTracking ([GnomeThemeTrackingRootView menu], [event timestamp]);
+          event = originalIMP (self, _cmd, mask, expiration, mode, flag);
+          continue;
+        }
+      break;
+    }
+  while (GnomeThemeTrackingIgnoresRelease && event != nil && flag)
+    {
+      NSEventType type = [event type];
+
+      if (type == NSLeftMouseDown || type == NSRightMouseDown || type == NSOtherMouseDown)
+        {
+          GnomeThemeTrackingIgnoresRelease = NO;
+        }
+      else if (type == NSPeriodic || type == NSLeftMouseDragged || type == NSRightMouseDragged
+        || type == NSOtherMouseDragged || type == NSMouseMoved)
+        {
+          if (GnomeThemeTrackingIndexForEvent (event) != GnomeThemeTrackingFirstIndex)
+            {
+              GnomeThemeTrackingIgnoresRelease = NO;
+            }
+        }
+      else if (type == NSLeftMouseUp || type == NSRightMouseUp || type == NSOtherMouseUp)
+        {
+          GnomeThemeTrackingIgnoresRelease = NO;
+          if (GnomeThemeTrackingIndexForEvent (event) == GnomeThemeTrackingFirstIndex)
+            {
+              event = originalIMP (self, _cmd, mask, expiration, mode, flag);
+              continue;
+            }
+        }
+      break;
+    }
+  return event;
+}
+
+/* The menu bar's and transient (context, ☰) menus in in-window style:
+   Escape closes them (GNUstep has no key for it), and in 0.32 the release
+   that ends nothing is dropped (see GnomeThemeTrackingMenuView), as master
+   ignores it for these menus. */
+- (BOOL) _overrideNSMenuViewMethod_trackWithEvent: (NSEvent *)event
+{
+  typedef BOOL (*TrackIMP)(id, SEL, NSEvent *);
+  TrackIMP originalIMP = (TrackIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
+  NSMenuView *outerView = GnomeThemeTrackingMenuView;
+  NSMenuView *outerRoot = GnomeThemeTrackingRootView;
+  NSInteger outerIndex = GnomeThemeTrackingFirstIndex;
+  BOOL outerIgnores = GnomeThemeTrackingIgnoresRelease;
+  BOOL result;
+
+  if (originalIMP == NULL)
     {
       return NO;
     }
-  [menuView setHighlightedItemIndex: index];
-  [window flushWindow];
-  while (YES)
-    {
-      NSEvent *next = [NSApp nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask
-                                         untilDate: [NSDate distantFuture]
-                                            inMode: NSEventTrackingRunLoopMode
-                                           dequeue: YES];
-      NSPoint point = [next locationInWindow];
+  NSTimer *escape;
 
-      if ([next type] == NSLeftMouseUp)
-        {
-          clicked = YES;
-          break;
-        }
-      if ([next window] == window && hypot (point.x - start.x, point.y - start.y) >= 8.0)
-        {
-          break;
-        }
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", menuView) != NSWindows95InterfaceStyle
+    || ([menuView isHorizontal] == NO && [[menuView menu] isTransient] == NO))
+    {
+      return originalIMP (self, _cmd, event);
     }
-  /* Tracking highlights the item itself, and attaches its menu only when
-     the highlight changes. */
-  [menuView setHighlightedItemIndex: -1];
-  return clicked;
+  escape = [NSTimer timerWithTimeInterval: 0.05
+                                   target: [GnomeThemeMenuEscape class]
+                                 selector: @selector(closeMenuOnEscape:)
+                                 userInfo: [menuView menu]
+                                  repeats: YES];
+  [[NSRunLoop currentRunLoop] addTimer: escape forMode: NSEventTrackingRunLoopMode];
+  if (outerRoot == nil)
+    {
+      GnomeThemeTrackingRootView = menuView;
+      GnomeThemeMenuDismissed = NO;
+      GnomeThemeTrackingSession++;
+    }
+  if (GnomeThemeMenuTrackingEndsOnFirstRelease ())
+    {
+      GnomeThemeTrackingMenuView = menuView;
+      GnomeThemeTrackingFirstIndex = GnomeThemeTrackingIndexForEvent (event);
+      GnomeThemeTrackingIgnoresRelease = YES;
+    }
+  NS_DURING
+    result = originalIMP (self, _cmd, event);
+  NS_HANDLER
+    [escape invalidate];
+    GnomeThemeTrackingRootView = outerRoot;
+    GnomeThemeTrackingMenuView = outerView;
+    GnomeThemeTrackingFirstIndex = outerIndex;
+    GnomeThemeTrackingIgnoresRelease = outerIgnores;
+    [localException raise];
+  NS_ENDHANDLER
+  [escape invalidate];
+  /* Dismissed by Escape or a press outside: master leaves the menu bar's
+     menu attached when the pointer isn't on the bar; close it, as master
+     does for a modifier key. */
+  if (outerRoot == nil && GnomeThemeMenuDismissed && [menuView isHorizontal])
+    {
+      [menuView setHighlightedItemIndex: -1];
+      [[[menuView menu] attachedMenu] close];
+    }
+  GnomeThemeTrackingRootView = outerRoot;
+  GnomeThemeTrackingMenuView = outerView;
+  GnomeThemeTrackingFirstIndex = outerIndex;
+  GnomeThemeTrackingIgnoresRelease = outerIgnores;
+  return result;
 }
 
 - (void) _overrideNSMenuViewMethod_mouseDown: (NSEvent *)event
 {
   typedef void (*MouseIMP)(id, SEL, NSEvent *);
   MouseIMP originalIMP = (MouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
-  NSMenuView *menuView = (NSMenuView *)self;
 
   if (GnomeThemeUsesPrimaryMenu () && [(NSMenuView *)self isHorizontal]
     && [[(NSMenuView *)self window] menu] == [(NSMenuView *)self menu])
@@ -695,31 +878,6 @@ GnomeThemeMenuBarTitleClicked(NSMenuView *menuView, NSEvent *event)
               [subview mouseDown: event];
             }
         }
-      return;
-    }
-  if (originalIMP != NULL && [menuView isHorizontal] && [event type] == NSLeftMouseDown
-    && NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", menuView) == NSWindows95InterfaceStyle
-    && GnomeThemeMenuBarTitleClicked (menuView, event))
-    {
-      NSWindow *window = [menuView window];
-      NSEvent *press = [NSEvent mouseEventWithType: NSLeftMouseDown
-                                          location: [window mouseLocationOutsideOfEventStream]
-                                     modifierFlags: 0
-                                         timestamp: [[NSApp currentEvent] timestamp]
-                                      windowNumber: [window windowNumber]
-                                           context: nil
-                                       eventNumber: 0
-                                        clickCount: 1
-                                          pressure: 1.0];
-      NSTimer *escape = [NSTimer timerWithTimeInterval: 0.05
-                                                target: [GnomeThemeMenuEscape class]
-                                              selector: @selector(closeMenuOnEscape:)
-                                              userInfo: [menuView menu]
-                                               repeats: YES];
-
-      [[NSRunLoop currentRunLoop] addTimer: escape forMode: NSEventTrackingRunLoopMode];
-      originalIMP (self, _cmd, press);
-      [escape invalidate];
       return;
     }
   if (originalIMP != NULL)

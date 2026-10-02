@@ -2252,6 +2252,20 @@ QuirkProbeVisibleMenus (void)
 
 /* Clicks a menu bar title, as a click with the pointer on it: the release
    is already queued when the press is handled. */
+/* Presses a menu bar title and holds it: no release follows. */
+- (void) pressMenuBar: (NSMenuView *)bar item: (NSInteger)index
+{
+  NSRect title = [bar convertRect: [bar rectOfItemAtIndex: index] toView: nil];
+  NSPoint point = NSMakePoint (NSMidX (title), NSMidY (title));
+  NSEvent *down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                    timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                  eventNumber: 0 clickCount: 1 pressure: 1];
+
+  [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: point]
+                              onScreen: [[_controlsWindow screen] screenNumber]];
+  [bar mouseDown: down];
+}
+
 - (void) clickMenuBar: (NSMenuView *)bar item: (NSInteger)index
 {
   NSRect title = [bar convertRect: [bar rectOfItemAtIndex: index] toView: nil];
@@ -2323,6 +2337,23 @@ QuirkProbeVisibleMenus (void)
   else
     {
       [self fail: @"menubar-click-opens" detail: detail];
+    }
+
+  /* A press alone opens it, as GTK's menu bar does (the theme used to
+     hold the press until its release); a click elsewhere closes it. */
+  ASSIGN (QuirkProbeMenuBarOpen, @"");
+  [self after: 0.3 perform: @selector(inspectMenuBarMenu:) mode: NSEventTrackingRunLoopMode];
+  [self pressMenuBar: bar item: index];
+  afterClose = QuirkProbeVisibleMenus ();
+  detail = [NSString stringWithFormat: @"0.3s into a press on File: showing \"%@\"; after a click elsewhere: \"%@\"",
+    QuirkProbeMenuBarOpen, afterClose];
+  if ([QuirkProbeMenuBarOpen isEqualToString: @"File"] && [afterClose length] == 0)
+    {
+      [self pass: @"menubar-press-opens" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menubar-press-opens" detail: detail];
     }
 
   /* The same for the application menu, drawn as ☰ at the bar's end. */

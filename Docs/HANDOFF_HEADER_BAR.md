@@ -448,6 +448,28 @@ Found on the way:
   differs on table headers (header text at 113pt) and the menu shortcut
   inset (30pt for 16 to 20): theme work for when master is released.
 
+Step 5 feedback (Dan, 2026-10-02, real desktop via `~/bin/gs-patched`):
+everything looked right, but resizing was not smooth enough to sit next to
+GPU-drawn GTK 4 apps, and menus opened on the release.
+
+- Resizing, measured with timing in libs-back (a 200px drag in 40 steps
+  under Mutter): with the shadow only 25 of 40 steps reached the window,
+  each flush copy took 4.7 ms (0.34 without the shadow) and a new shadow
+  4.4 ms. The copy drew the window through a rounded clip path and the
+  shadow through its even-odd complement; it now copies rectangles (the
+  window less its four corner squares, the margin from the shadow) and
+  takes the rounded clip only in the corner squares: 0.44 ms. The shadow
+  was computed per pixel over the whole window (sqrt and exp each); its
+  corners and short edges are now computed once per margin and radius,
+  kept in the X server, and each size's shadow is put together from them
+  there: about 1 ms. Now 40 of 40 steps, configure to first copy 5.8 ms
+  (6.9 without the shadow). libs-back already answers
+  `_NET_WM_SYNC_REQUEST` (in `-flushwindowrect::`), so Mutter paces the
+  resize to the redraws; what's left per step is GNUstep redrawing the
+  window. `make check-mutter-shadow` gives the same shadow pixels.
+- Menus: see the menu audit in the commit "Menus open on the press, as
+  GTK's"; the theme no longer holds a menu bar press until its release.
+
 Not yet tested (next steps, in order):
 
 5. Try it on the real desktop (GNOME Wayland, Xwayland), then the style
