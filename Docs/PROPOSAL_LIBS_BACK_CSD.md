@@ -66,7 +66,11 @@ theme does this after the window is created
 (`GnomeThemeWindowManagerAllowFunctions`).
 
 **Patch:** exactly that, in `setWindowHintsForStyle()`; borderless windows
-keep functions 0.
+keep functions 0. Note that this changes behaviour for everyone who uses
+GNUstep-drawn decorations today: every styled window, sheets and utility
+panels included, now lets the window manager move it (and resize, minimise,
+maximise or close it as its style allows), where before it allowed
+nothing.
 
 ### 1. Window-manager-driven move and resize (`_NET_WM_MOVERESIZE`) (done in the theme)
 
@@ -126,10 +130,15 @@ your view on it before starting.
 **Patch:** the backend draws the shadow, so the gui needs no change beyond
 item 4.
 
-- *When:* a styled window the gui decorates, `GSBackWindowShadows` YES (the
-  theme sets it in its `GSThemeDomain`), a compositing manager owning
+- *When:* a styled, buffered window the gui decorates, `GSBackWindowShadows`
+  YES (the theme sets it in its `GSThemeDomain`), a window manager that
+  lists `_GTK_FRAME_EXTENTS` in `_NET_SUPPORTED` (one that doesn't would
+  treat the margin as part of the window), a compositing manager owning
   `_NET_WM_CM_S<n>`, and a 32-bit visual. Such windows get a visual and
-  colormap of their own; other windows are unchanged.
+  colormap of their own; other windows are unchanged. The backend watches
+  the compositing manager with XFixes: while none runs, windows have no
+  margin (it would show black), and get it back when one starts. A window
+  created while none runs keeps the default visual and never gets one.
 - *Margin:* 30, 30, 24, 36 pixels (left, right, top, bottom), measured from
   libadwaita 1.7 under Mutter; `GSBackWindowCornerRadius` (the theme: 15)
   rounds the corners. `-_offsets::::for:` returns minus the margin where
@@ -157,6 +166,21 @@ item 4.
   it too) and a compositing manager, borderless windows such as menus and
   tool tips get the 32-bit visual, so a theme can round their corners, as
   libadwaita's popovers and tool tips are. No margin or shadow for them.
+  This covers every borderless window, an application's own included:
+  what it leaves transparent shows what's behind it.
+- *Tests:* `Tests/x11/shadowmargin.m` forks a window manager that lists
+  `_GTK_FRAME_EXTENTS` and a compositing manager that only owns the
+  selection, and checks the visual, the extents, the window size, the input
+  shape (also after a resize the program makes), the maximized state, the
+  compositing manager stopping and starting, non-retained and borderless
+  windows, a window manager without `_GTK_FRAME_EXTENTS`, and the Motif
+  hints (16 checks; 11 fail without the patch).
+- *Known limitations:* maximizing or restoring changes the margin before
+  the window manager re-fits the window, so the application sees two
+  resizes; only Mutter has been tried as the window manager (KWin,
+  Xfwm and others with a compositor are untested); the art and xlib
+  graphics backends don't define XRENDER and never make 32-bit windows; the
+  scale factor (`GSScaleFactor`) with a margin is untested.
 
 ### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 

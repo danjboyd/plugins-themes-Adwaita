@@ -1,5 +1,5 @@
 diff --git a/ChangeLog b/ChangeLog
-index fb9c9b75d..7c06b3a52 100644
+index fb9c9b75d..990a240b4 100644
 --- a/ChangeLog
 +++ b/ChangeLog
 @@ -1,3 +1,20 @@
@@ -11,10 +11,10 @@ index fb9c9b75d..7c06b3a52 100644
 +	GSBackHandlesWindowDecorations default from the GSThemeDomain of the
 +	theme named by the GSTheme default, without loading the theme,
 +	unless the user has set GSBackHandlesWindowDecorations or
-+	GSX11HandlesWindowDecorations.  A theme that draws the window
-+	decorations itself can then turn GNUstep-drawn decorations on: the
-+	backend reads that default when the display server is created,
-+	before the theme is loaded.
++	GSX11HandlesWindowDecorations, or a theme has already installed its
++	domain.  A theme that draws the window decorations itself can then
++	turn GNUstep-drawn decorations on: the backend reads that default
++	when the display server is created, before the theme is loaded.
 +	(+loadThemeNamed:): Use GSThemePathForFileName().
 +	* Source/GSThemePrivate.h: Declare GSThemeInstallBackendDefaults().
 +	* Source/NSApplication.m (-_init): Call it before creating the
@@ -24,10 +24,10 @@ index fb9c9b75d..7c06b3a52 100644
  
  	* Source/NSMenuView.m (-_trackWithEvent:startingMenuView:): Carry
 diff --git a/Source/GSTheme.m b/Source/GSTheme.m
-index 449dbac3e..add23f4b2 100644
+index 449dbac3e..4698b1013 100644
 --- a/Source/GSTheme.m
 +++ b/Source/GSTheme.m
-@@ -333,6 +333,110 @@ GSStringFromImageFrameStyle(NSImageFrameStyle type)
+@@ -333,6 +333,115 @@ GSStringFromImageFrameStyle(NSImageFrameStyle type)
  @implementation	GSThemeMethod
  @end
  
@@ -89,6 +89,11 @@ index 449dbac3e..add23f4b2 100644
 +    {
 +      return;
 +    }
++  /* A theme already activated has put its whole domain in place. */
++  if ([defs volatileDomainForName: @"GSThemeDomain"] != nil)
++    {
++      return;
++    }
 +  if ([[name pathExtension] isEqual: @"theme"])
 +    {
 +      name = [name stringByDeletingPathExtension];
@@ -138,7 +143,7 @@ index 449dbac3e..add23f4b2 100644
  @implementation GSTheme
  
  static GSTheme			*defaultTheme = nil;
-@@ -450,37 +554,7 @@ typedef	struct {
+@@ -450,37 +559,7 @@ typedef	struct {
    bundle = [themes objectForKey: theme];
    if (bundle == nil)
      {

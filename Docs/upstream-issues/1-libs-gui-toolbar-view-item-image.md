@@ -1,5 +1,7 @@
 **Repository:** gnustep/libs-gui
 
+**Not filed:** fixed by [gnustep/libs-gui#952](https://github.com/gnustep/libs-gui/pull/952) (open, by probonopd, with a test); we confirmed it there on 2026-10-02 instead of filing.
+
 **Title:** NSToolbarItem with a custom view: -_layout sets the view's image to nil
 
 ### Summary

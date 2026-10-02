@@ -1,5 +1,7 @@
 **Repository:** gnustep/libs-base
 
+**Filed:** [gnustep/libs-base#806](https://github.com/gnustep/libs-base/issues/806), 2026-10-02 (reproduced again on 1.31.1; unchanged on master 2e5067f8e)
+
 **Title:** Main dispatch queue is only drained in NSDefaultRunLoopMode (stalls during modal loops, sheets, and tracking)
 
 ### Summary
