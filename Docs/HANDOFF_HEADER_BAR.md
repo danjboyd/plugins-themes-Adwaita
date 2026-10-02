@@ -170,7 +170,7 @@ Upstream changes to `libs-back` (discuss with its maintainers first):
 - `_NET_WM_STATE` for maximised and tiled states, so the header bar can drop
   the shadow and corners, and the maximise button can show "restore".
 
-### Phase 3: toolbar in the header bar
+### Phase 3: toolbar in the header bar (done 2026-10-02)
 
 Move the window's toolbar items into the header bar row (start items on
 the left, trailing ones on the right, ☰ last), leaving no separate toolbar
@@ -191,8 +191,20 @@ hit-test through to the bar (moves, double-click, window menu). Items show
 icons alone, an item without an icon its label as a text button
 (vertically centred: libs-gui draws a label at the top of its frame).
 QuirkProbe `header-bar-toolbar`; tried with ScreenshotTool under GNOME
-Shell. Not done: right-to-left (the toolbar isn't mirrored), and an
-overflowing toolbar (libs-gui's » menu) not checked.
+Shell.
+
+Finished (2026-10-02): right to left, the toolbar is mirrored after every
+`-[GSToolbarView _reload]` (libs-gui lays it out left to right): the items
+within the clip view, the clip view to the right end and the » of the
+items that don't fit to the left, as GTK mirrors its header bar (an app's
+arrow icons stay as they are). A toolbar too wide for the bar keeps
+libs-gui's overflow: the items that don't fit go into the » menu, which
+opens and runs them; the title is shortened first. In the bar the toolbar
+has no border mask (libs-gui kept a point for the bottom line, putting the
+items 1pt high and » 1pt taller). QuirkProbe `header-bar-toolbar-overflow`
+and `header-bar-toolbar-rtl`. A first click on an item of a window that
+isn't active only activates it, as anywhere in GNUstep (GTK passes it
+through); left as it is.
 
 ## Decisions (Dan, 2026-09-25)
 

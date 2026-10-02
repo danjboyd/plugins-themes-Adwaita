@@ -156,8 +156,9 @@ designed):
   row of its own (only with the header bar, below). Items before the
   toolbar's flexible space go at the bar's start, items after it at its
   end, and the title in the space; icons are shown without labels, and an
-  item without an icon is a text button. Off by default: the toolbar has to
-  suit it (a few icons, a flexible space).
+  item without an icon is a text button. Items that don't fit go into the
+  toolbar's » menu; in right-to-left languages the bar is mirrored. Off by
+  default: the toolbar has to suit it (a few icons, a flexible space).
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
 ### Windows without the menu bar
