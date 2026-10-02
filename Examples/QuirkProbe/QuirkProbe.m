@@ -1542,6 +1542,95 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
                                NSMakeRect (NSMinX (gap), 2, NSWidth (gap), 42));
   [self saveWindow: window named: @"header-bar-toolbar"];
   [window orderOut: nil];
+
+  /* Too narrow for the toolbar: the items that don't fit go into libs-gui's
+     » menu, a button inside the bar at the end of the toolbar. */
+  {
+    NSWindow *narrow = [self windowWithFrame: NSMakeRect (40, 200, 150, 200) title: @"Probe Toolbar Narrow"];
+    NSToolbar *narrowToolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeHeaderToolbarNarrow"]);
+    NSView *narrowFrame, *narrowToolbarView, *mark = nil;
+    NSRect markFrame = NSZeroRect;
+    NSString *narrowDetail;
+
+    [narrowToolbar setDelegate: delegate];
+    [narrow setToolbar: narrowToolbar];
+    [narrow orderFront: nil];
+    [narrow display];
+    narrowFrame = [[narrow contentView] superview];
+    narrowToolbarView = [narrowToolbar _toolbarView];
+    enumerator = [[narrowToolbarView subviews] objectEnumerator];
+    while ((mark = [enumerator nextObject]) != nil)
+      {
+        if ([mark isKindOfClass: [NSButton class]])
+          {
+            markFrame = [narrowFrame convertRect: [mark bounds] fromView: mark];
+            break;
+          }
+      }
+    [narrow orderOut: nil];
+    narrowDetail = [NSString stringWithFormat: @"toolbar %@, » %@ in %@",
+      NSStringFromRect ([narrowToolbarView frame]), NSStringFromRect (markFrame),
+      NSStringFromRect ([narrowFrame bounds])];
+    if (mark != nil && NSMinY (markFrame) >= NSMaxY ([narrowFrame bounds]) - 46.5
+      && NSMaxY (markFrame) <= NSMaxY ([narrowFrame bounds]) + 0.5
+      && NSMaxX (markFrame) <= NSMaxX ([narrowToolbarView frame]) + 0.5)
+      {
+        [self pass: @"header-bar-toolbar-overflow" detail: narrowDetail];
+      }
+    else
+      {
+        [self fail: @"header-bar-toolbar-overflow" detail: narrowDetail];
+      }
+  }
+
+  /* Right to left, as GTK mirrors its header bar: the first item at the
+     right end, the items after the flexible space at the left. */
+  {
+    NSWindow *mirrored;
+    NSToolbar *mirroredToolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeHeaderToolbarRTL"]);
+    NSRect first = NSZeroRect, last = NSZeroRect, space = NSZeroRect;
+    NSView *mirroredFrame;
+    NSString *mirroredDetail;
+
+    [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarToolbar"];
+    [defaults setVolatileDomain: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                 @"YES", @"GnomeThemeHeaderBarToolbar",
+                                                 @"YES", @"NSForceRightToLeftWritingDirection", nil]
+                        forName: @"QuirkProbeHeaderBarToolbar"];
+    mirrored = [self windowWithFrame: NSMakeRect (40, 200, 700, 200) title: @"Probe Toolbar RTL"];
+    [mirroredToolbar setDelegate: delegate];
+    [mirrored setToolbar: mirroredToolbar];
+    [mirrored orderFront: nil];
+    [mirrored display];
+    mirroredFrame = [[mirrored contentView] superview];
+    enumerator = [[mirroredToolbar items] objectEnumerator];
+    while ((item = [enumerator nextObject]) != nil)
+      {
+        NSView *backView = [item _backView];
+        NSRect frame = [mirroredFrame convertRect: [backView bounds] fromView: backView];
+
+        if ([[item itemIdentifier] isEqualToString: @"IconA"])
+          first = frame;
+        else if ([[item itemIdentifier] isEqualToString: @"IconC"])
+          last = frame;
+        else if ([[item itemIdentifier] isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
+          space = frame;
+      }
+    [mirrored orderOut: nil];
+    mirroredDetail = [NSString stringWithFormat: @"IconA %g-%g, flexible space %g-%g, IconC %g-%g in %g",
+      NSMinX (first), NSMaxX (first), NSMinX (space), NSMaxX (space), NSMinX (last), NSMaxX (last),
+      NSWidth ([mirroredFrame bounds])];
+    if (NSMinX (first) > NSMaxX (space) && NSMaxX (last) < NSMinX (space)
+      && NSMaxX (first) > NSWidth ([mirroredFrame bounds]) - 60)
+      {
+        [self pass: @"header-bar-toolbar-rtl" detail: mirroredDetail];
+      }
+    else
+      {
+        [self fail: @"header-bar-toolbar-rtl" detail: mirroredDetail];
+      }
+  }
+
   [searchList removeObject: @"QuirkProbeHeaderBarToolbar"];
   [defaults setSearchList: searchList];
   [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarToolbar"];
