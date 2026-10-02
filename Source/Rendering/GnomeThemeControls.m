@@ -2009,7 +2009,8 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSColor *baseFill = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
   NSColor *segmentFill = GnomeThemeColor (self, @"controlColor", [NSColor controlColor]);
   NSColor *borderColor = GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]);
-  NSColor *selectedFill = GnomeThemeColor (self, @"selectedInactiveColor", segmentFill);
+  NSColor *windowFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  NSColor *textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   NSRect drawRect = NSInsetRect (cellFrame, 0.5, 0.5);
   CGFloat interiorOverlap = 1.0;
   CGFloat radius = MIN (8.0, floor (drawRect.size.height / 2.0));
@@ -2019,9 +2020,12 @@ GnomeThemeDrawTabLabel(NSString *label,
   (void)controlView;
 
   borderColor = GnomeThemeBlend (borderColor, baseFill, 0.42);
+  /* libadwaita's checked linked button: the text colour at 30% over the
+     window, so the selected segment stands out darker in the light palette
+     and lighter in the dark one (plugins-themes-Adwaita#7). */
   if (selected)
     {
-      segmentFill = GnomeThemeBlend (selectedFill, borderColor, 0.28);
+      segmentFill = GnomeThemeBlend (windowFill, textColor, 0.30);
     }
   else
     {

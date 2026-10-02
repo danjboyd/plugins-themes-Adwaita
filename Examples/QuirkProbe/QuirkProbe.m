@@ -1198,6 +1198,53 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
     }
 }
 
+/* A selected segment stands out from the others, further from the window's
+   background, in any palette (plugins-themes-Adwaita#7: in the dark one it
+   was 2/255 darker than the others). Runs with the dark and high contrast
+   header bar runs too. */
+- (void) checkSegmentedSelection
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 200, 300, 80) title: @"QuirkProbe Segments"];
+  NSSegmentedControl *control = AUTORELEASE ([[NSSegmentedControl alloc] initWithFrame: NSMakeRect (20, 20, 240, 34)]);
+  NSBitmapImageRep *rep, *windowRep;
+  NSUInteger fills[2], background;
+  NSInteger i;
+  NSString *detail;
+
+  [control setSegmentCount: 3];
+  for (i = 0; i < 3; i++)
+    {
+      [control setLabel: [NSString stringWithFormat: @"Item %ld", (long)i + 1] forSegment: i];
+      [control setWidth: 80 forSegment: i];
+    }
+  [control setSelectedSegment: 1];
+  [[window contentView] addSubview: control];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (control);
+  windowRep = QuirkProbeRender ([window contentView]);
+  /* Inside each segment, near its top edge, clear of the label. */
+  for (i = 0; i < 2; i++)
+    {
+      fills[i] = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (40 + 80 * i, 4, 2, 2)).darkest;
+    }
+  background = QuirkProbeMeasureIn (windowRep, QuirkProbeIsAnyPixel, NSMakeRect (2, 2, 2, 2)).darkest;
+  [self saveWindow: window named: @"segments"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"r+g+b: window %lu, unselected segment %lu, selected %lu",
+    (unsigned long)background, (unsigned long)fills[0], (unsigned long)fills[1]];
+  if (labs ((long)fills[1] - (long)fills[0]) >= 60
+    && labs ((long)fills[1] - (long)background) > labs ((long)fills[0] - (long)background))
+    {
+      [self pass: @"segment-selected-visible" detail: detail];
+    }
+  else
+    {
+      [self fail: @"segment-selected-visible" detail: detail];
+    }
+}
+
 - (void) checkLabel: (NSView *)label ident: (NSString *)ident lineHeight: (NSInteger)lineHeight
 {
   QuirkProbeInk ink = QuirkProbeTextInk (label);
@@ -2952,6 +2999,7 @@ QuirkProbeVisibleMenus (void)
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])
     {
       [self checkHeaderBar];
+      [self checkSegmentedSelection];
       [self finish];
       return;
     }
@@ -2976,6 +3024,7 @@ QuirkProbeVisibleMenus (void)
   [self checkTabView];
   [self checkToolbarDisplayMode];
   [self checkToolbarRowHeight];
+  [self checkSegmentedSelection];
   [self checkApplicationMenuPosition];
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
