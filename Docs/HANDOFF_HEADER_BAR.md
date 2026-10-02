@@ -274,7 +274,7 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-## Phase 2b in progress (started 2026-09-25; steps 1 to 4 done 2026-10-02)
+## Phase 2b (started 2026-09-25; done 2026-10-02, patches not yet sent upstream)
 
 Work in two new git worktrees, on local branches, **nothing committed or
 pushed**, nothing installed system-wide:
@@ -470,11 +470,19 @@ GPU-drawn GTK 4 apps, and menus opened on the release.
 - Menus: see the menu audit in the commit "Menus open on the press, as
   GTK's"; the theme no longer holds a menu bar press until its release.
 
-Not yet tested (next steps, in order):
+Step 5 done (2026-10-02): Dan confirmed the shadow, resizing and menus on
+his desktop. Style pass for upstream: the `_NET_WM_STATE` and GTK atoms
+come from libs-back's atom table (`_GTK_FRAME_EXTENTS` and
+`_GTK_EDGE_CONSTRAINTS` added to `XGGeneric.h`), braces and comments in
+GNUstep's style, ChangeLog entries in both worktrees. The patches are
+exported to `Docs/upstream-patches/` and the proposal says what each does;
+`make check-mutter`, `make check-mutter-shadow` and `make check-quirks`
+pass against them. Still local and uncommitted in the worktrees; sending
+the proposal is Dan's.
 
-5. Try it on the real desktop (GNOME Wayland, Xwayland), then the style
-   pass for upstream (GNU style, ChangeLog entries) and a note in the
-   proposal that items 0, 2 and 4 now have patches.
+Open (Dan's decisions, from step 4): rounded menus and tool tips (an alpha
+channel for borderless windows in libs-back, and whether menus get a
+shadow); window types for menus, tool tips and panels. Then phase 3.
 
 How to run against the patched libraries:
 

@@ -5,6 +5,16 @@
 Draft, 2026-09-25, for Dan Boyd to send to the libs-back maintainers. Checked
 against libs-back master 5db2ae7 (2026-09-11) and libs-gui master ff49ac8.
 
+**Updated 2026-10-02: items 0, 2 and 4 have patches**, against those same
+commits, with ChangeLog entries:
+`Docs/upstream-patches/libs-back-csd.diff` (items 0 and 2) and
+`Docs/upstream-patches/libs-gui-theme-decorations.diff` (item 4). They were
+built and used with the Adwaita theme on GNOME (Mutter, X11 and Xwayland);
+`make check-mutter-shadow` in the theme repository runs a GNOME Shell on a
+private Xvfb against them and checks the shadow, corners, maximise and
+restore, tiling, moves, the resize band and click-through. Each item below
+says what its patch does where it differs from what was first proposed.
+
 ### Background
 
 With `GSX11HandlesWindowDecorations NO`, GNUstep draws the title bar itself
@@ -54,6 +64,9 @@ the functions from the style mask as the decorated branch already does
 (move; close, minimise, resize and maximise as the style allows). The
 theme does this after the window is created
 (`GnomeThemeWindowManagerAllowFunctions`).
+
+**Patch:** exactly that, in `setWindowHintsForStyle()`; borderless windows
+keep functions 0.
 
 ### 1. Window-manager-driven move and resize (`_NET_WM_MOVERESIZE`) (done in the theme)
 
@@ -110,6 +123,37 @@ shape:
 This is the largest of the four and touches every drawing path, so we'd like
 your view on it before starting.
 
+**Patch:** the backend draws the shadow, so the gui needs no change beyond
+item 4.
+
+- *When:* a styled window the gui decorates, `GSBackWindowShadows` YES (the
+  theme sets it in its `GSThemeDomain`), a compositing manager owning
+  `_NET_WM_CM_S<n>`, and a 32-bit visual. Such windows get a visual and
+  colormap of their own; other windows are unchanged.
+- *Margin:* 30, 30, 24, 36 pixels (left, right, top, bottom), measured from
+  libadwaita 1.7 under Mutter; `GSBackWindowCornerRadius` (the theme: 15)
+  rounds the corners. `-_offsets::::for:` returns minus the margin where
+  `-styleoffsets` was used for the frame and point conversions, so
+  `NSWindow`'s frame stays the visible window.
+- *Window manager:* `_GTK_FRAME_EXTENTS` is the margin, 0 while
+  `_NET_WM_STATE` is maximised or fullscreen or `_GTK_EDGE_CONSTRAINTS`
+  says tiled (read on PropertyNotify, which also sends the window its new
+  frame; so item 3's reading of states is partly here). The size hints
+  move with the margin: with stale ones Mutter restored a maximised window
+  20 pixels too big.
+- *Input:* an input shape of the visible part, plus a 12 pixel band round a
+  resizable window's edge, where GTK 4 windows resize from under Mutter; a
+  press further out in the shadow goes to the window behind. The Adwaita
+  theme's decoration view resizes from that band.
+- *Drawing:* the shadow (libadwaita's, measured: 0.19 opacity at the edge,
+  falling off over 30 pixels, weaker above and stronger below) is made
+  from corners and edges computed once per margin and radius and kept in
+  the X server; the expose copy takes the window's contents and the
+  shadow as rectangles and only the four corner squares through the
+  rounded clip. A 40-step resize drag under Mutter: every step reaches the
+  window and its first copy follows the configure within about 6 ms,
+  the same as without a shadow.
+
 ### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 
 libs-back sets `_NET_WM_STATE` for skip-taskbar, sticky and modal, but
@@ -142,6 +186,15 @@ by the `GSTheme` default before it creates the display server
 (`-[NSApplication _init]`, before `+[GSDisplayServer serverWithAttributes:]`)
 and passes on (a volatile defaults domain, or a server attribute). An
 explicit user default still wins.
+
+**Patch:** no new key. The theme sets `GSBackHandlesWindowDecorations = NO`
+in its Info.plist `GSThemeDomain`, which `-activate` already installs as a
+volatile domain; `GSThemeInstallBackendDefaults()` in GSTheme.m installs
+that one value early, from the bundle's Info.plist without loading the
+theme, unless the user set `GSBackHandlesWindowDecorations` or
+`GSX11HandlesWindowDecorations`. `-[NSApplication _init]` calls it just
+before creating the display server. The theme path lookup moves out of
+`+loadThemeNamed:` into `GSThemePathForFileName()` for it.
 
 ### Wayland
 

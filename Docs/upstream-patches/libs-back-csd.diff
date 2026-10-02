@@ -1,0 +1,982 @@
+diff --git a/ChangeLog b/ChangeLog
+index 2b1b779..580535a 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,52 @@
++2026-10-02 Daniel Boyd <danieljboyd@icloud.com>
++
++	Window shadows, rounded corners and window manager functions for
++	windows whose decorations the gui draws (GSBackHandlesWindowDecorations
++	or GSX11HandlesWindowDecorations NO), as GTK's client-side
++	decorations have them under GNOME's Mutter.
++	* Source/x11/XGServerWindow.m (setWindowHintsForStyle): For a styled
++	window the gui decorates, ask for no decorations but keep the
++	functions the style allows, plus move.  With functions 0 window
++	managers such as Mutter refused to move, resize, maximize, minimize
++	or close the window, even when asked with _NET_WM_MOVERESIZE or
++	_NET_WM_STATE.
++	(argb_visual, -_windowGetsShadow:): New.  A styled window the gui
++	decorates gets a transparent margin for a shadow when the
++	GSBackWindowShadows default is YES (a theme sets it in its
++	GSThemeDomain) and a compositing manager runs, with a 32-bit visual
++	of its own.  GSBackWindowCornerRadius rounds its corners.
++	(-_offsets::::for:): New.  The offsets between the frame and the X
++	window: the window manager's decorations when it draws them, else
++	minus the shadow margin.  Use it in the frame, window rectangle and
++	point conversions, -setWindowdevice:forContext: and
++	-flushwindowrect::.
++	(-_updateShadowSizeOf:): New.  No margin while the window manager
++	has the window maximized, fullscreen or tiled (_NET_WM_STATE,
++	_GTK_EDGE_CONSTRAINTS); move the minimum and maximum size hints with
++	the margin.
++	(-_updateShadowOf:): New.  Set _GTK_FRAME_EXTENTS to the margin, and
++	an input shape of the visible part and, for a resizable window, a
++	12 pixel band round it, which the gui uses to resize.
++	(-window::::): Create such windows with the 32-bit visual and the
++	margin.
++	* Source/x11/XGServerEvent.m: Use -_offsets::::for: for event
++	locations.  On ConfigureNotify reshape the input region; on Expose
++	copy the margin from the backing store; on PropertyNotify of
++	_NET_WM_STATE or _GTK_EDGE_CONSTRAINTS update the margin and send the
++	window its new frame.
++	* Source/cairo/XGCairoModernSurface.m (shadow_alpha, shadow_template,
++	create_shadow): New.  The shadow, as libadwaita's under Mutter, put
++	together in the X server from corners and edges computed once.
++	(-initWithDevice:): Make the shadow for a window with a margin.
++	(-handleExposeRect:): Copy the window's contents and the shadow as
++	rectangles, and the four corners through a rounded clip.
++	* Headers/cairo/XGCairoModernSurface.h: Add _shadowSurface.
++	* Headers/x11/XGServerWindow.h: Add shadow, corner_radius,
++	shadow_eligible and shadow_resizable to gswindow_device_t.  Declare
++	-_offsets::::for:, -_updateShadowOf: and -_updateShadowSizeOf:.
++	* Headers/x11/XGGeneric.h: Add the _GTK_FRAME_EXTENTS and
++	_GTK_EDGE_CONSTRAINTS atoms.
++
+ 2026-07-22 Richard Frith-Macdonald <rfm@gnu.org>
+ 
+ 	* Source/x11/XGServerEvent.m:
+diff --git a/Headers/cairo/XGCairoModernSurface.h b/Headers/cairo/XGCairoModernSurface.h
+index 9a02c62..02c03b6 100644
+--- a/Headers/cairo/XGCairoModernSurface.h
++++ b/Headers/cairo/XGCairoModernSurface.h
+@@ -31,6 +31,9 @@
+ {
+   @private
+     cairo_surface_t *_windowSurface;
++    /* The shadow round the window, for its margin and rounded corners
++       (gswindow_device_t shadow); NULL without a margin. */
++    cairo_surface_t *_shadowSurface;
+ }
+ @end
+ 
+diff --git a/Headers/x11/XGGeneric.h b/Headers/x11/XGGeneric.h
+index f2ff682..5a90d78 100644
+--- a/Headers/x11/XGGeneric.h
++++ b/Headers/x11/XGGeneric.h
+@@ -111,7 +111,10 @@ static char *atom_names[] = {
+   "_GNUSTEP_WM_ATTR",
+   "_GNUSTEP_TITLEBAR_STATE",
+   "_GNUSTEP_FRAME_OFFSETS",
+-  "WM_IGNORE_FOCUS_EVENTS"
++  "WM_IGNORE_FOCUS_EVENTS",
++  // GTK's client-side decorations
++  "_GTK_FRAME_EXTENTS",
++  "_GTK_EDGE_CONSTRAINTS"
+  };
+ 
+ /*
+@@ -187,6 +190,8 @@ static char *atom_names[] = {
+ #define _GNUSTEP_TITLEBAR_STATE_ATOM           atoms[67]
+ #define _GNUSTEP_FRAME_OFFSETS_ATOM            atoms[68]
+ #define WM_IGNORE_FOCUS_EVENTS_ATOM            atoms[69]
++#define _GTK_FRAME_EXTENTS_ATOM                atoms[70]
++#define _GTK_EDGE_CONSTRAINTS_ATOM             atoms[71]
+ 
+ /*
+  * Frame offsets for window inside parent decoration window.
+diff --git a/Headers/x11/XGServerWindow.h b/Headers/x11/XGServerWindow.h
+index adca517..1a0ede4 100644
+--- a/Headers/x11/XGServerWindow.h
++++ b/Headers/x11/XGServerWindow.h
+@@ -97,6 +97,17 @@ typedef struct _gswindow_device_t {
+   NSBackingStoreType    type;          /* Backing type */
+   NSRect                xframe;        /* Window frame in X11 coordinates */
+   NSRect                osframe;       /* Window frame in OpenStep coordinates */
++  int                   shadow[4];     /* Transparent margin round the frame,
++					  left, right, top, bottom, for a
++					  shadow when the gui draws the
++					  decorations (_GTK_FRAME_EXTENTS) */
++  int                   corner_radius; /* Rounds the visible part's corners
++					  while it has that margin */
++  BOOL                  shadow_eligible; /* Gets that margin when the window
++					  manager has it neither maximized,
++					  fullscreen nor tiled */
++  BOOL                  shadow_resizable; /* Takes presses in a band round
++					  the visible part, for resizing */
+ 
+   unsigned int          buffer_width;  /* Size in pixels of the current buffers. */
+   unsigned int          buffer_height;
+@@ -133,6 +144,10 @@ typedef struct _gswindow_device_t {
+ + (gswindow_device_t *) _windowForXParent: (Window)xWindow;
+ + (gswindow_device_t *) _windowWithTag: (int)windowNumber;
+ - (void) _addExposedRectangle: (XRectangle)rectangle : (int)win : (BOOL) ignoreBacking;
++- (void) _offsets: (float *)l : (float *)r : (float *)t : (float *)b
++	      for: (gswindow_device_t *)win;
++- (void) _updateShadowOf: (gswindow_device_t *)win;
++- (BOOL) _updateShadowSizeOf: (gswindow_device_t *)win;
+ - (void) _processExposedRectangles: (int)win;
+ - (void) _initializeCursorForXWindow: (Window) win;
+ - (void) _destroyServerWindows;
+diff --git a/Source/cairo/XGCairoModernSurface.m b/Source/cairo/XGCairoModernSurface.m
+index a722168..9f5dea3 100644
+--- a/Source/cairo/XGCairoModernSurface.m
++++ b/Source/cairo/XGCairoModernSurface.m
+@@ -27,9 +27,216 @@
+ #include "x11/XGServerWindow.h"
+ #include "cairo/XGCairoModernSurface.h"
+ #include <cairo-xlib.h>
++#include <math.h>
++#include <stdint.h>
++#include <string.h>
+ 
+ #define GSWINDEVICE ((gswindow_device_t *)gsDevice)
+ 
++/*
++ * The visible part of a window with a shadow margin: the surface less the
++ * margin, with rounded corners.
++ */
++static void
++visible_path(cairo_t *cr, int width, int height, const int *margin, double radius)
++{
++  double x0 = margin[0], x1 = width - margin[1];
++  double y0 = margin[2], y1 = height - margin[3];
++
++  cairo_new_sub_path(cr);
++  cairo_arc(cr, x1 - radius, y0 + radius, radius, -M_PI / 2, 0);
++  cairo_arc(cr, x1 - radius, y1 - radius, radius, 0, M_PI / 2);
++  cairo_arc(cr, x0 + radius, y1 - radius, radius, M_PI / 2, M_PI);
++  cairo_arc(cr, x0 + radius, y0 + radius, radius, M_PI, 3 * M_PI / 2);
++  cairo_close_path(cr);
++}
++
++/*
++ * The shadow's opacity at a point outside the rounded visible part, as
++ * GNOME's windows have it (libadwaita 1.7 measured under Mutter): black,
++ * from 0.19 at the edge to about 0.01 thirty pixels out at the sides;
++ * weaker and shorter above and a little stronger below, as the shadow sits
++ * lower; following the rounded corners. 0 inside.
++ */
++static double
++shadow_alpha(double px, double py, double x0, double x1, double y0, double y1,
++	     double radius)
++{
++  double dx, dy, corner, d, vertical, side;
++
++  /* Distance outside the rounded visible part, and how much of it is
++     vertical. */
++  dx = MAX(MAX(x0 + radius - px, px - (x1 - radius)), 0.0);
++  dy = MAX(MAX(y0 + radius - py, py - (y1 - radius)), 0.0);
++  corner = sqrt(dx * dx + dy * dy);
++  if (corner <= radius && px > x0 && px < x1 && py > y0 && py < y1)
++    {
++      return 0.0;
++    }
++  d = MAX(corner - radius, 0.0);
++  vertical = corner > 0.0 ? dy / corner : 0.0;
++  side = 0.19 * exp(-d / 10.0);
++  if (py < y0 + radius)
++    {
++      return (1.0 - vertical) * side + vertical * 0.10 * exp(-d / 3.5);
++    }
++  if (py > y1 - radius)
++    {
++      return (1.0 - vertical) * side + vertical * 0.21 * exp(-d / 11.0);
++    }
++  return side;
++}
++
++static inline uint32_t
++shadow_pixel(double alpha)
++{
++  /* Premultiplied black. */
++  return ((uint32_t)(alpha * 255.0 + 0.5)) << 24;
++}
++
++/*
++ * The shadow of a small window with the given margin and radius: its four
++ * corners, and between them straight edges SHADOW_TILE pixels long, on a
++ * surface like the window's. Computed once and kept in the X server; any
++ * window's shadow is put together from it there (see create_shadow).
++ */
++#define SHADOW_TILE 64
++
++static cairo_surface_t *
++shadow_template(cairo_surface_t *similar, const int *margin, int radius)
++{
++  static cairo_surface_t *cached = NULL;
++  static Display *cachedDisplay = NULL;
++  static int cachedMargin[4], cachedRadius = -1;
++  int width = margin[0] + 2 * radius + SHADOW_TILE + margin[1];
++  int height = margin[2] + 2 * radius + SHADOW_TILE + margin[3];
++  double x0 = margin[0], x1 = width - margin[1];
++  double y0 = margin[2], y1 = height - margin[3];
++  Display *display = cairo_xlib_surface_get_display(similar);
++  cairo_surface_t *image;
++  cairo_t *cr;
++  unsigned char *data;
++  int stride, x, y;
++
++  if (cached != NULL && cachedDisplay == display && cachedRadius == radius
++    && memcmp(cachedMargin, margin, sizeof(cachedMargin)) == 0)
++    {
++      return cached;
++    }
++  image = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
++  if (cairo_surface_status(image) != CAIRO_STATUS_SUCCESS)
++    {
++      cairo_surface_destroy(image);
++      return NULL;
++    }
++  cairo_surface_flush(image);
++  data = cairo_image_surface_get_data(image);
++  stride = cairo_image_surface_get_stride(image);
++  for (y = 0; y < height; y++)
++    {
++      uint32_t *row = (uint32_t *)(data + y * stride);
++
++      for (x = 0; x < width; x++)
++	{
++	  row[x] = shadow_pixel(shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1, radius));
++	}
++    }
++  cairo_surface_mark_dirty(image);
++  if (cached != NULL)
++    {
++      cairo_surface_destroy(cached);
++    }
++  cached = cairo_surface_create_similar(similar, CAIRO_CONTENT_COLOR_ALPHA, width, height);
++  cr = cairo_create(cached);
++  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
++  cairo_set_source_surface(cr, image, 0, 0);
++  cairo_paint(cr);
++  cairo_destroy(cr);
++  cairo_surface_destroy(image);
++  cachedDisplay = display;
++  memcpy(cachedMargin, margin, sizeof(cachedMargin));
++  cachedRadius = radius;
++  return cached;
++}
++
++/* Copies a rectangle of the template to (dx, dy) in the shadow. */
++static void
++shadow_copy(cairo_t *cr, cairo_surface_t *template, double sx, double sy,
++	    double w, double h, double dx, double dy)
++{
++  if (w <= 0 || h <= 0)
++    {
++      return;
++    }
++  cairo_save(cr);
++  cairo_rectangle(cr, dx, dy, w, h);
++  cairo_clip(cr);
++  cairo_set_source_surface(cr, template, dx - sx, dy - sy);
++  cairo_paint(cr);
++  cairo_restore(cr);
++}
++
++/*
++ * The shadow round a window with a shadow margin, on a surface like the
++ * window's (so exposes copy it within the X server), transparent inside the
++ * visible part: the template's corners, and its straight edges repeated
++ * along the window's (the shadow there only depends on the distance from
++ * the edge). All copies within the X server: windows are resized often,
++ * and a new shadow is made at each size.
++ */
++static cairo_surface_t *
++create_shadow(cairo_surface_t *similar, int width, int height,
++	      const int *margin, int radius)
++{
++  int l = margin[0], r = margin[1], t = margin[2], b = margin[3];
++  cairo_surface_t *template, *shadow;
++  int tw, th, x, y;
++  cairo_t *cr;
++
++  if (width <= 0 || height <= 0 || width - l - r < 2 * radius
++    || height - t - b < 2 * radius)
++    {
++      return NULL;
++    }
++  template = shadow_template(similar, margin, radius);
++  if (template == NULL)
++    {
++      return NULL;
++    }
++  tw = l + 2 * radius + SHADOW_TILE + r;
++  th = t + 2 * radius + SHADOW_TILE + b;
++  /* Similar surfaces start transparent. */
++  shadow = cairo_surface_create_similar(similar, CAIRO_CONTENT_COLOR_ALPHA,
++					width, height);
++  cr = cairo_create(shadow);
++  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
++  /* Corners: the margin and the radius each way. */
++  shadow_copy(cr, template, 0, 0, l + radius, t + radius, 0, 0);
++  shadow_copy(cr, template, tw - r - radius, 0, r + radius, t + radius,
++	      width - r - radius, 0);
++  shadow_copy(cr, template, 0, th - b - radius, l + radius, b + radius,
++	      0, height - b - radius);
++  shadow_copy(cr, template, tw - r - radius, th - b - radius, r + radius,
++	      b + radius, width - r - radius, height - b - radius);
++  /* Edges between them, a tile at a time. */
++  for (x = l + radius; x < width - r - radius; x += SHADOW_TILE)
++    {
++      int w = MIN(SHADOW_TILE, width - r - radius - x);
++
++      shadow_copy(cr, template, l + radius, 0, w, t, x, 0);
++      shadow_copy(cr, template, l + radius, th - b, w, b, x, height - b);
++    }
++  for (y = t + radius; y < height - b - radius; y += SHADOW_TILE)
++    {
++      int h = MIN(SHADOW_TILE, height - b - radius - y);
++
++      shadow_copy(cr, template, 0, t + radius, l, h, 0, y);
++      shadow_copy(cr, template, tw - r, t + radius, r, h, width - r, y);
++    }
++  cairo_destroy(cr);
++  return shadow;
++}
++
+ @implementation XGCairoModernSurface
+ 
+ - (id) initWithDevice: (void *)device
+@@ -83,6 +290,15 @@
+ 					      CAIRO_CONTENT_COLOR_ALPHA,
+ 					      GSWINDEVICE->xframe.size.width,
+ 					      GSWINDEVICE->xframe.size.height);
++      if (GSWINDEVICE->shadow[0] || GSWINDEVICE->shadow[1]
++	|| GSWINDEVICE->shadow[2] || GSWINDEVICE->shadow[3])
++	{
++	  _shadowSurface = create_shadow(windowsurface,
++					 GSWINDEVICE->xframe.size.width,
++					 GSWINDEVICE->xframe.size.height,
++					 GSWINDEVICE->shadow,
++					 GSWINDEVICE->corner_radius);
++	}
+ 
+       /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
+ 	(int) cairo_surface_get_type(_windowSurface),
+@@ -101,6 +317,10 @@
+     {
+       cairo_surface_destroy(_windowSurface);
+     }
++  if (_shadowSurface != NULL)
++    {
++      cairo_surface_destroy(_shadowSurface);
++    }
+   [super dealloc];
+ }
+ 
+@@ -127,9 +347,65 @@
+   // FIXME: should round
+   cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
+   cairo_clip(windowCtx);
+-  cairo_set_source_surface(windowCtx, _surface, 0, 0);
+   cairo_set_operator(windowCtx, CAIRO_OPERATOR_SOURCE);
+-  cairo_paint(windowCtx);
++  if (_shadowSurface != NULL)
++    {
++      /* The window's contents inside its rounded visible part, the
++	 shadow everywhere else (the margin and the corners). Rectangles
++	 copy within the X server; only the four corners take the rounded
++	 clip, so nothing the gui draws can un-round them. */
++      int width = GSWINDEVICE->xframe.size.width;
++      int height = GSWINDEVICE->xframe.size.height;
++      int x0 = GSWINDEVICE->shadow[0], x1 = width - GSWINDEVICE->shadow[1];
++      int y0 = GSWINDEVICE->shadow[2], y1 = height - GSWINDEVICE->shadow[3];
++      int r = GSWINDEVICE->corner_radius;
++      int corners[4][2] = { { x0, y0 }, { x1 - r, y0 }, { x0, y1 - r }, { x1 - r, y1 - r } };
++      int i;
++
++      cairo_save(windowCtx);
++      cairo_rectangle(windowCtx, x0, y0 + r, x1 - x0, (y1 - r) - (y0 + r));
++      cairo_rectangle(windowCtx, x0 + r, y0, (x1 - r) - (x0 + r), r);
++      cairo_rectangle(windowCtx, x0 + r, y1 - r, (x1 - r) - (x0 + r), r);
++      cairo_clip(windowCtx);
++      cairo_set_source_surface(windowCtx, _surface, 0, 0);
++      cairo_paint(windowCtx);
++      cairo_restore(windowCtx);
++
++      cairo_save(windowCtx);
++      cairo_rectangle(windowCtx, 0, 0, width, y0);
++      cairo_rectangle(windowCtx, 0, y1, width, height - y1);
++      cairo_rectangle(windowCtx, 0, y0, x0, y1 - y0);
++      cairo_rectangle(windowCtx, x1, y0, width - x1, y1 - y0);
++      cairo_clip(windowCtx);
++      cairo_set_source_surface(windowCtx, _shadowSurface, 0, 0);
++      cairo_paint(windowCtx);
++      cairo_restore(windowCtx);
++
++      for (i = 0; r > 0 && i < 4; i++)
++	{
++	  NSRect square = NSMakeRect(corners[i][0], corners[i][1], r, r);
++
++	  if (!NSIntersectsRect(square, rect))
++	    {
++	      continue;
++	    }
++	  cairo_save(windowCtx);
++	  cairo_rectangle(windowCtx, corners[i][0], corners[i][1], r, r);
++	  cairo_clip(windowCtx);
++	  cairo_set_source_surface(windowCtx, _shadowSurface, 0, 0);
++	  cairo_paint(windowCtx);
++	  visible_path(windowCtx, width, height, GSWINDEVICE->shadow, r);
++	  cairo_clip(windowCtx);
++	  cairo_set_source_surface(windowCtx, _surface, 0, 0);
++	  cairo_paint(windowCtx);
++	  cairo_restore(windowCtx);
++	}
++    }
++  else
++    {
++      cairo_set_source_surface(windowCtx, _surface, 0, 0);
++      cairo_paint(windowCtx);
++    }
+ 
+   // Debugging
+   // cairo_reset_clip(windowCtx);
+diff --git a/Source/x11/XGServerEvent.m b/Source/x11/XGServerEvent.m
+index c98ecb3..45c85de 100644
+--- a/Source/x11/XGServerEvent.m
++++ b/Source/x11/XGServerEvent.m
+@@ -354,7 +354,7 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+   NSPoint o;
+   float t, b, l, r;
+ 
+-  [self styleoffsets: &l : &r : &t : &b : style : win->ident];
++  [self _offsets: &l : &r : &t : &b for: win];
+   o.x = x.x + l;
+   o.y = NSHeight(win->xframe) - x.y + b;
+ 
+@@ -998,6 +998,11 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+ 
+             cWin->xframe = x;
+             n = [self _XFrameToOSFrame: x for: cWin];
++            if (!NSEqualSizes(r.size, x.size))
++              {
++                /* The visible part, which takes pointer events. */
++                [self _updateShadowOf: cWin];
++              }
+             NSDebugLLog(@"Moving",
+                         @"Update win %lu:\n   original:%@\n   new:%@",
+                         cWin->number, NSStringFromRect(r), 
+@@ -1218,6 +1223,17 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+               {
+                 NSRect rect;
+                 NSTimeInterval ts = (NSTimeInterval)generic.lastMotion;
++
++                /* The gui doesn't draw the shadow margin, which is outside
++                   its window: copy it from the backing store. */
++                if ((cWin->shadow[0] || cWin->shadow[1] || cWin->shadow[2]
++                     || cWin->shadow[3])
++                    && (cWin->gdriverProtocol & GDriverHandlesExpose))
++                  {
++                    [self _addExposedRectangle: rectangle
++                                              : cWin->number
++                                              : NO];
++                  }
+                 
+                 rect = [self _XWinRectToOSWinRect: NSMakeRect(
+                         rectangle.x, rectangle.y, rectangle.width, rectangle.height)
+@@ -1618,6 +1634,45 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+         NSDebugLLog(@"NSEvent", @"%lu PropertyNotify - '%s'\n",
+                     xEvent.xproperty.window,
+                     XGetAtomName(dpy, xEvent.xproperty.atom));
++	/* Maximized, fullscreen or tiled windows have no shadow margin. */
++	if (xEvent.xproperty.atom == generic._NET_WM_STATE_ATOM
++	  || xEvent.xproperty.atom == generic._GTK_EDGE_CONSTRAINTS_ATOM)
++	  {
++	    gswindow_device_t *sWin
++	      = [XGServer _windowForXWindow: xEvent.xproperty.window];
++
++	    if (sWin != 0 && [self _updateShadowSizeOf: sWin])
++	      {
++		NSRect n = [self _XFrameToOSFrame: sWin->xframe for: sWin];
++		NSWindow *window = [NSApp windowWithWindowNumber: sWin->number];
++		NSEvent *r;
++
++		[self _updateShadowOf: sWin];
++		/* The frame is the X window less the new margin. The window
++		   manager moves and resizes the X window to match, which
++		   arrives as a ConfigureNotify. */
++		r = [NSEvent otherEventWithType: NSAppKitDefined
++				       location: n.origin
++				  modifierFlags: eventFlags
++				      timestamp: 0
++				   windowNumber: sWin->number
++					context: gcontext
++				        subtype: GSAppKitWindowResized
++					  data1: n.size.width
++					  data2: n.size.height];
++		[window sendEvent: r];
++		r = [NSEvent otherEventWithType: NSAppKitDefined
++				       location: eventLocation
++				  modifierFlags: eventFlags
++				      timestamp: 0
++				   windowNumber: sWin->number
++					context: gcontext
++				        subtype: GSAppKitWindowMoved
++					  data1: n.origin.x
++					  data2: n.origin.y];
++		[window sendEvent: r];
++	      }
++	  }
+ 	if (xEvent.xproperty.atom == generic.WM_STATE_ATOM)
+ 	  {
+ 	    if (cWin == 0 || xEvent.xproperty.window != cWin->ident)
+diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
+index 19c5e9e..078122f 100644
+--- a/Source/x11/XGServerWindow.m
++++ b/Source/x11/XGServerWindow.m
+@@ -40,6 +40,7 @@
+ #include <AppKit/NSApplication.h>
+ #include <AppKit/NSCursor.h>
+ #include <AppKit/NSGraphics.h>
++#include <AppKit/NSPanel.h>
+ #include <AppKit/NSWindow.h>
+ #include <AppKit/NSImage.h>
+ #include <AppKit/NSBitmapImageRep.h>
+@@ -64,6 +65,9 @@
+ #if HAVE_XCURSOR
+ #include <X11/Xcursor/Xcursor.h>
+ #endif
++#ifdef XRENDER
++#include <X11/extensions/Xrender.h>
++#endif
+ #ifdef HAVE_XSHAPE
+ #include <X11/extensions/shape.h>
+ #endif
+@@ -341,8 +345,7 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
+   hints->functions = 0;
+ 
+   /* Now add to the hints from the styleMask */
+-  if (styleMask == NSBorderlessWindowMask
+-      || !handlesWindowDecorations)
++  if (styleMask == NSBorderlessWindowMask)
+     {
+       hints->flags |= MWM_HINTS_DECORATIONS;
+       hints->flags |= MWM_HINTS_FUNCTIONS;
+@@ -386,6 +389,19 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
+ 	  hints->functions |= MWM_FUNC_MAXIMIZE;
+ 	  hints->functions |= MWM_FUNC_MOVE;
+         }
++      if (!handlesWindowDecorations)
++	{
++	  /* The gui library draws the decorations: ask for none, but keep
++	     the functions, so that the window manager still moves,
++	     resizes, maximizes, minimizes and closes the window when the
++	     user or the decorations ask it to (_NET_WM_MOVERESIZE, its
++	     window menu, keyboard shortcuts). With functions 0 a window
++	     manager such as Mutter refuses all of them. */
++	  hints->flags |= MWM_HINTS_DECORATIONS;
++	  hints->flags |= MWM_HINTS_FUNCTIONS;
++	  hints->decorations = 0;
++	  hints->functions |= MWM_FUNC_MOVE;
++	}
+       if (styleMask & NSIconWindowMask)
+ 	{
+ 	  // FIXME
+@@ -506,7 +522,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+   NSRect	x;
+   float	t, b, l, r;
+ 
+-  [self styleoffsets: &l : &r : &t : &b : style : win->ident];
++  [self _offsets: &l : &r : &t : &b for: win];
+ 
+   x.size.width = o.size.width - l - r;
+   x.size.height = o.size.height - t - b;
+@@ -550,11 +566,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+ - (NSRect) _XWinRectToOSWinRect: (NSRect)x for: (void*)window
+ {
+   gswindow_device_t	*win = (gswindow_device_t*)window;
+-  unsigned int		style = win->win_attrs.window_style;
+   NSRect	o;
+   float	t, b, l, r;
+ 
+-  [self styleoffsets: &l : &r : &t : &b : style : win->ident];
++  [self _offsets: &l : &r : &t : &b for: win];
+   o.size.width = x.size.width;
+   o.size.height = x.size.height;
+   o.origin.x = x.origin.x + l;
+@@ -577,7 +592,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+   NSRect	o;
+   float	t, b, l, r;
+ 
+-  [self styleoffsets: &l : &r : &t : &b : style : win->ident];
++  [self _offsets: &l : &r : &t : &b for: win];
+   o = x;
+   o.origin.y = xScreenSize.height - x.origin.y;
+   o.origin.y = o.origin.y - x.size.height - b;
+@@ -590,6 +605,262 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+   return o;
+ }
+ 
++/*
++ * The offsets between the NSWindow frame and the X window: the window
++ * manager's decorations when it draws them (-styleoffsets:::::), else the
++ * shadow margin, which makes the X window larger than the frame.
++ */
++- (void) _offsets: (float *)l : (float *)r : (float *)t : (float *)b
++	      for: (gswindow_device_t *)win
++{
++  if (!handlesWindowDecorations)
++    {
++      *l = -win->shadow[0];
++      *r = -win->shadow[1];
++      *t = -win->shadow[2];
++      *b = -win->shadow[3];
++      return;
++    }
++  [self styleoffsets: l : r : t : b : win->win_attrs.window_style
++		    : win->ident];
++}
++
++/* The shadow margin, as GNOME's windows have it (libadwaita 1.7 measured
++ * under Mutter): the shadow reaches about 30 pixels out at the sides, and
++ * sits lower, so less at the top and more at the bottom.
++ */
++static const int shadowMargin[4] = { 30, 30, 24, 36 };
++
++/* How far outside the visible edge a resizable window takes presses, for
++ * resizing from the shadow (GTK 4 under Mutter: 12 pixels).
++ */
++static const int shadowResizeBand = 12;
++
++/*
++ * A 32-bit visual with an alpha channel, and a colormap for it, for windows
++ * with a shadow margin: the margin is transparent except for the shadow.
++ * (The screen context uses the default visual, which has no alpha.)
++ * NO when the display has none.
++ */
++static BOOL
++argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
++{
++  static Visual *found = NULL;
++  static Colormap foundCmap = None;
++  static BOOL looked = NO;
++
++  if (!looked)
++    {
++#ifdef XRENDER
++      XVisualInfo templ, *vinfo;
++      int count, i;
++
++      templ.screen = screen;
++      templ.depth = 32;
++      templ.class = TrueColor;
++      vinfo = XGetVisualInfo(dpy, VisualScreenMask | VisualDepthMask
++			     | VisualClassMask, &templ, &count);
++      for (i = 0; vinfo != NULL && i < count && found == NULL; i++)
++	{
++	  XRenderPictFormat *format
++	    = XRenderFindVisualFormat(dpy, vinfo[i].visual);
++
++	  if (format != NULL && format->type == PictTypeDirect
++	    && format->direct.alphaMask)
++	    {
++	      found = vinfo[i].visual;
++	      foundCmap = XCreateColormap(dpy, RootWindow(dpy, screen),
++					  found, AllocNone);
++	    }
++	}
++      if (vinfo != NULL)
++	{
++	  XFree(vinfo);
++	}
++#endif
++      looked = YES;
++    }
++  *visual = found;
++  *cmap = foundCmap;
++  return found != NULL;
++}
++
++/*
++ * A styled window gets a shadow margin when the gui draws the decorations,
++ * GSBackWindowShadows is YES (a theme that draws the decorations sets it in
++ * its GSThemeDomain), and a compositing manager draws its transparency
++ * (without one the margin would show black). GSBackWindowCornerRadius
++ * rounds the corners of such a window.
++ */
++- (BOOL) _windowGetsShadow: (unsigned int)style
++{
++  char name[32];
++  NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
++
++  if (handlesWindowDecorations
++    || (style & (NSTitledWindowMask | NSClosableWindowMask
++		 | NSMiniaturizableWindowMask | NSResizableWindowMask
++		 | NSDocModalWindowMask)) == 0
++    || (style & (NSIconWindowMask | NSMiniWindowMask
++		 | NSFullScreenWindowMask)) != 0
++    || [defs boolForKey: @"GSBackWindowShadows"] == NO)
++    {
++      return NO;
++    }
++  snprintf(name, sizeof(name), "_NET_WM_CM_S%d", defScreen);
++  if (XGetSelectionOwner(dpy, XInternAtom(dpy, name, False)) == None)
++    {
++      return NO;
++    }
++  {
++    Visual *visual;
++    Colormap cmap;
++
++    return argb_visual(dpy, defScreen, &visual, &cmap);
++  }
++}
++
++/*
++ * The window manager's state decides the margin: none while the window is
++ * maximized, fullscreen or tiled against an edge (_GTK_EDGE_CONSTRAINTS),
++ * as GTK drops its shadow then. Returns YES when the margin changed.
++ */
++- (BOOL) _updateShadowSizeOf: (gswindow_device_t *)win
++{
++  Atom type;
++  int format;
++  unsigned long count, remaining;
++  unsigned char *data = NULL;
++  BOOL flat = NO;
++  BOOL changed = NO;
++  int dw = 0, dh = 0;
++  int i;
++
++  if (!win->shadow_eligible)
++    {
++      return NO;
++    }
++  if (XGetWindowProperty(dpy, win->ident, generic._NET_WM_STATE_ATOM, 0, 64,
++			 False, XA_ATOM, &type, &format, &count, &remaining,
++			 &data) == Success && data != NULL)
++    {
++      Atom *atoms = (Atom *)data;
++      BOOL hasVert = NO, hasHorz = NO;
++      unsigned long j;
++
++      for (j = 0; j < count; j++)
++	{
++	  hasVert = hasVert
++	    || atoms[j] == generic._NET_WM_STATE_MAXIMIZED_VERT_ATOM;
++	  hasHorz = hasHorz
++	    || atoms[j] == generic._NET_WM_STATE_MAXIMIZED_HORZ_ATOM;
++	  flat = flat || atoms[j] == generic._NET_WM_STATE_FULLSCREEN_ATOM;
++	}
++      flat = flat || (hasVert && hasHorz);
++      XFree(data);
++      data = NULL;
++    }
++  if (XGetWindowProperty(dpy, win->ident,
++			 generic._GTK_EDGE_CONSTRAINTS_ATOM, 0, 1, False,
++			 XA_CARDINAL, &type, &format, &count, &remaining,
++			 &data) == Success && data != NULL)
++    {
++      /* The top, right, bottom and left "tiled" bits. */
++      if (count > 0 && (((unsigned long *)data)[0] & 0x55) != 0)
++	{
++	  flat = YES;
++	}
++      XFree(data);
++    }
++  for (i = 0; i < 4; i++)
++    {
++      int wanted = flat ? 0 : shadowMargin[i];
++
++      if (win->shadow[i] != wanted)
++	{
++	  if (i < 2)
++	    {
++	      dw += wanted - win->shadow[i];
++	    }
++	  else
++	    {
++	      dh += wanted - win->shadow[i];
++	    }
++	  win->shadow[i] = wanted;
++	  changed = YES;
++	}
++    }
++  /* The size hints are for the X window, margin included: follow the
++     margin, as GTK does. Stale hints would have the window manager
++     restore a maximized window to the old minimum plus the margin. */
++  if (changed && (win->siz_hints.flags & (PMinSize | PMaxSize)))
++    {
++      if (win->siz_hints.flags & PMinSize)
++	{
++	  win->siz_hints.min_width += dw;
++	  win->siz_hints.min_height += dh;
++	}
++      if (win->siz_hints.flags & PMaxSize)
++	{
++	  win->siz_hints.max_width += dw;
++	  win->siz_hints.max_height += dh;
++	}
++      setNormalHints(dpy, win);
++    }
++  return changed;
++}
++
++/*
++ * Tells the window manager where the visible window is in the X window
++ * (_GTK_FRAME_EXTENTS), and lets pointer events in the margin through to
++ * what is behind (the input shape), except in the resize band.
++ */
++- (void) _updateShadowOf: (gswindow_device_t *)win
++{
++  unsigned long extents[4];
++  int i;
++
++  if (!win->shadow_eligible)
++    {
++      return;
++    }
++  for (i = 0; i < 4; i++)
++    {
++      extents[i] = win->shadow[i];
++    }
++  XChangeProperty(dpy, win->ident, generic._GTK_FRAME_EXTENTS_ATOM,
++		  XA_CARDINAL, 32, PropModeReplace, (unsigned char *)extents, 4);
++#ifdef HAVE_XSHAPE
++  if (win->shadow[0] || win->shadow[1] || win->shadow[2] || win->shadow[3])
++    {
++      XRectangle visible;
++      /* A resizable window takes presses in a band round its visible
++	 edge, where GTK's windows resize from: the gui handles them. */
++      int band[4];
++
++      for (i = 0; i < 4; i++)
++	{
++	  band[i] = win->shadow_resizable
++	    ? MIN(shadowResizeBand, win->shadow[i]) : 0;
++	}
++      visible.x = win->shadow[0] - band[0];
++      visible.y = win->shadow[2] - band[2];
++      visible.width = MAX(1, (int)NSWidth(win->xframe)
++			     - win->shadow[0] - win->shadow[1]
++			     + band[0] + band[1]);
++      visible.height = MAX(1, (int)NSHeight(win->xframe)
++			      - win->shadow[2] - win->shadow[3]
++			      + band[2] + band[3]);
++      XShapeCombineRectangles(dpy, win->ident, ShapeInput, 0, 0,
++			      &visible, 1, ShapeSet, Unsorted);
++    }
++  else
++    {
++      XShapeCombineMask(dpy, win->ident, ShapeInput, 0, 0, None, ShapeSet);
++    }
++#endif
++}
++
+ /*
+  * Convert a window frame in X absolute screen coordinates to
+  * a frame suitable for setting X hints for a window manager.
+@@ -2048,6 +2319,19 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+       window->win_attrs.window_style
+         = style & (NSIconWindowMask | NSMiniWindowMask);
+     }
++  if ([self _windowGetsShadow: style])
++    {
++      int i;
++
++      window->shadow_eligible = YES;
++      window->shadow_resizable = (style & NSResizableWindowMask) != 0;
++      for (i = 0; i < 4; i++)
++	{
++	  window->shadow[i] = shadowMargin[i];
++	}
++      window->corner_radius = MAX(0, [[NSUserDefaults standardUserDefaults]
++	integerForKey: @"GSBackWindowCornerRadius"]);
++    }
+ 
+   frame = [self _OSFrameToXFrame: frame for: window];
+ 
+@@ -2074,17 +2358,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+ 
+   window->xwn_attrs.override_redirect = False;
+ 
+-  window->ident = XCreateWindow(dpy, window->root,
+-				NSMinX(frame), NSMinY(frame),
+-				NSWidth(frame), NSHeight(frame),
+-				0,
+-				context->depth,
+-				CopyFromParent,
+-				context->visual,
+-                                // Don't set the CWBackPixel, as the background of the
+-                                // window may be different.
+-				(CWColormap | CWBorderPixel | CWOverrideRedirect),
+-				&window->xwn_attrs);
++  if (window->shadow_eligible)
++    {
++      Visual *visual;
++      Colormap cmap;
++
++      /* An alpha channel for the transparent margin, which starts
++	 transparent. */
++      argb_visual(dpy, defScreen, &visual, &cmap);
++      window->depth = 32;
++      window->xwn_attrs.colormap = cmap;
++      window->xwn_attrs.border_pixel = 0;
++      window->xwn_attrs.background_pixel = 0;
++      window->ident = XCreateWindow(dpy, window->root,
++				    NSMinX(frame), NSMinY(frame),
++				    NSWidth(frame), NSHeight(frame),
++				    0, 32, InputOutput, visual,
++				    (CWColormap | CWBorderPixel | CWBackPixel
++				     | CWOverrideRedirect),
++				    &window->xwn_attrs);
++    }
++  else
++    {
++      window->ident = XCreateWindow(dpy, window->root,
++				    NSMinX(frame), NSMinY(frame),
++				    NSWidth(frame), NSHeight(frame),
++				    0,
++				    context->depth,
++				    CopyFromParent,
++				    context->visual,
++				    // Don't set the CWBackPixel, as the background
++				    // of the window may be different.
++				    (CWColormap | CWBorderPixel
++				     | CWOverrideRedirect),
++				    &window->xwn_attrs);
++    }
+ 
+   /*
+    * Mark the window as the application with name & class so the WM can group it
+@@ -2098,6 +2406,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+   window->visibility = -1;
+   window->wm_state = WithdrawnState;
+ 
++  [self _updateShadowOf: window];
++
+   // Create an X GC for the content view set it's colors
+   values.foreground = window->xwn_attrs.background_pixel;
+   values.background = window->xwn_attrs.background_pixel;
+@@ -2842,8 +3152,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+     }
+ #endif
+ 
+-  [self styleoffsets: &l : &r : &t : &b
+-		    : window->win_attrs.window_style : window->ident];
++  [self _offsets: &l : &r : &t : &b for: window];
+   GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
+   DPSinitmatrix(ctxt);
+   //DPStranslate(ctxt, -l, -b);
+@@ -3933,8 +4242,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+   valuemask = (GCFunction | GCPlaneMask | GCClipMask);
+   XChangeGC(dpy, window->gc, valuemask, &values);
+ 
+-  [self styleoffsets: &l : &r : &t : &b
+-		    : window->win_attrs.window_style : window->ident];
++  [self _offsets: &l : &r : &t : &b for: window];
+   xi = rect.origin.x = NSMinX(rect) - l;
+   yi = rect.origin.y = NSHeight(window->xframe) + b - NSMaxY(rect);
+   width = NSWidth(rect);
