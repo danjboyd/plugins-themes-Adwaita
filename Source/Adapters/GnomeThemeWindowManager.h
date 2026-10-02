@@ -73,8 +73,8 @@ BOOL GnomeThemeWindowManagerHasShadow(NSWindow *window);
 BOOL GnomeThemeWindowManagerShadowExtents(NSWindow *window, CGFloat extents[4]);
 
 /* Whether the window's pixels have an alpha channel (a 32-bit visual on
-   X11), so what it leaves transparent shows what is behind it; NO when
-   the backend can't tell. */
+   X11) and a compositing manager shows it, so what the window leaves
+   transparent shows what is behind it; NO when the backend can't tell. */
 BOOL GnomeThemeWindowManagerHasAlpha(NSWindow *window);
 
 /* Whether the window manager has the window maximised; NO in `known` when

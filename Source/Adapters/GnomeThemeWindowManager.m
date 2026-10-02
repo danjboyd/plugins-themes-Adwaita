@@ -295,6 +295,17 @@ GnomeThemeWindowManagerHasAlpha(NSWindow *window)
     {
       return NO;
     }
+  /* The alpha shows only while a compositing manager draws it; without
+     one, transparent pixels are black. */
+  {
+    char name[32];
+
+    snprintf (name, sizeof (name), "_NET_WM_CM_S%d", DefaultScreen (display));
+    if (XGetSelectionOwner (display, XInternAtom (display, name, False)) == None)
+      {
+        return NO;
+      }
+  }
   return attributes.depth == 32;
 }
 
