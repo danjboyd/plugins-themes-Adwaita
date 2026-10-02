@@ -267,13 +267,9 @@ GnomeThemeWindowManagerHasShadow(NSWindow *window)
   if (XGetWindowProperty (display, xwindow, XInternAtom (display, "_GTK_FRAME_EXTENTS", False), 0, 4, False,
                           XA_CARDINAL, &type, &format, &count, &remaining, &data) == Success && data != NULL)
     {
-      unsigned long *extents = (unsigned long *)data;
-      unsigned long i;
-
-      for (i = 0; i < count; i++)
-        {
-          shadow = shadow || extents[i] != 0;
-        }
+      /* Present even while the extents are 0 (maximised or tiled): the
+         window then has neither shadow nor border, as libadwaita's. */
+      shadow = type == XA_CARDINAL;
       XFree (data);
     }
   return shadow;

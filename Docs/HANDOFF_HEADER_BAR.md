@@ -274,7 +274,7 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-## Phase 2b in progress (stopped 2026-09-25 evening)
+## Phase 2b in progress (started 2026-09-25; step 1 done 2026-10-02)
 
 Work in two new git worktrees, on local branches, **nothing committed or
 pushed**, nothing installed system-wide:
@@ -312,22 +312,25 @@ pushed**, nothing installed system-wide:
     `_GTK_FRAME_EXTENTS` and an XShape input region of the visible part
     (clicks in the margin go through). `-_updateShadowSizeOf:` drops the
     margin while `_NET_WM_STATE` is maximised (both) or fullscreen, or
-    `_GTK_EDGE_CONSTRAINTS` has a tiled bit; PropertyNotify on those calls
-    it and sends the gui the new frame; ConfigureNotify reshapes the input
-    region; Expose copies the margin from the backing store.
+    `_GTK_EDGE_CONSTRAINTS` has a tiled bit, and moves the min and max
+    size hints (X window sizes, margin included) by the change, as GTK
+    does; PropertyNotify on those calls it and sends the gui the new
+    frame; ConfigureNotify reshapes the input region; Expose copies the
+    margin from the backing store.
   - XGCairoModernSurface keeps a separate shadow image
     (`create_shadow()`: 0.19·e^(−d/10) at the sides, weaker above, a little
     stronger below, following the corner radius) and `-handleExposeRect:`
     copies the backing store through a rounded clip of the visible part
     (`visible_path()`) and the shadow everywhere else, so nothing the gui
     draws can un-round the corners.
-- Theme (this repo, uncommitted): `Resources/Info-gnustep.plist`
+- Theme (this repo, committed in 6926fb0): `Resources/Info-gnustep.plist`
   GSThemeDomain sets `GSBackHandlesWindowDecorations = NO`,
   `GSBackWindowShadows = YES`, `GSBackWindowCornerRadius = 15`;
-  `GnomeThemeWindowManagerHasShadow()` reads `_GTK_FRAME_EXTENTS`, and the
-  header bar then paints its 1px border in the window background (the
-  shadow's outline is the edge, as in libadwaita). `make check-quirks`
-  passes (38, 42, 48, 52, 9, 9).
+  `GnomeThemeWindowManagerHasShadow()` is YES when `_GTK_FRAME_EXTENTS`
+  exists (also while it is 0, maximised or tiled), and the header bar then
+  paints its 1px border in the window background (the shadow's outline is
+  the edge, as in libadwaita; maximised, libadwaita has no border at all).
+  `make check-quirks` passes.
 
 Verified under Mutter (GNOME Shell on a private Xvfb, `:63`): the X window
 is 32-bit, `_GTK_FRAME_EXTENTS` = 30, 30, 24, 36, the visible window sits
@@ -335,10 +338,37 @@ where the frame says, the shadow is there (about 18% at the edge, like
 libadwaita's) and all four corners are rounded with the shadow following
 them.
 
+Step 1 done (2026-10-02, GNOME Shell on a private Xvfb, 1280x800 and
+1920x1080, against libadwaita 1.7 in the same session): maximise by
+double-click, by the button and by Super+Up, restore by double-click, by
+the button and by dragging the bar down, tile with Super+Left and
+Super+Right and untile with Super+Down. Maximised and tiled, the extents
+are 0, the window fills the work area (or its half) with square corners
+and no border, and the button shows the restore icon (6px; 8px
+otherwise). Restored and untiled, the screen is pixel for pixel what it
+was before (shadow, corners, frame). The free edge of a tiled window
+resizes. Two fixes on the way:
+
+- libs-back: the min/max size hints kept the margin while it was 0, so
+  Mutter restored a maximised window to the stale minimum (the window came
+  back 20px wider and taller); `-_updateShadowSizeOf:` now moves them with
+  the margin.
+- Theme: maximised, `_GTK_FRAME_EXTENTS` is 0 and the header bar drew the
+  grey border of a window without a compositor; libadwaita has none.
+
+Differences from libadwaita left as they are: tiled, GTK keeps a 20px
+margin (extents 20, 20, 20, 20) with no shadow but a faint 1px outline
+outside the edge and its resize zone there; ours drops the margin, and
+the free edge resizes from inside the window. Normal, GTK's extents are
+61, 61, 55, 67 (its shadow plus resize area outside the window); ours are
+the 30, 30, 24, 36 the visible shadow needs, and clicks in the margin go
+through, so there is no resize zone outside the edge (step 2 decides
+whether that matters). ThemeDemo's minimum width (722) doesn't fit half
+of a 1280px screen, so Mutter won't tile it there: test tiling at
+1920x1080.
+
 Not yet tested (next steps, in order):
 
-1. Maximise and restore: the margin should drop to 0 (square corners, the
-   window filling the work area) and come back. Also tiling (Super+Left).
 2. Moves and resizes handed to Mutter with the margin (xdotool on `:63` as
    in `make check-mutter`), and a click in the margin reaching the window
    behind (input shape).
