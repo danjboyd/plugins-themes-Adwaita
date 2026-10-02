@@ -100,6 +100,65 @@ enum
 - (void) _releaseMouse: (id)sender;
 @end
 
+@interface NSToolbar (GnomeThemeHeaderBarPrivate)
+- (NSView *) _toolbarView;
+@end
+
+@interface NSToolbarItem (GnomeThemeHeaderBarPrivate)
+- (NSView *) _backView;
+@end
+
+@interface NSView (GnomeThemeHeaderBarToolbarView)
+- (void) _reload;
+- (CGFloat) _heightFromLayout;
+- (NSToolbarItem *) toolbarItem;
+- (BOOL) holdsToolbarInBar;
+@end
+
+/* GSWindowDecorationView's (ToolbarPrivate) methods, overridden below. */
+@interface GSWindowDecorationView (GnomeThemeHeaderBarToolbar)
+- (void) addToolbarView: (NSView *)toolbarView;
+- (void) removeToolbarView: (NSView *)toolbarView;
+- (void) adjustToolbarView: (NSView *)toolbarView;
+@end
+
+/* The app shows its toolbar in the header bar row, as a GNOME app packs
+   its buttons there, instead of as a row of its own: the user's default,
+   then the app's Info.plist. Opt-in, as the app's toolbar has to suit it
+   (a few icons, a flexible space between those at the start and those at
+   the end). */
+static BOOL
+GnomeThemeHeaderBarToolbarEnabled(void)
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  id declared;
+
+  if ([defaults objectForKey: @"GnomeThemeHeaderBarToolbar"] != nil)
+    {
+      return [defaults boolForKey: @"GnomeThemeHeaderBarToolbar"];
+    }
+  declared = [[[NSBundle mainBundle] infoDictionary] objectForKey: @"GnomeThemeHeaderBarToolbar"];
+  return [declared respondsToSelector: @selector(boolValue)] && [declared boolValue];
+}
+
+BOOL
+GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar)
+{
+  NSView *superview = [[toolbar _toolbarView] superview];
+
+  return [superview respondsToSelector: @selector(holdsToolbarInBar)] && [superview holdsToolbarInBar];
+}
+
+static BOOL
+GnomeThemeToolbarItemIsSpace(NSToolbarItem *item)
+{
+  NSString *identifier = [item itemIdentifier];
+
+  return [identifier isEqualToString: NSToolbarSpaceItemIdentifier]
+    || [identifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier]
+    || [identifier isEqualToString: NSToolbarSeparatorItemIdentifier];
+}
+
 BOOL
 GnomeThemeUsesRightToLeft(void)
 {
@@ -619,6 +678,151 @@ GnomeThemeResizeCursor(NSUInteger edges)
     {
       [self mirrorBarLayout];
     }
+  [self layoutToolbarInBar];
+}
+
+/* Whether the window's toolbar is in the bar: a titled window, the app
+   opting in, the toolbar shown. */
+- (BOOL) holdsToolbarInBar
+{
+  NSToolbar *toolbar = [window toolbar];
+
+  return hasTitleBar && GnomeThemeHeaderBarToolbarEnabled () && toolbar != nil && [toolbar isVisible];
+}
+
+/* The toolbar between the buttons at the bar's start and end, 6pt from
+   them (its items keep 3pt at each side), as libadwaita spaces a header
+   bar's children. */
+- (void) layoutToolbarInBar
+{
+  NSView *toolbarView = [[window toolbar] _toolbarView];
+  NSRect frame;
+
+  if ([self holdsToolbarInBar] == NO || [toolbarView superview] != self)
+    {
+      return;
+    }
+  frame = NSMakeRect (_startLimit + 3.0, NSMaxY ([self bounds]) - GnomeThemeHeaderBarHeight,
+                      MAX (0.0, _endLimit - _startLimit - 6.0), GnomeThemeHeaderBarHeight);
+  if (NSWidth (frame) != NSWidth ([toolbarView frame]))
+    {
+      /* libs-gui lays the items out again for a new width. */
+      [toolbarView setFrameSize: NSMakeSize (NSWidth (frame), 100.0)];
+      [toolbarView _reload];
+    }
+  [toolbarView setFrame: frame];
+}
+
+/* The toolbar's row of its own is gone: the content keeps the window's
+   height, and the window doesn't grow or shrink with the toolbar. */
+- (NSRect) contentRectForFrameRect: (NSRect)aRect
+                         styleMask: (NSUInteger)aStyle
+{
+  NSRect content = [super contentRectForFrameRect: aRect styleMask: aStyle];
+
+  if ([self holdsToolbarInBar])
+    {
+      content.size.height += [[[window toolbar] _toolbarView] _heightFromLayout];
+    }
+  return content;
+}
+
+- (NSRect) frameRectForContentRect: (NSRect)aRect
+                         styleMask: (NSUInteger)aStyle
+{
+  NSRect frame = [super frameRectForContentRect: aRect styleMask: aStyle];
+
+  if ([self holdsToolbarInBar])
+    {
+      frame.size.height -= [[[window toolbar] _toolbarView] _heightFromLayout];
+    }
+  return frame;
+}
+
+- (void) addToolbarView: (NSView *)toolbarView
+{
+  if (hasTitleBar == NO || GnomeThemeHeaderBarToolbarEnabled () == NO)
+    {
+      [super addToolbarView: toolbarView];
+      return;
+    }
+  hasToolbar = YES;
+  /* In the bar before its items are laid out: they lay out for it. */
+  [self addSubview: toolbarView];
+  [toolbarView setFrameSize: NSMakeSize (MAX (0.0, _endLimit - _startLimit - 6.0), 100.0)];
+  [toolbarView _reload];
+  [self layoutToolbarInBar];
+  [self setNeedsDisplayInRect: titleBarRect];
+}
+
+- (void) removeToolbarView: (NSView *)toolbarView
+{
+  if ([toolbarView superview] != self || NSMinY ([toolbarView frame]) < NSMinY (titleBarRect))
+    {
+      [super removeToolbarView: toolbarView];
+      return;
+    }
+  hasToolbar = NO;
+  [toolbarView removeFromSuperviewWithoutNeedingDisplay];
+  [self setNeedsDisplayInRect: titleBarRect];
+}
+
+- (void) adjustToolbarView: (NSView *)toolbarView
+{
+  if ([self holdsToolbarInBar])
+    {
+      [self layoutToolbarInBar];
+      [self setNeedsDisplayInRect: titleBarRect];
+      return;
+    }
+  [super adjustToolbarView: toolbarView];
+}
+
+/* Where the title goes when the toolbar is in the bar: in its widest
+   flexible space (the items before it are the bar's start, those after
+   it its end), else after the items. */
+- (void) titleLimitsWithToolbar: (CGFloat *)minX : (CGFloat *)maxX
+{
+  NSEnumerator *enumerator = [[[window toolbar] items] objectEnumerator];
+  NSToolbarItem *item;
+  NSRect widest = NSZeroRect;
+  CGFloat itemsEnd = *minX;
+
+  if ([self holdsToolbarInBar] == NO)
+    {
+      return;
+    }
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      NSView *backView = [item _backView];
+      NSRect frame;
+
+      if ([backView superview] == nil || [backView isHiddenOrHasHiddenAncestor])
+        {
+          continue;
+        }
+      frame = [self convertRect: [backView bounds] fromView: backView];
+      if ([[item itemIdentifier] isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
+        {
+          if (NSWidth (frame) > NSWidth (widest))
+            {
+              widest = frame;
+            }
+        }
+      else
+        {
+          itemsEnd = MAX (itemsEnd, NSMaxX (frame) + GnomeThemeHeaderBarTitleSpacing);
+        }
+    }
+  if (NSWidth (widest) > 0.0)
+    {
+      *minX = MAX (*minX, NSMinX (widest));
+      *maxX = MIN (*maxX, NSMaxX (widest));
+    }
+  else
+    {
+      *minX = MAX (*minX, itemsEnd);
+    }
 }
 
 /* In a right-to-left language GTK mirrors the header bar: button-layout's
@@ -687,7 +891,8 @@ GnomeThemeResizeCursor(NSUInteger edges)
   while ((subview = [enumerator nextObject]) != nil)
     {
       if (subview != closeButton && subview != miniaturizeButton && subview != _zoomButton
-        && subview != _menuButton)
+        && subview != _menuButton
+        && ([self holdsToolbarInBar] == NO || subview != [[window toolbar] _toolbarView]))
         {
           NSPoint origin = [subview frame].origin;
 
@@ -700,9 +905,21 @@ GnomeThemeResizeCursor(NSUInteger edges)
 {
   NSEnumerator *enumerator;
   NSView *subview;
+  BOOL inBar = [self holdsToolbarInBar];
 
+  /* GSWindowDecorationView would give the toolbar a row above the
+     content: in the bar, it has none. */
+  if (inBar)
+    {
+      hasToolbar = NO;
+    }
   [super layout];
+  if (inBar)
+    {
+      hasToolbar = YES;
+    }
   [self scaleContentOrigin];
+  [self layoutToolbarInBar];
   enumerator = [[self subviews] objectEnumerator];
   while ((subview = [enumerator nextObject]) != nil)
     {
@@ -774,6 +991,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   CGFloat x;
   CGFloat baseline;
 
+  [self titleLimitsWithToolbar: &minX : &maxX];
   if (isTitled == NO || [title length] == 0 || maxX <= minX)
     {
       return;
@@ -1301,6 +1519,59 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 @end
 
 @implementation GnomeTheme (HeaderBar)
+
+/* In the header bar the toolbar is part of the bar: no background or
+   bottom line of its own (the bar's shows, with the title), and presses
+   on its empty parts and spaces are the bar's (moves, double-click). */
+- (void) _overrideGSToolbarViewMethod_drawRect: (NSRect)rect
+{
+  typedef void (*DrawIMP)(id, SEL, NSRect);
+  DrawIMP originalIMP = (DrawIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSView *superview = [(NSView *)self superview];
+
+  if ([superview respondsToSelector: @selector(holdsToolbarInBar)] && [superview holdsToolbarInBar])
+    {
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, rect);
+    }
+}
+
+- (BOOL) _overrideGSToolbarViewMethod_isOpaque
+{
+  typedef BOOL (*OpaqueIMP)(id, SEL);
+  OpaqueIMP originalIMP = (OpaqueIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSView *superview = [(NSView *)self superview];
+
+  if ([superview respondsToSelector: @selector(holdsToolbarInBar)] && [superview holdsToolbarInBar])
+    {
+      return NO;
+    }
+  return originalIMP != NULL ? originalIMP (self, _cmd) : NO;
+}
+
+- (NSView *) _overrideGSToolbarViewMethod_hitTest: (NSPoint)point
+{
+  typedef NSView *(*HitIMP)(id, SEL, NSPoint);
+  HitIMP originalIMP = (HitIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSView *toolbarView = (NSView *)self;
+  NSView *superview = [toolbarView superview];
+  NSView *hit = originalIMP != NULL ? originalIMP (self, _cmd, point) : nil;
+
+  if ([superview respondsToSelector: @selector(holdsToolbarInBar)] == NO || [superview holdsToolbarInBar] == NO)
+    {
+      return hit;
+    }
+  /* The toolbar view and its clip view are background; so are spaces. */
+  if (hit == toolbarView || [hit isKindOfClass: [NSClipView class]]
+    || ([hit respondsToSelector: @selector(toolbarItem)] && GnomeThemeToolbarItemIsSpace ([hit toolbarItem])))
+    {
+      return nil;
+    }
+  return hit;
+}
 
 /* Alerts have no header bar, as AdwAlertDialog, whether shown alone or as
    a sheet: GSAlertPanel's title bar becomes a border. An NSPanel can

@@ -49,6 +49,9 @@ BOOL GnomeThemeUsesPrimaryMenu(void);
    (GSX11HandlesWindowDecorations NO): the theme then draws libadwaita's
    header bar as the windows' title bar. */
 BOOL GnomeThemeUsesHeaderBar(void);
+/* Whether a toolbar is shown in its window's header bar row
+   (GnomeThemeHeaderBarToolbar), not as a row of its own. */
+BOOL GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar);
 
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is

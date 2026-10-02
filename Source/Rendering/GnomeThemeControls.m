@@ -3339,10 +3339,23 @@ GnomeThemeToolbarItemIsSpace(NSToolbarItem *item)
     || [identifier isEqualToString: NSToolbarSeparatorItemIdentifier];
 }
 
+/* In the header bar, icons alone, as GNOME's header bar buttons; an item
+   without an icon shows its label there (see GnomeThemeToolbarTextItem). */
 static BOOL
 GnomeThemeToolbarShowsLabels(NSToolbar *toolbar)
 {
-  return [toolbar displayMode] != NSToolbarDisplayModeIconOnly;
+  return [toolbar displayMode] != NSToolbarDisplayModeIconOnly && GnomeThemeToolbarInHeaderBar (toolbar) == NO;
+}
+
+/* An item drawn as a text button: its label alone, in the label-only
+   mode or, in the header bar, when it has neither icon nor view. */
+static BOOL
+GnomeThemeToolbarTextItem(NSToolbarItem *item)
+{
+  NSToolbar *toolbar = [item toolbar];
+
+  return [toolbar displayMode] == NSToolbarDisplayModeLabelOnly
+    || (GnomeThemeToolbarInHeaderBar (toolbar) && [item image] == nil && [item view] == nil);
 }
 
 /* The label's font: the interface font alone, or libadwaita's caption size
@@ -3358,7 +3371,8 @@ GnomeThemeToolbarLabelFont(NSToolbar *toolbar)
       ASSIGN (regular, [NSFont systemFontOfSize: [NSFont systemFontSize]]);
       ASSIGN (caption, [NSFont systemFontOfSize: floor ([NSFont systemFontSize] * 0.82 + 0.5)]);
     }
-  return ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly) ? regular : caption;
+  return ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly || GnomeThemeToolbarInHeaderBar (toolbar))
+    ? regular : caption;
 }
 
 static NSSize
@@ -3368,7 +3382,8 @@ GnomeThemeToolbarLabelSize(NSToolbarItem *item)
   NSString *label = [item label];
   NSSize size;
 
-  if (GnomeThemeToolbarShowsLabels (toolbar) == NO || [label length] == 0)
+  if ((GnomeThemeToolbarShowsLabels (toolbar) == NO && GnomeThemeToolbarTextItem (item) == NO)
+    || [label length] == 0)
     {
       return NSZeroSize;
     }
@@ -3436,7 +3451,7 @@ GnomeThemeToolbarContentSize(NSToolbarItem *item)
   NSView *view = [item view];
   NSSize content;
 
-  if ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly)
+  if (GnomeThemeToolbarTextItem (item))
     {
       return NSMakeSize (label.width + 2.0 * GnomeThemeToolbarLabelPadding, GnomeThemeToolbarButtonSize);
     }
@@ -3699,6 +3714,13 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
               [[toolbarItem image] setSize: image];
             }
           [button setFont: GnomeThemeToolbarLabelFont (toolbar)];
+          /* In the header bar libs-gui's layout still follows the
+             toolbar's display mode: the icon alone, or the label alone
+             for an item without one. */
+          if (GnomeThemeToolbarInHeaderBar (toolbar))
+            {
+              [button setImagePosition: [toolbarItem image] != nil ? NSImageOnly : NSNoImage];
+            }
           [button setFrameSize: NSMakeSize (GnomeThemeToolbarContentSize (toolbarItem).width
                                               + 2.0 * GnomeThemeToolbarSpacing,
                                             GnomeThemeToolbarItemHeight (toolbarItem))];
@@ -3712,7 +3734,8 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   if ([button respondsToSelector: @selector(toolbarItem)])
     {
       NSToolbarItem *item = [(id<GnomeThemeToolbarButton>)button toolbarItem];
-      BOOL iconOnly = ([[item toolbar] displayMode] == NSToolbarDisplayModeIconOnly);
+      BOOL iconOnly = ([[item toolbar] displayMode] == NSToolbarDisplayModeIconOnly
+                       || (GnomeThemeToolbarInHeaderBar ([item toolbar]) && [item image] != nil));
 
       if ([item toolTip] == nil)
         {
@@ -3767,6 +3790,19 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
                                               GnomeThemeBlend (background, textColor, pressed ? 0.16 : 0.07),
                                               nil,
                                               0.0);
+        }
+    }
+  /* A label alone: libs-gui draws it at the top of the frame it's given
+     (GSToolbarButtonCell's titleRect); give it a frame of the label's
+     height, centred in the button. */
+  if (GnomeThemeLaysOutToolbar ([toolbarItem toolbar]) && [cell imagePosition] == NSNoImage)
+    {
+      CGFloat height = GnomeThemeToolbarLabelSize (toolbarItem).height;
+
+      if (height > 0.0 && height < NSHeight (cellFrame))
+        {
+          cellFrame = NSMakeRect (NSMinX (cellFrame), floor (NSMidY (cellFrame) - height / 2.0),
+                                  NSWidth (cellFrame), height);
         }
     }
   if (originalIMP != NULL)
