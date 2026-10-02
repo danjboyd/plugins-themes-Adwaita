@@ -1,6 +1,6 @@
 **Repository:** gnustep/libs-gui
 
-**Status:** draft, not filed yet (plugins-themes-Adwaita#8).
+**Filed:** [gnustep/libs-gui#972](https://github.com/gnustep/libs-gui/issues/972), 2026-10-02 (from plugins-themes-Adwaita#8)
 
 **Title:** Toolbar heights are fixed constants: item content can't change them, empty labels still take space, and view items taller than 32pt are removed
 

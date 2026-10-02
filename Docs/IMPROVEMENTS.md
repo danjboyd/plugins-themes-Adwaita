@@ -198,7 +198,7 @@ Found on 2026-09-25 while building the header bar; already fixed on master.
    released. Fixed on master by a84b42471; not in a release yet. The theme
    works around it for ☰ (see `8-libs-gui-menu-click-closes-fixed-on-master.md`).
 
-9. **libs-gui: toolbar heights are fixed constants.** Items get a 60pt (50pt
+9. **libs-gui: toolbar heights are fixed constants** ([libs-gui#972](https://github.com/gnustep/libs-gui/issues/972)). Items get a 60pt (50pt
    small) slot whatever their content, empty labels still take a label row,
    views taller than 32pt are removed and images are made 32x32; there's no
    theme hook. The theme lays toolbars out itself with GNOME metrics (see
