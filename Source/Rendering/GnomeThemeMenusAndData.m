@@ -351,6 +351,14 @@ GnomeThemePhase67MenuShortcutFont(GnomeTheme *theme)
   return [NSFont systemFontOfSize: size];
 }
 
+/* As libadwaita's popover menus: shortcuts and submenu arrows end 12px
+   inside the row (its padding), and the row is inset 4px in the cell (the
+   selection), so they end 16px from the cell's right edge. A shortcut
+   keeps 12px from the title; an arrow is a 16px box. */
+static const CGFloat GnomeThemeMenuTrailingInset = 16.0;
+static const CGFloat GnomeThemeMenuShortcutGap = 12.0;
+static const CGFloat GnomeThemeMenuArrowBox = 16.0;
+
 static CGFloat
 GnomeThemePhase67MenuKeyEquivalentWidth(NSMenuItemCell *cell, GnomeTheme *theme)
 {
@@ -367,7 +375,7 @@ GnomeThemePhase67MenuKeyEquivalentWidth(NSMenuItemCell *cell, GnomeTheme *theme)
 
   if ([[cell menuItem] hasSubmenu])
     {
-      return 20.0;
+      return GnomeThemeMenuArrowBox + GnomeThemeMenuTrailingInset;
     }
 
   keyEquivalent = GnomeThemePhase67KeyEquivalentString (cell);
@@ -380,7 +388,7 @@ GnomeThemePhase67MenuKeyEquivalentWidth(NSMenuItemCell *cell, GnomeTheme *theme)
                                            forKey: NSFontAttributeName];
   keySize = [keyEquivalent sizeWithAttributes: attributes];
 
-  return ceil (keySize.width) + 12.0;
+  return ceil (keySize.width) + GnomeThemeMenuShortcutGap + GnomeThemeMenuTrailingInset;
 }
 
 /* libadwaita column headers: small bold text (about 9pt against an 11pt
@@ -626,30 +634,41 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                    inView: (NSView *)controlView
                              isHorizontal: (BOOL)isHorizontal
 {
-  NSColor *separatorColor = [self menuSeparatorColor];
+  /* Not -menuSeparatorColor: it is black for in-window (Windows 95 style)
+     menus when the theme names no colour. */
+  NSColor *separatorColor = [self colorNamed: @"menuSeparatorColor" state: GSThemeNormalState];
   CGFloat inset = [self menuSeparatorInset];
   NSBezierPath *path = [NSBezierPath bezierPath];
 
   (void)cell;
   (void)controlView;
 
+  /* libadwaita's separator: the text colour at 15% (50% in high
+     contrast) over the menu's background, a hairline on a pixel row
+     (plugins-themes-Adwaita#11: two rows of mid grey). */
   if (separatorColor == nil)
     {
-      separatorColor = GnomeThemePhase67Color (self,
-                                               @"menuSeparatorColor",
-                                               [NSColor controlShadowColor]);
+      NSColor *background = GnomeThemePhase67Color (self,
+                                                    @"menuBackgroundColor",
+                                                    [NSColor controlBackgroundColor]);
+      NSColor *text = GnomeThemePhase67Color (self,
+                                              @"controlTextColor",
+                                              [NSColor controlTextColor]);
+
+      separatorColor = GnomeThemePhase67Blend (background, text,
+                                               [[self settings] highContrastEnabled] ? 0.5 : 0.15);
     }
 
   if (isHorizontal)
     {
-      CGFloat x = NSMidX (cellFrame) + 0.5;
+      CGFloat x = floor (NSMidX (cellFrame)) + 0.5;
 
       [path moveToPoint: NSMakePoint (x, NSMinY (cellFrame) + 5.0)];
       [path lineToPoint: NSMakePoint (x, NSMaxY (cellFrame) - 5.0)];
     }
   else
     {
-      CGFloat y = NSMidY (cellFrame) + 0.5;
+      CGFloat y = floor (NSMidY (cellFrame)) + 0.5;
 
       [path moveToPoint: NSMakePoint (NSMinX (cellFrame) + inset, y)];
       [path lineToPoint: NSMakePoint (NSMaxX (cellFrame) - inset, y)];
@@ -1163,11 +1182,14 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
     }
 
   keyRect = [cell keyEquivalentRectForBounds: cellFrame];
+  /* Shortcuts and arrows end at the row's padding, not at the cell's edge
+     (plugins-themes-Adwaita#10). */
+  keyRect.size.width = MAX (0.0, NSMaxX (cellFrame) - GnomeThemeMenuTrailingInset - NSMinX (keyRect));
   foregroundColor = GnomeThemePhase67MenuForegroundColor (theme, cell, highlighted);
 
   if ([[cell menuItem] hasSubmenu])
     {
-      NSRect arrowRect = NSMakeRect (NSMaxX (keyRect) - 14.0,
+      NSRect arrowRect = NSMakeRect (NSMaxX (keyRect) - GnomeThemeMenuArrowBox + 3.0,
                                      floor (NSMidY (keyRect) - 6.0),
                                      10.0,
                                      12.0);

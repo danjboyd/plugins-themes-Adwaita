@@ -1290,6 +1290,120 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
     }
 }
 
+/* A vertical menu as libadwaita's popover menus: a separator is one
+   hairline at 15% of the text colour (plugins-themes-Adwaita#11: two rows
+   of mid grey), and shortcuts end 12pt inside the row, 16pt from the
+   cell's edge (the row is inset 4pt), with submenu arrows' boxes (#10:
+   flush against the edge). */
+- (void) checkMenuSeparatorAndShortcut
+{
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Probe"]);
+  NSMenu *submenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"More"]);
+  NSWindow *window;
+  NSMenuView *menuView;
+  NSBitmapImageRep *rep;
+  NSRect bounds, rects[4];
+  NSInteger i, rows = 0, top;
+  NSUInteger background, line = 0;
+  CGFloat shortcutGap, chevronGap;
+  QuirkProbeInk ink;
+  NSString *detail;
+  BOOL highContrast;
+  long contrast;
+
+  [[menu addItemWithTitle: @"Alpha" action: @selector(description) keyEquivalent: @"1"] setTarget: self];
+  [menu addItem: [NSMenuItem separatorItem]];
+  [[menu addItemWithTitle: @"Quit" action: @selector(description) keyEquivalent: @"q"] setTarget: self];
+  [menu setSubmenu: submenu forItem: [menu addItemWithTitle: @"More" action: NULL keyEquivalent: @""]];
+  [submenu addItemWithTitle: @"Inner" action: NULL keyEquivalent: @""];
+  menuView = AUTORELEASE ([[NSMenuView alloc] initWithFrame: NSMakeRect (0, 0, 200, 100)]);
+  [menuView setMenu: menu];
+  [menuView sizeToFit];
+  window = [self windowWithFrame: NSMakeRect (40, 200, NSWidth ([menuView frame]) + 40, NSHeight ([menuView frame]) + 40)
+                           title: @"QuirkProbe Menu"];
+  [menuView setFrameOrigin: NSMakePoint (20, 20)];
+  [[window contentView] addSubview: menuView];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (menuView);
+  bounds = [menuView bounds];
+  for (i = 0; i < 4; i++)
+    {
+      rects[i] = [menuView rectOfItemAtIndex: i];
+      if ([menuView isFlipped] == NO)
+        {
+          rects[i].origin.y = NSHeight (bounds) - NSMaxY (rects[i]);
+        }
+    }
+  /* The separator: the rows in the middle of its cell that differ from
+     the menu's background. */
+  background = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel,
+                                    NSMakeRect (NSMidX (rects[1]), NSMinY (rects[1]), 1, 1)).darkest;
+  for (top = (NSInteger)NSMinY (rects[1]); top < (NSInteger)NSMaxY (rects[1]); top++)
+    {
+      NSUInteger value = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel,
+                                              NSMakeRect (NSMidX (rects[1]), top, 1, 1)).darkest;
+
+      if (labs ((long)value - (long)background) > 6)
+        {
+          rows++;
+          if (labs ((long)value - (long)background) > labs ((long)line - (long)background) || line == 0)
+            {
+              line = value;
+            }
+        }
+    }
+  QuirkProbeInkBackground = background;
+  /* In the middle of the rows, clear of the menu's rounded corners. */
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                             NSMakeRect (NSMidX (bounds), NSMinY (rects[0]) + NSHeight (rects[0]) / 4.0,
+                                         NSMaxX (rects[0]) - 2.0 - NSMidX (bounds), NSHeight (rects[0]) / 2.0));
+  shortcutGap = NSMaxX (rects[0]) - (ink.minX + ink.width);
+  {
+    /* The chevron is drawn at 30%: anything clearly off the background. */
+    NSInteger x, y, maxX = -1;
+    NSUInteger pixel[5];
+
+    for (y = (NSInteger)(NSMinY (rects[3]) + NSHeight (rects[3]) / 4.0);
+         y < (NSInteger)(NSMaxY (rects[3]) - NSHeight (rects[3]) / 4.0); y++)
+      {
+        for (x = (NSInteger)NSMidX (bounds); x < (NSInteger)NSMaxX (rects[3]) - 2; x++)
+          {
+            NSUInteger sum;
+
+            [rep getPixel: pixel atX: x y: y];
+            sum = pixel[0] + pixel[1] + pixel[2];
+            if (labs ((long)sum - (long)background) > 60)
+              {
+                maxX = MAX (maxX, x);
+              }
+          }
+      }
+    chevronGap = NSMaxX (rects[3]) - (maxX + 1);
+  }
+  [self saveWindow: window named: @"menu"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"separator %ld row(s), r+g+b %lu on %lu; shortcut ends %gpt, chevron %gpt "
+    @"from the row's right edge (row %@)", (long)rows, (unsigned long)line, (unsigned long)background,
+    shortcutGap, chevronGap, NSStringFromRect (rects[0])];
+  /* Light: libadwaita's #e0e0e1 on white is 93 below it (15%); high
+     contrast is 50%, about 380. The shortcut's box ends 16pt in, its ink
+     a side bearing further; the arrow's 16pt box ends there too, its
+     glyph centred in it. */
+  highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  contrast = labs ((long)line - (long)background);
+  if (rows == 1 && (highContrast ? (contrast >= 300 && contrast <= 460) : (contrast >= 50 && contrast <= 140))
+    && shortcutGap >= 16 && shortcutGap <= 20 && chevronGap >= 18 && chevronGap <= 26)
+    {
+      [self pass: @"menu-separator-and-shortcut" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menu-separator-and-shortcut" detail: detail];
+    }
+}
+
 /* A selected segment stands out from the others, further from the window's
    background, in any palette (plugins-themes-Adwaita#7: in the dark one it
    was 2/255 darker than the others). Runs with the dark and high contrast
@@ -3092,6 +3206,7 @@ QuirkProbeVisibleMenus (void)
     {
       [self checkHeaderBar];
       [self checkSegmentedSelection];
+      [self checkMenuSeparatorAndShortcut];
       [self finish];
       return;
     }
@@ -3118,6 +3233,7 @@ QuirkProbeVisibleMenus (void)
   [self checkToolbarRowHeight];
   [self checkToolbarViewItemWidth];
   [self checkSegmentedSelection];
+  [self checkMenuSeparatorAndShortcut];
   [self checkApplicationMenuPosition];
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
