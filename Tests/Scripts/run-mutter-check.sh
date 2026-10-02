@@ -45,7 +45,8 @@
 # directory, so the theme alone asks for the decorations and the shadow,
 # and the backend is linked into a scratch user Library. Also checked: a
 # 32-bit window with GNOME's frame extents, a shadow outside the edge and
-# rounded corners; maximised, no margin and square corners; restored, the
+# rounded corners; a menu with rounded corners (a borderless window with an
+# alpha channel); maximised, no margin and square corners; restored, the
 # margin back and the same frame; the edges resize from the band outside
 # the window (not from inside), and a press further out in the shadow
 # goes to what is behind.
@@ -287,6 +288,40 @@ if [ "$SHADOW" = YES ]; then
     report PASS "$NAME-shadow-corners" "$DETAIL"
   else
     report FAIL "$NAME-shadow-corners" "$DETAIL"
+  fi
+fi
+
+if [ "$SHADOW" = YES ]; then
+  # A menu: a borderless window with an alpha channel
+  # (GSBackBorderlessWindowAlpha), its corners rounded off to show what's
+  # behind it, as libadwaita's: its bottom left pixel is what's there once
+  # the menu has closed (a square menu has its border there).
+  read -r VX VY VW VH <<<"$(visible)"
+  xdotool mousemove $((VX + 30)) $((VY + 64)) click 1
+  sleep 1
+  MENU=""
+  for w in $(xwininfo -root -children | awk '/^ +0x/ {print $1}'); do
+    if [ "$((w))" != "$WINDOW" ] && xwininfo -id "$w" | grep -q 'IsViewable' \
+      && xwininfo -id "$w" | grep -q 'Depth: 32' && xprop -id "$w" WM_CLASS 2>/dev/null | grep -q ThemeDemo; then
+      MENU="$w"
+    fi
+  done
+  if [ -n "$MENU" ]; then
+    eval "$(xwininfo -id "$MENU" | awk '/Absolute upper-left X/ {print "MX=" $NF} /Absolute upper-left Y/ {print "MY=" $NF} /Height:/ {print "MH=" $NF}')"
+    CORNER="$(pixel "$MX" $((MY + MH - 1)))"
+    INSIDE="$(pixel $((MX + 8)) $((MY + MH - 8)))"
+  fi
+  xdotool key Escape
+  sleep 0.8
+  if [ -n "$MENU" ]; then
+    BEHIND="$(pixel "$MX" $((MY + MH - 1)))"
+  fi
+  DETAIL="menu window ${MENU:-none} (32-bit); r+g+b at its bottom left corner ${CORNER:-?}, there without the menu ${BEHIND:-?}, inside ${INSIDE:-?}"
+  if [ -n "$MENU" ] && [ "$CORNER" -ge $((BEHIND - 12)) ] && [ "$CORNER" -le $((BEHIND + 12)) ] \
+    && [ "$INSIDE" -ge 700 ]; then
+    report PASS "$NAME-menu-corners" "$DETAIL"
+  else
+    report FAIL "$NAME-menu-corners" "$DETAIL"
   fi
 fi
 
