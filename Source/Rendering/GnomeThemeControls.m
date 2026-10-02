@@ -3406,6 +3406,26 @@ GnomeThemeToolbarImageSize(NSImage *image, NSToolbar *toolbar)
   return size;
 }
 
+/* A view item's view width: its own, kept within the item's minSize and
+   maxSize when it has them. */
+static CGFloat
+GnomeThemeToolbarViewWidth(NSToolbarItem *item)
+{
+  CGFloat width = NSWidth ([[item view] frame]);
+  CGFloat minWidth = [item minSize].width;
+  CGFloat maxWidth = [item maxSize].width;
+
+  if (minWidth > 0.0)
+    {
+      width = MAX (width, minWidth);
+    }
+  if (maxWidth > 0.0 && maxWidth >= minWidth)
+    {
+      width = MIN (width, maxWidth);
+    }
+  return width;
+}
+
 /* An item's content: the button an image item is drawn as, or a view item's
    view (with its label under it). */
 static NSSize
@@ -3422,7 +3442,7 @@ GnomeThemeToolbarContentSize(NSToolbarItem *item)
     }
   if (view != nil)
     {
-      content = [view frame].size;
+      content = NSMakeSize (GnomeThemeToolbarViewWidth (item), NSHeight ([view frame]));
     }
   else
     {
@@ -3594,6 +3614,51 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   if (heightIvar != NULL)
     {
       *(CGFloat *)((char *)self + ivar_getOffset (heightIvar)) = row;
+    }
+}
+
+/* After libs-gui shares out the flexible width: it sets each view to its
+   slot less its own 10pt insets, narrower than the slot this layout gives
+   it (3pt insets), so views shrank on every layout down to nothing
+   (plugins-themes-Adwaita#9). Each view gets its slot less the theme's
+   insets instead, within its item's minSize and maxSize. */
+- (void) _overrideGSToolbarViewMethod__takeInAccountFlexibleSpaces
+{
+  typedef void (*TakeIMP)(id, SEL);
+  TakeIMP originalIMP = (TakeIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSToolbar *toolbar = [(id)self toolbar];
+  NSEnumerator *enumerator;
+  NSToolbarItem *item;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeLaysOutToolbar (toolbar) == NO)
+    {
+      return;
+    }
+  enumerator = [[toolbar items] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      NSView *backView = [item _backView];
+      NSView *view = [item view];
+      CGFloat width, minWidth, maxWidth;
+
+      if (view == nil || [view superview] != backView)
+        {
+          continue;
+        }
+      width = NSWidth ([backView frame]) - 2.0 * GnomeThemeToolbarSpacing;
+      minWidth = [item minSize].width;
+      maxWidth = [item maxSize].width;
+      if (maxWidth > 0.0 && maxWidth >= minWidth)
+        {
+          width = MIN (width, maxWidth);
+        }
+      width = MAX (width, MAX (minWidth, 0.0));
+      [view setFrameSize: NSMakeSize (width, NSHeight ([view frame]))];
+      GnomeThemePlaceToolbarView (backView, item);
     }
 }
 

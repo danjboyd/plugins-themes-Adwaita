@@ -537,6 +537,40 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+/* An icon-only toolbar of plain views with fixed sizes (minSize = maxSize =
+   the view's frame) around a flexible space, as ScreenshotTool makes it. */
+@interface QuirkProbeViewItemToolbarDelegate : NSObject
+@end
+
+@implementation QuirkProbeViewItemToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+  NSView *view = AUTORELEASE ([[NSView alloc] initWithFrame:
+    NSMakeRect (0, 0, [identifier isEqualToString: @"Wide"] ? 104 : 40, 32)]);
+
+  [item setLabel: identifier];
+  [item setView: view];
+  [item setMinSize: [view frame].size];
+  [item setMaxSize: [view frame].size];
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Narrow", NSToolbarFlexibleSpaceItemIdentifier, @"Wide", nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 @implementation QuirkProbe
 
 - (id) init
@@ -1195,6 +1229,64 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
   else
     {
       [self fail: @"toolbar-row-height" detail: detail];
+    }
+}
+
+/* A view item keeps its fixed width through layouts: libs-gui sets each
+   view to its slot less 10pt insets, and with the theme's narrower slots
+   views lost 14pt a layout down to nothing (plugins-themes-Adwaita#9). */
+- (void) checkToolbarViewItemWidth
+{
+  /* Toolbars don't retain their delegate; the windows live on. */
+  QuirkProbeViewItemToolbarDelegate *delegate = [QuirkProbeViewItemToolbarDelegate new];
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 300, 400, 120) title: @"QuirkProbe Toolbar Views"];
+  NSToolbar *toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeViewItems"]);
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok = YES;
+  NSEnumerator *enumerator;
+  NSToolbarItem *item;
+  int i;
+
+  [toolbar setDelegate: delegate];
+  [toolbar setDisplayMode: NSToolbarDisplayModeIconOnly];
+  [toolbar setSizeMode: NSToolbarSizeModeRegular];
+  [window setToolbar: toolbar];
+  [window orderFront: nil];
+  /* Each resize lays the toolbar out again. */
+  for (i = 0; i < 4; i++)
+    {
+      NSRect frame = [window frame];
+
+      frame.size.width += (i % 2) ? -20 : 20;
+      [window setFrame: frame display: YES];
+    }
+  enumerator = [[toolbar items] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      NSView *view = [item view];
+      NSView *slot = [view superview];
+
+      if (view == nil)
+        {
+          continue;
+        }
+      [detail appendFormat: @"%@%@ %gpt in a %gpt slot", [detail length] ? @"; " : @"", [item itemIdentifier],
+        NSWidth ([view frame]), NSWidth ([slot frame])];
+      ok = ok && slot != nil && NSWidth ([view frame]) == [item minSize].width
+        && NSWidth ([slot frame]) >= [item minSize].width;
+    }
+  [window orderOut: nil];
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"] isEqualToString: @"compact"])
+    {
+      [self skip: @"toolbar-view-item-width" detail: @"compact metrics keep libs-gui's toolbar layout"];
+    }
+  else if (ok)
+    {
+      [self pass: @"toolbar-view-item-width" detail: detail];
+    }
+  else
+    {
+      [self fail: @"toolbar-view-item-width" detail: detail];
     }
 }
 
@@ -3024,6 +3116,7 @@ QuirkProbeVisibleMenus (void)
   [self checkTabView];
   [self checkToolbarDisplayMode];
   [self checkToolbarRowHeight];
+  [self checkToolbarViewItemWidth];
   [self checkSegmentedSelection];
   [self checkApplicationMenuPosition];
   [self checkCocoaApplicationMenu];
