@@ -21,6 +21,7 @@
 #import "../GnomeTheme.h"
 #import "../Settings/GnomeThemeSettings.h"
 #import "../Settings/GnomeThemeMetrics.h"
+#import "../Adapters/GnomeThemeWindowManager.h"
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
@@ -535,7 +536,6 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSColor *fillColor = nil;
   NSColor *borderColor = nil;
 
-  (void)menuView;
   (void)dirtyRect;
 
   if (horizontal)
@@ -563,11 +563,24 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                             @"menuBorderColor",
                                             [NSColor controlShadowColor]);
 
-      GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (bounds, 0.5, 0.5),
-                                                 10.0,
-                                                 fillColor,
-                                                 borderColor,
-                                                 1.0);
+      /* Rounded only on a window with an alpha channel: elsewhere the
+         corners outside the curve stay unpainted, black under a
+         compositor (menus are borderless, 24-bit windows). */
+      if ([menuView window] != nil && GnomeThemeWindowManagerHasAlpha ([menuView window]) == NO)
+        {
+          [fillColor set];
+          NSRectFill (bounds);
+          [borderColor set];
+          NSFrameRectWithWidth (bounds, 1.0);
+        }
+      else
+        {
+          GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (bounds, 0.5, 0.5),
+                                                     10.0,
+                                                     fillColor,
+                                                     borderColor,
+                                                     1.0);
+        }
     }
 }
 

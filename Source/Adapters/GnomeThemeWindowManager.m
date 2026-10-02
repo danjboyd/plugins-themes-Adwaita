@@ -285,6 +285,20 @@ GnomeThemeWindowManagerShadowExtents(NSWindow *window, CGFloat extents[4])
 }
 
 BOOL
+GnomeThemeWindowManagerHasAlpha(NSWindow *window)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
+  XWindowAttributes attributes;
+
+  if (xwindow == None || XGetWindowAttributes (display, xwindow, &attributes) == 0)
+    {
+      return NO;
+    }
+  return attributes.depth == 32;
+}
+
+BOOL
 GnomeThemeWindowManagerHasShadow(NSWindow *window)
 {
   CGFloat extents[4];

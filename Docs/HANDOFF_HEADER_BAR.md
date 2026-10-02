@@ -274,7 +274,7 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-## Phase 2b in progress (started 2026-09-25; steps 1 to 3 done 2026-10-02)
+## Phase 2b in progress (started 2026-09-25; steps 1 to 4 done 2026-10-02)
 
 Work in two new git worktrees, on local branches, **nothing committed or
 pushed**, nothing installed system-wide:
@@ -411,10 +411,45 @@ resizing from 6px out, not from 3px in; and the window under the pointer
 12px out but not 13px out. `make check-mutter` (installed libraries)
 takes positions from the visible window too and still passes.
 
+Step 4 done (2026-10-02, a scratch app opening one kind at a time under
+GNOME Shell with the patched libraries): panels, utility panels
+(`_NET_WM_WINDOW_TYPE_UTILITY`), resizable panels, a standalone alert and
+an alert as a sheet (transient for its window) all get the 32-bit window,
+the 30, 30, 24, 36 extents, the shadow and rounded corners. Only the
+resizable ones take presses in the resize band (a fixed panel's band
+goes through). Menus and tool tips are borderless: 24-bit, no shadow, as
+planned.
+
+Found on the way:
+
+- Menus drew rounded corners and left what's outside the curve
+  unpainted, which a compositor shows black (also with the installed
+  0.32 libraries, so on GNOME today). Fixed in the theme: a menu is
+  square, with its border, unless its window has an alpha channel
+  (`GnomeThemeWindowManagerHasAlpha()`). QuirkProbe's offscreen renders
+  paint the corners from the window background, so no probe check can
+  see this; verified on screen.
+- libadwaita's popover menus have 15px rounded corners and a soft shadow,
+  and its tool tips 9px rounded corners (no shadow). Ours stay square
+  until libs-back gives such borderless windows an alpha channel too: a
+  decision for Dan (which windows, and whether menus get a shadow).
+- libs-back types menus and tool tips `_NET_WM_WINDOW_TYPE_DIALOG` (GTK:
+  `POPUP_MENU`/`DROPDOWN_MENU`, `TOOLTIP`) and panels `NORMAL` (GTK's
+  dialogs: `DIALOG`).
+- GNUstep enables cursor rects only in the key window, so the resize
+  band's cursors don't show over an inactive window (GTK shows them).
+- The standalone alert's heading and text are right-aligned;
+  libadwaita's alert dialogs centre them.
+- Against the patched libs-gui (master) a click on a menu bar title under
+  Mutter showed no menu, though the same click with the installed 0.32
+  did. xdotool clicks open neither on a bare Xvfb, and QuirkProbe's
+  in-app clicks do open it on master, so this may be the synthetic input
+  (see Testing); try it by hand in step 5. QuirkProbe against master also
+  differs on table headers (header text at 113pt) and the menu shortcut
+  inset (30pt for 16 to 20): theme work for when master is released.
+
 Not yet tested (next steps, in order):
 
-4. Other window kinds with a shadow: panels, alerts (NSDocModalWindowMask
-   gets one), sheets, menus and tool tips (borderless: none).
 5. Try it on the real desktop (GNOME Wayland, Xwayland), then the style
    pass for upstream (GNU style, ChangeLog entries) and a note in the
    proposal that items 0, 2 and 4 now have patches.

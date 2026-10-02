@@ -72,6 +72,11 @@ BOOL GnomeThemeWindowManagerHasShadow(NSWindow *window);
    right, top, bottom, in pixels; 0 while maximised or tiled). */
 BOOL GnomeThemeWindowManagerShadowExtents(NSWindow *window, CGFloat extents[4]);
 
+/* Whether the window's pixels have an alpha channel (a 32-bit visual on
+   X11), so what it leaves transparent shows what is behind it; NO when
+   the backend can't tell. */
+BOOL GnomeThemeWindowManagerHasAlpha(NSWindow *window);
+
 /* Whether the window manager has the window maximised; NO in `known` when
    it can't tell. */
 BOOL GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known);
