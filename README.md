@@ -199,9 +199,11 @@ loads.
 With `GnomeThemeHeaderBarToolbar` (above) the window's toolbar goes in the
 bar's row.
 
-Not yet with the installed GNUstep: the shadow, rounded corners and resizing
-from the shadow. These need the libs-back and libs-gui patches in
-`Docs/upstream-patches/` (see `Docs/PROPOSAL_LIBS_BACK_CSD.md`).
+Not yet with the installed GNUstep: the shadow, rounded corners (of
+windows, menus and tool tips) and resizing from the shadow. These need the
+libs-back and libs-gui patches in `Docs/upstream-patches/` (see
+`Docs/PROPOSAL_LIBS_BACK_CSD.md`); without them menus and tool tips are
+square.
 
 `make check-mutter` checks the header bar with Mutter as the window manager:
 GNOME Shell on a private Xvfb display, with its own D-Bus session and no

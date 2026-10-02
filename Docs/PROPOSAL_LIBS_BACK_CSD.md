@@ -153,6 +153,10 @@ item 4.
   rounded clip. A 40-step resize drag under Mutter: every step reaches the
   window and its first copy follows the configure within about 6 ms,
   the same as without a shadow.
+- *Borderless windows:* with `GSBackBorderlessWindowAlpha` (the theme sets
+  it too) and a compositing manager, borderless windows such as menus and
+  tool tips get the 32-bit visual, so a theme can round their corners, as
+  libadwaita's popovers and tool tips are. No margin or shadow for them.
 
 ### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 

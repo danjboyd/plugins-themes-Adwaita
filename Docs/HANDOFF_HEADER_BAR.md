@@ -509,9 +509,13 @@ exported to `Docs/upstream-patches/` and the proposal says what each does;
 pass against them. Still local and uncommitted in the worktrees; sending
 the proposal is Dan's.
 
-Open (Dan's decisions, from step 4): rounded menus and tool tips (an alpha
-channel for borderless windows in libs-back, and whether menus get a
-shadow); window types for menus, tool tips and panels. Then phase 3.
+Rounded menus and tool tips (Dan, 2026-10-02): libs-back gives borderless
+windows the 32-bit visual when `GSBackBorderlessWindowAlpha` is YES (the
+theme's GSThemeDomain sets it) and a compositing manager runs; the theme
+rounds a menu (10pt) and a tool tip (libadwaita's 9pt, with its 1pt light
+outline) when the window has an alpha channel, and keeps them square
+otherwise. No shadow for them. `make check-mutter-shadow` checks a menu's
+corner. Still open: window types for menus, tool tips and panels.
 
 How to run against the patched libraries:
 
