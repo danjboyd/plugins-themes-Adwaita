@@ -110,6 +110,8 @@ enum
 
 @interface NSView (GnomeThemeHeaderBarToolbarView)
 - (void) _reload;
+- (void) setBorderMask: (unsigned int)borderMask;
+- (unsigned int) borderMask;
 - (CGFloat) _heightFromLayout;
 - (NSToolbarItem *) toolbarItem;
 - (BOOL) holdsToolbarInBar;
@@ -704,6 +706,13 @@ GnomeThemeResizeCursor(NSUInteger edges)
     }
   frame = NSMakeRect (_startLimit + 3.0, NSMaxY ([self bounds]) - GnomeThemeHeaderBarHeight,
                       MAX (0.0, _endLimit - _startLimit - 6.0), GnomeThemeHeaderBarHeight);
+  /* No bottom line in the bar: without it libs-gui doesn't keep a point
+     for one, which put the items 1pt high and » 1pt taller. */
+  if ([toolbarView borderMask] != 0)
+    {
+      [toolbarView setBorderMask: 0];
+      [toolbarView _reload];
+    }
   if (NSWidth (frame) != NSWidth ([toolbarView frame]))
     {
       /* libs-gui lays the items out again for a new width. */
@@ -1550,6 +1559,58 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
       return NO;
     }
   return originalIMP != NULL ? originalIMP (self, _cmd) : NO;
+}
+
+/* libs-gui lays the toolbar out left to right at every reload; in the bar of
+   a right-to-left window, as GTK mirrors its header bar, the items go from
+   the right (those before the flexible space at the bar's start, now its
+   right), and the » of the items that don't fit goes to the left. */
+- (void) _overrideGSToolbarViewMethod__reload
+{
+  typedef void (*ReloadIMP)(id, SEL);
+  ReloadIMP originalIMP = (ReloadIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSView *toolbarView = (NSView *)self;
+  NSView *superview = [toolbarView superview];
+  CGFloat width = NSWidth ([toolbarView frame]);
+  NSEnumerator *enumerator;
+  NSView *subview;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeUsesRightToLeft () == NO || [superview respondsToSelector: @selector(holdsToolbarInBar)] == NO
+    || [superview holdsToolbarInBar] == NO)
+    {
+      return;
+    }
+  enumerator = [[toolbarView subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      NSRect frame = [subview frame];
+
+      if ([subview isKindOfClass: [NSClipView class]])
+        {
+          CGFloat clipWidth = NSWidth (frame);
+          NSEnumerator *items = [[subview subviews] objectEnumerator];
+          NSView *backView;
+
+          frame.origin.x = width - clipWidth;
+          [subview setFrame: frame];
+          while ((backView = [items nextObject]) != nil)
+            {
+              NSRect itemFrame = [backView frame];
+
+              itemFrame.origin.x = clipWidth - NSMaxX (itemFrame);
+              [backView setFrame: itemFrame];
+            }
+        }
+      else
+        {
+          frame.origin.x = 0.0;
+          [subview setFrame: frame];
+        }
+    }
 }
 
 - (NSView *) _overrideGSToolbarViewMethod_hitTest: (NSPoint)point
