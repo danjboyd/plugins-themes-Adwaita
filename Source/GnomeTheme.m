@@ -22,6 +22,7 @@
 #import "Settings/GnomeThemeSettings.h"
 #import "Settings/GnomeThemeMetrics.h"
 #import "Rendering/GnomeThemePalette.h"
+#import "Adapters/GnomeThemeWindowManager.h"
 
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -345,8 +346,12 @@ static NSPoint GnomeThemeToolTipShift = { 0.0, 0.0 };
 
 /* libadwaita's tool tip: a dark box with light text, padded, without
    GNUstep's black border (a white one in high contrast, where the box is
-   as black as the windows). The corners stay square: the tip's window is
-   opaque. */
+   as black as the windows). Its 9pt rounded corners and 1pt light outline
+   (white at 10%) only where the tip's window has an alpha channel (a
+   libs-back with GSBackBorderlessWindowAlpha, under a compositor): an
+   opaque window would show the corners black. */
+static const CGFloat GnomeThemeToolTipRadius = 9.0;
+
 - (void) _overrideGSTTViewMethod_drawRect: (NSRect)dirtyRect
 {
   NSView *view = (NSView *)self;
@@ -355,16 +360,34 @@ static NSPoint GnomeThemeToolTipShift = { 0.0, 0.0 };
   NSRect bounds = [view bounds];
   GnomeTheme *theme = (GnomeTheme *)[GSTheme theme];
 
+  BOOL highContrast = [theme isKindOfClass: [GnomeTheme class]] && [[theme settings] highContrastEnabled];
+
   if (text == nil)
     {
       return;
     }
-  [[NSColor toolTipColor] set];
-  NSRectFill (bounds);
-  if ([theme isKindOfClass: [GnomeTheme class]] && [[theme settings] highContrastEnabled])
+  if ([view window] != nil && GnomeThemeWindowManagerHasAlpha ([view window]))
     {
-      [[NSColor toolTipTextColor] set];
-      NSFrameRect (bounds);
+      NSBezierPath *box = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect (bounds, 0.5, 0.5)
+                                                          xRadius: GnomeThemeToolTipRadius
+                                                          yRadius: GnomeThemeToolTipRadius];
+
+      NSRectFillUsingOperation (bounds, NSCompositeClear);
+      [[NSColor toolTipColor] set];
+      [box fill];
+      [(highContrast ? [NSColor toolTipTextColor] : [NSColor colorWithCalibratedWhite: 1.0 alpha: 0.10]) set];
+      [box setLineWidth: 1.0];
+      [box stroke];
+    }
+  else
+    {
+      [[NSColor toolTipColor] set];
+      NSRectFill (bounds);
+      if (highContrast)
+        {
+          [[NSColor toolTipTextColor] set];
+          NSFrameRect (bounds);
+        }
     }
   [text drawInRect: NSInsetRect (bounds, GnomeThemeToolTipPaddingX, GnomeThemeToolTipPaddingY)];
 }
