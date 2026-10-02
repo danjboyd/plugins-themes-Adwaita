@@ -177,6 +177,23 @@ the left, trailing ones on the right, ☰ last), leaving no separate toolbar
 row. NSToolbar has no notion of start and end groups; flexible spaces could
 mark the split. Opt-in per app (see Decisions).
 
+Built (2026-10-02): `GnomeThemeHeaderBarToolbar` (user default, then the
+app's Info.plist) puts a titled window's visible toolbar in the bar. The
+toolbar view lies between the buttons at the bar's start and those at its
+end (☰ included), 6pt from them; the header bar decoration view overrides
+`-addToolbarView:`, `-removeToolbarView:`, `-adjustToolbarView:`,
+`-contentRectForFrameRect:styleMask:` and `-frameRectForContentRect:...`
+and clears `hasToolbar` around `-[GSWindowDecorationView layout]`, so no
+toolbar row is reserved and the window keeps its size. The title goes in
+the widest flexible space (after the items without one). GSToolbarView
+draws no background there, isn't opaque, and its empty parts and spaces
+hit-test through to the bar (moves, double-click, window menu). Items show
+icons alone, an item without an icon its label as a text button
+(vertically centred: libs-gui draws a label at the top of its frame).
+QuirkProbe `header-bar-toolbar`; tried with ScreenshotTool under GNOME
+Shell. Not done: right-to-left (the toolbar isn't mirrored), and an
+overflowing toolbar (libs-gui's » menu) not checked.
+
 ## Decisions (Dan, 2026-09-25)
 
 - The header bar becomes the default once it's solid. Until then it stays

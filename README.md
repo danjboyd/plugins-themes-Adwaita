@@ -133,8 +133,9 @@ python3 Reference/AdwaitaDemo/adwaita_demo.py --page text
 
 The theme reads these from the user's defaults for an app
 (`defaults write APP KEY VALUE`, or `-KEY VALUE` on the command line), then
-from the app's own Info.plist (`GnomeThemeMetrics` and `GnomeThemeMenuStyle`,
-so an app can declare how it was designed):
+from the app's own Info.plist (`GnomeThemeMetrics`, `GnomeThemeMenuStyle`
+and `GnomeThemeHeaderBarToolbar`, so an app can declare how it was
+designed):
 
 - `GnomeThemeMetrics`: `gnome` or `compact`. Apps whose windows are built in
   code get GNOME's metrics: the interface font at GNOME's size (11pt at
@@ -150,6 +151,13 @@ so an app can declare how it was designed):
   Clicking it shows the app's menus, then its application menu's items
   (Preferences, About, Quit), as GNOME's primary menu lists them. The menu
   itself is unchanged, so key equivalents and validation work as before.
+- `GnomeThemeHeaderBarToolbar`: `YES` puts the window's toolbar in the
+  header bar's row, as a GNOME app packs its buttons there, instead of a
+  row of its own (only with the header bar, below). Items before the
+  toolbar's flexible space go at the bar's start, items after it at its
+  end, and the title in the space; icons are shown without labels, and an
+  item without an icon is a text button. Off by default: the toolbar has to
+  suit it (a few icons, a flexible space).
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
 ### Windows without the menu bar
@@ -187,9 +195,12 @@ libadwaita's high contrast details. Alerts have no bar, as GNOME's. The
 theme can't set the flag itself: GNUstep's backend reads it before any theme
 loads.
 
-Not yet: the shadow and rounded top corners (these need changes in
-libs-back, see `Docs/PROPOSAL_LIBS_BACK_CSD.md`), and toolbar items in the
-header bar row.
+With `GnomeThemeHeaderBarToolbar` (above) the window's toolbar goes in the
+bar's row.
+
+Not yet with the installed GNUstep: the shadow, rounded corners and resizing
+from the shadow. These need the libs-back and libs-gui patches in
+`Docs/upstream-patches/` (see `Docs/PROPOSAL_LIBS_BACK_CSD.md`).
 
 `make check-mutter` checks the header bar with Mutter as the window manager:
 GNOME Shell on a private Xvfb display, with its own D-Bus session and no
