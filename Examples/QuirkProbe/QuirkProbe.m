@@ -537,6 +537,55 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+@interface NSToolbar (QuirkProbePrivate)
+- (NSView *) _toolbarView;
+@end
+
+@interface NSToolbarItem (QuirkProbePrivate)
+- (NSView *) _backView;
+@end
+
+/* A toolbar as a GNOME app packs its header bar: two icons at the start, a
+   flexible space, a text button and an icon at the end. */
+@interface QuirkProbeHeaderToolbarDelegate : NSObject
+@end
+
+@implementation QuirkProbeHeaderToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: identifier];
+  [item setTarget: self];
+  [item setAction: @selector(description)];
+  if ([identifier hasPrefix: @"Icon"])
+    {
+      NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (16, 16)]);
+
+      [image lockFocus];
+      [[NSColor blackColor] set];
+      NSRectFill (NSMakeRect (4, 4, 8, 8));
+      [image unlockFocus];
+      [item setImage: image];
+    }
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"IconA", @"IconB", NSToolbarFlexibleSpaceItemIdentifier, @"Share", @"IconC", nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 /* An icon-only toolbar of plain views with fixed sizes (minSize = maxSize =
    the view's frame) around a flexible space, as ScreenshotTool makes it. */
 @interface QuirkProbeViewItemToolbarDelegate : NSObject
@@ -1401,6 +1450,118 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
   else
     {
       [self fail: @"menu-separator-and-shortcut" detail: detail];
+    }
+}
+
+/* With GnomeThemeHeaderBarToolbar a window's toolbar is in its header bar
+   row, as a GNOME app packs its buttons there: no row of its own (the
+   content keeps its size), the title in the flexible space, presses on the
+   bar's empty parts the bar's, icons without labels and an item without an
+   icon a text button. */
+- (void) checkHeaderBarToolbar
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSMutableArray *searchList;
+  QuirkProbeHeaderToolbarDelegate *delegate;
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSView *frameView, *toolbarView, *hitGap = nil, *hitIcon = nil;
+  NSSize before, after;
+  NSRect bounds, gap = NSZeroRect, iconFrame = NSZeroRect;
+  NSBitmapImageRep *rep;
+  QuirkProbeInk title;
+  NSMutableArray *positions = [NSMutableArray array];
+  NSEnumerator *enumerator;
+  NSToolbarItem *item;
+  BOOL labelsOk = YES;
+  NSString *detail;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"header-bar-toolbar" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  /* The app opting in, in a domain of its own: nothing saved. */
+  [defaults setVolatileDomain: [NSDictionary dictionaryWithObject: @"YES" forKey: @"GnomeThemeHeaderBarToolbar"]
+                      forName: @"QuirkProbeHeaderBarToolbar"];
+  searchList = AUTORELEASE ([[defaults searchList] mutableCopy]);
+  [searchList insertObject: @"QuirkProbeHeaderBarToolbar" atIndex: 0];
+  [defaults setSearchList: searchList];
+
+  delegate = [QuirkProbeHeaderToolbarDelegate new];
+  window = [self windowWithFrame: NSMakeRect (40, 200, 700, 260) title: @"Probe Toolbar Bar"];
+  before = [[window contentView] frame].size;
+  toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeHeaderToolbar"]);
+  [toolbar setDelegate: delegate];
+  [window setToolbar: toolbar];
+  [window orderFront: nil];
+  [window display];
+  after = [[window contentView] frame].size;
+  frameView = [[window contentView] superview];
+  bounds = [frameView bounds];
+  toolbarView = [toolbar _toolbarView];
+
+  enumerator = [[toolbar items] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      NSView *backView = [item _backView];
+      NSRect frame = [frameView convertRect: [backView bounds] fromView: backView];
+
+      [positions addObject: [NSString stringWithFormat: @"%@ %g-%g", [item itemIdentifier], NSMinX (frame), NSMaxX (frame)]];
+      if ([[item itemIdentifier] isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
+        {
+          gap = frame;
+        }
+      else if ([backView isKindOfClass: [NSButton class]])
+        {
+          NSCellImagePosition position = [(NSButton *)backView imagePosition];
+
+          labelsOk = labelsOk && position == ([item image] != nil ? NSImageOnly : NSNoImage);
+          if ([[item itemIdentifier] isEqualToString: @"IconA"])
+            {
+              iconFrame = frame;
+            }
+        }
+    }
+  if (NSIsEmptyRect (gap) == NO)
+    {
+      hitGap = [frameView hitTest: NSMakePoint (NSMidX (gap) - 1, NSMidY (gap))];
+    }
+  if (NSIsEmptyRect (iconFrame) == NO)
+    {
+      hitIcon = [frameView hitTest: NSMakePoint (NSMidX (iconFrame), NSMidY (iconFrame))];
+    }
+  rep = QuirkProbeRender (frameView);
+  /* The title's ink in the bar, in pixels from the top left, below the
+     window's border: anything clearly off the bar's background, in any
+     palette (dimmed: the probe's window isn't the key window; nothing
+     else is in the gap). */
+  QuirkProbeInkBackground = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel,
+                                                 NSMakeRect (NSMinX (gap) + 2, 4, 1, 1)).darkest;
+  title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                               NSMakeRect (NSMinX (gap), 2, NSWidth (gap), 42));
+  [self saveWindow: window named: @"header-bar-toolbar"];
+  [window orderOut: nil];
+  [searchList removeObject: @"QuirkProbeHeaderBarToolbar"];
+  [defaults setSearchList: searchList];
+  [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarToolbar"];
+
+  detail = [NSString stringWithFormat: @"content %@ -> %@; toolbar %@ in %@; items %@; title ink x %ld-%ld in the gap; "
+    @"a press in the gap goes to %@, on an icon to %@; labels %@",
+    NSStringFromSize (before), NSStringFromSize (after), NSStringFromRect ([toolbarView frame]),
+    NSStringFromRect (bounds), [positions componentsJoinedByString: @", "],
+    (long)title.minX, (long)(title.minX + title.width), NSStringFromClass ([hitGap class]),
+    NSStringFromClass ([hitIcon class]), labelsOk ? @"as expected" : @"wrong"];
+  if (NSEqualSizes (before, after) && [toolbarView superview] == frameView
+    && NSMinY ([toolbarView frame]) >= NSMaxY (bounds) - 46.5 && NSHeight ([toolbarView frame]) == 46
+    && title.count > 0 && title.minX > NSMinX (gap) && title.minX + title.width < NSMaxX (gap)
+    && hitGap == frameView && [hitIcon respondsToSelector: @selector(toolbarItem)] && labelsOk)
+    {
+      [self pass: @"header-bar-toolbar" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-toolbar" detail: detail];
     }
 }
 
@@ -3236,6 +3397,7 @@ QuirkProbeVisibleMenus (void)
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])
     {
       [self checkHeaderBar];
+  [self checkHeaderBarToolbar];
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
       [self finish];
@@ -3271,6 +3433,7 @@ QuirkProbeVisibleMenus (void)
   [self checkMetricsMode];
   [self checkPrimaryMenu];
   [self checkHeaderBar];
+  [self checkHeaderBarToolbar];
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];
