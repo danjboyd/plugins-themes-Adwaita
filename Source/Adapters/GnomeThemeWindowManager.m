@@ -250,7 +250,7 @@ GnomeThemeWindowManagerShowWindowMenu(NSWindow *window)
 }
 
 BOOL
-GnomeThemeWindowManagerHasShadow(NSWindow *window)
+GnomeThemeWindowManagerShadowExtents(NSWindow *window, CGFloat extents[4])
 {
   Display *display = GnomeThemeX11Display ();
   Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
@@ -259,7 +259,12 @@ GnomeThemeWindowManagerHasShadow(NSWindow *window)
   unsigned long count, remaining;
   unsigned char *data = NULL;
   BOOL shadow = NO;
+  int i;
 
+  for (i = 0; i < 4; i++)
+    {
+      extents[i] = 0.0;
+    }
   if (xwindow == None)
     {
       return NO;
@@ -270,9 +275,21 @@ GnomeThemeWindowManagerHasShadow(NSWindow *window)
       /* Present even while the extents are 0 (maximised or tiled): the
          window then has neither shadow nor border, as libadwaita's. */
       shadow = type == XA_CARDINAL;
+      for (i = 0; shadow && i < 4 && (unsigned long)i < count; i++)
+        {
+          extents[i] = ((unsigned long *)data)[i];
+        }
       XFree (data);
     }
   return shadow;
+}
+
+BOOL
+GnomeThemeWindowManagerHasShadow(NSWindow *window)
+{
+  CGFloat extents[4];
+
+  return GnomeThemeWindowManagerShadowExtents (window, extents);
 }
 
 BOOL

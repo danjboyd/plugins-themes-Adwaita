@@ -56,6 +56,9 @@ static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
    outside the window to put it in), and corners this long. */
 static const CGFloat GnomeThemeResizeEdge = 5.0;
 static const CGFloat GnomeThemeResizeCorner = 16.0;
+/* With a shadow, as GTK 4 under Mutter: the edges are a band outside the
+   visible window, in the shadow, and none inside. */
+static const CGFloat GnomeThemeResizeBand = 12.0;
 /* How far the pointer moves before a press on the bar becomes a move
    (GTK's gtk-dnd-drag-threshold). */
 static const CGFloat GnomeThemeDragThreshold = 8.0;
@@ -438,6 +441,9 @@ GnomeThemeResizeCursor(NSUInteger edges)
   /* The backend draws a shadow round the window (and its outline): no
      border of our own then. */
   BOOL _hasShadow;
+  /* The resize band outside each edge (left, right, top, bottom), while
+     the shadow shows; all 0 otherwise, and the edges are inside. */
+  CGFloat _resizeBand[4];
   /* The ends of the buttons at the bar's start and end, for the title. */
   CGFloat _startLimit;
   CGFloat _endLimit;
@@ -725,7 +731,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   resizeBarRect = NSZeroRect;
   /* The shadow comes and goes with the window manager's state
      (maximised, tiled), which also changes the frame. */
-  _hasShadow = GnomeThemeWindowManagerHasShadow (window);
+  [self updateShadow];
   [[self window] invalidateCursorRectsForView: self];
 }
 
@@ -832,7 +838,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   if (number > 0)
     {
       GnomeThemeWindowManagerAllowFunctions (window);
-      _hasShadow = GnomeThemeWindowManagerHasShadow (window);
+      [self updateShadow];
     }
 }
 
@@ -857,6 +863,36 @@ GnomeThemeResizeCursor(NSUInteger edges)
   return known ? maximized : [window isZoomed];
 }
 
+/* Whether the backend draws the shadow, and the resize band it leaves
+   outside each edge (the input shape takes presses there). */
+- (void) updateShadow
+{
+  CGFloat extents[4];
+  CGFloat factor = [window userSpaceScaleFactor];
+  int i;
+
+  _hasShadow = GnomeThemeWindowManagerShadowExtents (window, extents);
+  for (i = 0; i < 4; i++)
+    {
+      _resizeBand[i] = MIN (GnomeThemeResizeBand, extents[i] / (factor > 0.0 ? factor : 1.0));
+    }
+}
+
+- (BOOL) resizesOutside
+{
+  return _resizeBand[0] > 0.0 || _resizeBand[1] > 0.0 || _resizeBand[2] > 0.0 || _resizeBand[3] > 0.0;
+}
+
+/* Where the edges are: the bounds, or the bounds with the band outside. */
+- (NSRect) resizeArea
+{
+  NSRect bounds = [self bounds];
+
+  return NSMakeRect (NSMinX (bounds) - _resizeBand[0], NSMinY (bounds) - _resizeBand[3],
+                     NSWidth (bounds) + _resizeBand[0] + _resizeBand[1],
+                     NSHeight (bounds) + _resizeBand[2] + _resizeBand[3]);
+}
+
 /* Resizable from the edges: not while maximised or fullscreen. */
 - (BOOL) resizable
 {
@@ -866,27 +902,34 @@ GnomeThemeResizeCursor(NSUInteger edges)
 }
 
 /* The edges a point is on, for resizing. */
-- (NSUInteger) resizeEdgesForPoint: (NSPoint)p
+- (NSUInteger) resizeEdgesForPoint: (NSPoint)point
 {
+  /* An event's location is its pixel's top edge (the pixel row just
+     below the window is at y 0): test the pixel's centre. */
+  NSPoint p = NSMakePoint (point.x + 0.5, point.y - 0.5);
   NSRect bounds = [self bounds];
-  BOOL left = p.x < NSMinX (bounds) + GnomeThemeResizeEdge;
-  BOOL right = p.x >= NSMaxX (bounds) - GnomeThemeResizeEdge;
-  BOOL bottom = p.y < NSMinY (bounds) + GnomeThemeResizeEdge;
-  BOOL top = p.y >= NSMaxY (bounds) - GnomeThemeResizeEdge;
+  NSRect area = [self resizeArea];
+  BOOL outside = [self resizesOutside];
+  CGFloat edge = outside ? 0.0 : GnomeThemeResizeEdge;
+  BOOL left = p.x < NSMinX (bounds) + edge;
+  BOOL right = p.x >= NSMaxX (bounds) - edge;
+  BOOL bottom = p.y < NSMinY (bounds) + edge;
+  BOOL top = p.y >= NSMaxY (bounds) - edge;
   NSUInteger edges = 0;
 
-  if ([self resizable] == NO || NSPointInRect (p, bounds) == NO)
+  /* With a shadow, presses inside the window are the content's. */
+  if ([self resizable] == NO || NSPointInRect (p, area) == NO || (outside && NSPointInRect (p, bounds)))
     {
       return 0;
     }
   if (left || right)
     {
       edges |= left ? GnomeThemeResizeLeft : GnomeThemeResizeRight;
-      if (p.y < NSMinY (bounds) + GnomeThemeResizeCorner)
+      if (p.y < NSMinY (area) + GnomeThemeResizeCorner)
         {
           edges |= GnomeThemeResizeBottom;
         }
-      else if (p.y >= NSMaxY (bounds) - GnomeThemeResizeCorner)
+      else if (p.y >= NSMaxY (area) - GnomeThemeResizeCorner)
         {
           edges |= GnomeThemeResizeTop;
         }
@@ -894,11 +937,11 @@ GnomeThemeResizeCursor(NSUInteger edges)
   if (top || bottom)
     {
       edges |= bottom ? GnomeThemeResizeBottom : GnomeThemeResizeTop;
-      if (p.x < NSMinX (bounds) + GnomeThemeResizeCorner)
+      if (p.x < NSMinX (area) + GnomeThemeResizeCorner)
         {
           edges |= GnomeThemeResizeLeft;
         }
-      else if (p.x >= NSMaxX (bounds) - GnomeThemeResizeCorner)
+      else if (p.x >= NSMaxX (area) - GnomeThemeResizeCorner)
         {
           edges |= GnomeThemeResizeRight;
         }
@@ -906,8 +949,8 @@ GnomeThemeResizeCursor(NSUInteger edges)
   return edges;
 }
 
-/* The edges are over the content view's edge: take clicks there before
-   the content does. */
+/* The edges are over the content view's edge, or outside the bounds in
+   the shadow: take clicks there before the content does. */
 - (NSView *) hitTest: (NSPoint)point
 {
   NSPoint p = [self convertPoint: point fromView: nil];
@@ -930,6 +973,35 @@ GnomeThemeResizeCursor(NSUInteger edges)
   [super resetCursorRects];
   if ([self resizable] == NO)
     {
+      return;
+    }
+  if ([self resizesOutside])
+    {
+      /* The band outside the edges; each corner is the band's two arms. */
+      NSRect area = [self resizeArea];
+      CGFloat l = _resizeBand[0], r = _resizeBand[1], t = _resizeBand[2], b = _resizeBand[3];
+      CGFloat aMinX = NSMinX (area), aMaxX = NSMaxX (area), aMinY = NSMinY (area), aMaxY = NSMaxY (area);
+      NSCursor *bottomLeft = GnomeThemeResizeCursor (GnomeThemeResizeLeft | GnomeThemeResizeBottom);
+      NSCursor *bottomRight = GnomeThemeResizeCursor (GnomeThemeResizeRight | GnomeThemeResizeBottom);
+      NSCursor *topLeft = GnomeThemeResizeCursor (GnomeThemeResizeLeft | GnomeThemeResizeTop);
+      NSCursor *topRight = GnomeThemeResizeCursor (GnomeThemeResizeRight | GnomeThemeResizeTop);
+
+      [self addCursorRect: NSMakeRect (aMinX, aMinY + corner, l, NSHeight (area) - 2.0 * corner)
+                   cursor: GnomeThemeResizeCursor (GnomeThemeResizeLeft)];
+      [self addCursorRect: NSMakeRect (maxX, aMinY + corner, r, NSHeight (area) - 2.0 * corner)
+                   cursor: GnomeThemeResizeCursor (GnomeThemeResizeRight)];
+      [self addCursorRect: NSMakeRect (aMinX + corner, aMinY, NSWidth (area) - 2.0 * corner, b)
+                   cursor: GnomeThemeResizeCursor (GnomeThemeResizeBottom)];
+      [self addCursorRect: NSMakeRect (aMinX + corner, maxY, NSWidth (area) - 2.0 * corner, t)
+                   cursor: GnomeThemeResizeCursor (GnomeThemeResizeTop)];
+      [self addCursorRect: NSMakeRect (aMinX, aMinY, l, corner) cursor: bottomLeft];
+      [self addCursorRect: NSMakeRect (aMinX, aMinY, corner, b) cursor: bottomLeft];
+      [self addCursorRect: NSMakeRect (maxX, aMinY, r, corner) cursor: bottomRight];
+      [self addCursorRect: NSMakeRect (aMaxX - corner, aMinY, corner, b) cursor: bottomRight];
+      [self addCursorRect: NSMakeRect (aMinX, aMaxY - corner, l, corner) cursor: topLeft];
+      [self addCursorRect: NSMakeRect (aMinX, maxY, corner, t) cursor: topLeft];
+      [self addCursorRect: NSMakeRect (maxX, aMaxY - corner, r, corner) cursor: topRight];
+      [self addCursorRect: NSMakeRect (aMaxX - corner, maxY, corner, t) cursor: topRight];
       return;
     }
   [self addCursorRect: NSMakeRect (minX, minY + corner, edge, NSHeight (bounds) - 2.0 * corner)
@@ -1204,7 +1276,8 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
         }
       return;
     }
-  if (hasTitleBar && NSPointInRect (p, titleBarRect))
+  /* At the pixel's centre, as for the edges: the bar's top row too. */
+  if (hasTitleBar && NSPointInRect (NSMakePoint (p.x + 0.5, p.y - 0.5), titleBarRect))
     {
       if ([event clickCount] == 2)
         {

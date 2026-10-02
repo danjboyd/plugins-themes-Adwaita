@@ -274,7 +274,7 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-## Phase 2b in progress (started 2026-09-25; step 1 done 2026-10-02)
+## Phase 2b in progress (started 2026-09-25; steps 1 and 2 done 2026-10-02)
 
 Work in two new git worktrees, on local branches, **nothing committed or
 pushed**, nothing installed system-wide:
@@ -310,7 +310,8 @@ pushed**, nothing installed system-wide:
     and `-flushwindowrect::`; the WM hint conversions keep `-styleoffsets`
     (hints use the X window's own origin). `-_updateShadowOf:` sets
     `_GTK_FRAME_EXTENTS` and an XShape input region of the visible part
-    (clicks in the margin go through). `-_updateShadowSizeOf:` drops the
+    plus a 12px resize band for resizable windows (`shadow_resizable`;
+    clicks further out in the margin go through). `-_updateShadowSizeOf:` drops the
     margin while `_NET_WM_STATE` is maximised (both) or fullscreen, or
     `_GTK_EDGE_CONSTRAINTS` has a tiled bit, and moves the min and max
     size hints (X window sizes, margin included) by the change, as GTK
@@ -360,18 +361,41 @@ Differences from libadwaita left as they are: tiled, GTK keeps a 20px
 margin (extents 20, 20, 20, 20) with no shadow but a faint 1px outline
 outside the edge and its resize zone there; ours drops the margin, and
 the free edge resizes from inside the window. Normal, GTK's extents are
-61, 61, 55, 67 (its shadow plus resize area outside the window); ours are
-the 30, 30, 24, 36 the visible shadow needs, and clicks in the margin go
-through, so there is no resize zone outside the edge (step 2 decides
-whether that matters). ThemeDemo's minimum width (722) doesn't fit half
+61, 61, 55, 67; ours are the 30, 30, 24, 36 the visible shadow needs (the
+resize band, step 2, fits in them). ThemeDemo's minimum width (722) doesn't fit half
 of a 1280px screen, so Mutter won't tile it there: test tiling at
 1920x1080.
 
+Step 2 done (2026-10-02, same session setup, against libadwaita 1.7 in
+the same session). Measured first: libadwaita resizes from a band 1 to 12
+px outside its visible edge on every side, and not from inside (a press
+inside the top is the header bar's: a move). Ours resized from 5px inside
+the edges and passed every press in the shadow through. Now, while the
+shadow shows, ours does as libadwaita, to the pixel (edge row and inside:
+no resize; 1 and 12px out: resize; 13px out: the window behind):
+
+- libs-back: the input shape takes the visible part plus a 12px band
+  (within the margin) for resizable windows. The window style libs-back
+  keeps when the gui decorates has no resize bit, so the device records
+  `shadow_resizable` when the shadow is set up.
+- Theme: `GnomeThemeWindowManagerShadowExtents()` gives the margin now;
+  the header bar's edges are the band outside its bounds (hit test,
+  cursor rects, corners as the band's two arms), none inside. Without a
+  shadow (maximised, tiled, no compositor) the 5px inside edges stay, as
+  GTK's without a compositor. Edge and title bar tests use the pixel's
+  centre: GNUstep gives an event its pixel's top edge, so the row just
+  below the window came as y 0, inside the bounds.
+
+Verified: all four sides and corners resize (Mutter does it, from 6px
+out at the corners, diagonally), cursors over the band are the resize
+ones (XFixes cursor names), a drag on the bar is Mutter's move (past the
+screen's edge), a click 20px out in the shadow activates and raises the
+window behind, and a tiled window still resizes from inside its free
+edge. `make check-quirks` and `make check-mutter` (installed libraries)
+pass.
+
 Not yet tested (next steps, in order):
 
-2. Moves and resizes handed to Mutter with the margin (xdotool on `:63` as
-   in `make check-mutter`), and a click in the margin reaching the window
-   behind (input shape).
 3. `make check-mutter` against the patched libraries; extend it with
    shadow checks (depth 32, frame extents, a shadow pixel, a rounded
    corner pixel, extents 0 when maximised).

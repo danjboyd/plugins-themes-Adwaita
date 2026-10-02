@@ -68,6 +68,10 @@ BOOL GnomeThemeWindowManagerShowWindowMenu(NSWindow *window);
    libadwaita's. */
 BOOL GnomeThemeWindowManagerHasShadow(NSWindow *window);
 
+/* As GnomeThemeWindowManagerHasShadow, with the shadow margin now (left,
+   right, top, bottom, in pixels; 0 while maximised or tiled). */
+BOOL GnomeThemeWindowManagerShadowExtents(NSWindow *window, CGFloat extents[4]);
+
 /* Whether the window manager has the window maximised; NO in `known` when
    it can't tell. */
 BOOL GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known);
