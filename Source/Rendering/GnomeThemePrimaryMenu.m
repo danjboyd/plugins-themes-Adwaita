@@ -789,10 +789,31 @@ GnomeThemeTrackingIndexForEvent(NSEvent *event)
   return event;
 }
 
-/* The menu bar's and transient (context, ☰) menus in in-window style:
-   Escape closes them (GNUstep has no key for it), and in 0.32 the release
-   that ends nothing is dropped (see GnomeThemeTrackingMenuView), as master
-   ignores it for these menus. */
+/* Pop-up buttons open their menu on the press, as the menu bar does, so
+   the release of a click that opens one must not end the tracking either:
+   it would pick the item under the pointer, the current one, and close the
+   menu at once (when the release comes before the tracking starts, as
+   while the menu's window is first made, the menu stays open, so this
+   showed only from the second opening on). With this, libs-gui ignores
+   that release in master; 0.32 has the theme drop it, as for the menu
+   bar. A modifier key also closes the menu, and the menu works in modal
+   sessions. */
+- (BOOL) doesProcessEventsForPopUpMenu
+{
+  return YES;
+}
+
+static BOOL
+GnomeThemeMenuIsOwnedByPopUp(NSMenu *menu)
+{
+  return [menu respondsToSelector: @selector(_ownedByPopUp)]
+    && [(id)menu _ownedByPopUp];
+}
+
+/* The menu bar's, transient (context, ☰) and pop-up buttons' menus in
+   in-window style: Escape closes them (GNUstep has no key for it), and in
+   0.32 the release that ends nothing is dropped (see
+   GnomeThemeTrackingMenuView), as master ignores it for these menus. */
 - (BOOL) _overrideNSMenuViewMethod_trackWithEvent: (NSEvent *)event
 {
   typedef BOOL (*TrackIMP)(id, SEL, NSEvent *);
@@ -811,7 +832,8 @@ GnomeThemeTrackingIndexForEvent(NSEvent *event)
   NSTimer *escape;
 
   if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", menuView) != NSWindows95InterfaceStyle
-    || ([menuView isHorizontal] == NO && [[menuView menu] isTransient] == NO))
+    || ([menuView isHorizontal] == NO && [[menuView menu] isTransient] == NO
+      && GnomeThemeMenuIsOwnedByPopUp ([menuView menu]) == NO))
     {
       return originalIMP (self, _cmd, event);
     }

@@ -2500,6 +2500,71 @@ QuirkProbeVisibleMenus (void)
   [NSApp postEvent: up atStart: NO];
 }
 
+/* Fires while a pop-up button's menu is tracking: note whether it's
+   showing, then click elsewhere to close it. */
+- (void) inspectPopUpMenu: (NSTimer *)timer
+{
+  NSWindow *menuWindow = [[[_popUpButton menu] menuRepresentation] window];
+
+  ASSIGN (QuirkProbeMenuBarOpen, (menuWindow != nil && [menuWindow isVisible]) ? @"menu" : @"");
+  [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: NSMakePoint (850, 20)]
+                              onScreen: [[_controlsWindow screen] screenNumber]];
+  [self after: 0.2 perform: @selector(clickOffMenuBar:) mode: NSEventTrackingRunLoopMode];
+}
+
+/* A click on a pop-up button opens its menu and the menu stays open: its
+   menu opens on the press, and the release (here already queued) used to
+   end the tracking, picking the current item and closing the menu at once
+   (when the release came before the tracking, as while the menu's window
+   was first made, the menu stayed open: so only from the second click on).
+   A click elsewhere closes it and changes nothing. */
+- (void) checkPopUpClick
+{
+  NSRect frame = [_popUpButton convertRect: [_popUpButton bounds] toView: nil];
+  NSPoint point = NSMakePoint (NSMidX (frame), NSMidY (frame));
+  NSString *before = [_popUpButton titleOfSelectedItem];
+  NSMutableArray *opened = [NSMutableArray array];
+  NSWindow *menuWindow;
+  NSString *detail;
+  int i;
+
+  if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeOwnsDisplay"] == NO)
+    {
+      [self skip: @"popup-click-stays-open" detail: @"moves the pointer: only on the probe's own Xvfb"];
+      return;
+    }
+  for (i = 0; i < 3; i++)
+    {
+      NSEvent *down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                        timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                      eventNumber: 0 clickCount: 1 pressure: 1];
+      NSEvent *up = [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                                      timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil
+                                    eventNumber: 0 clickCount: 1 pressure: 0];
+
+      ASSIGN (QuirkProbeMenuBarOpen, @"");
+      [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: point]
+                                  onScreen: [[_controlsWindow screen] screenNumber]];
+      [self after: 0.3 perform: @selector(inspectPopUpMenu:) mode: NSEventTrackingRunLoopMode];
+      [NSApp postEvent: up atStart: NO];
+      [_popUpButton mouseDown: down];
+      [opened addObject: [QuirkProbeMenuBarOpen length] > 0 ? @"open" : @"closed"];
+    }
+  menuWindow = [[[_popUpButton menu] menuRepresentation] window];
+  detail = [NSString stringWithFormat: @"0.3s after each of 3 clicks: %@; after a click elsewhere: %@, selection %@ -> %@",
+    [opened componentsJoinedByString: @", "],
+    [menuWindow isVisible] ? @"showing" : @"closed", before, [_popUpButton titleOfSelectedItem]];
+  if ([opened containsObject: @"closed"] == NO && [menuWindow isVisible] == NO
+    && [before isEqualToString: [_popUpButton titleOfSelectedItem]])
+    {
+      [self pass: @"popup-click-stays-open" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-click-stays-open" detail: detail];
+    }
+}
+
 /* Clicks a menu bar title, as a click with the pointer on it: the release
    is already queued when the press is handled. */
 /* Presses a menu bar title and holds it: no release follows. */
@@ -3507,6 +3572,7 @@ QuirkProbeVisibleMenus (void)
   [self checkToolbarEdges];
   [self checkToolbarHover];
   [self checkPopUpButton];
+  [self checkPopUpClick];
   [self checkButtonFocusRing];
   [self checkCheckboxGap];
   [self checkTableDensity];
