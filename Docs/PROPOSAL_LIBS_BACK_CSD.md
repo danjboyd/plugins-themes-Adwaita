@@ -172,22 +172,30 @@ item 4.
   `_GTK_FRAME_EXTENTS` and a compositing manager that only owns the
   selection, and checks the visual, the extents, the window size, the input
   shape (also after a resize the program makes), the maximized state, the
-  compositing manager stopping and starting, non-retained and borderless
-  windows, a window manager without `_GTK_FRAME_EXTENTS`, and the Motif
-  hints (16 checks; 11 fail without the patch).
+  compositing manager stopping and starting, the scale factor,
+  non-retained and borderless windows, a window manager without
+  `_GTK_FRAME_EXTENTS`, and the Motif hints (19 checks; 14 fail without
+  the patch).
+- *Scale factor:* the margin, the corner radius and the resize band are
+  in points, multiplied by the gui's scale factor (`GSScaleFactor`), as
+  GTK's grow with its scale; the shadow's fall-off scales with them. At 2×
+  under Mutter: extents 60 60 48 72, the band 24 pixels, the shadow and
+  corners as at 1× (checked by hand; `shadowmargin.m` checks the extents,
+  the band and the margin after a maximise).
 - *Frame changes:* when the margin changes the window manager re-fits
   the window, usually configuring it for the old margin first. libs-back
   holds the frame from the gui until those ConfigureNotify events stop
-  (20 ms with none, 200 ms at most) and sends it once, then exposes the
+  (50 ms with none, 300 ms at most; a ConfigureNotify also looks for a
+  new state, which Mutter may configure before the PropertyNotify for it
+  arrives) and sends it once, then exposes the
   whole window from the new buffers: a maximize is one resize, not
-  three. A restore is two, since Mutter configures the restored size
+  three, at 1× and 2×. A restore is two, since Mutter configures the restored size
   before it changes the state, while the window still has no margin
   (`make check-mutter-shadow` in the theme counts them, and checks the
   shadow is drawn again).
 - *Known limitations:* only Mutter has been tried as the window manager (KWin,
   Xfwm and others with a compositor are untested); the art and xlib
-  graphics backends don't define XRENDER and never make 32-bit windows; the
-  scale factor (`GSScaleFactor`) with a margin is untested.
+  graphics backends don't define XRENDER and never make 32-bit windows.
 
 ### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 

@@ -68,6 +68,7 @@ it was found. Compare against the libadwaita reference with
 | Menu separators were two rows of mid grey (plugins-themes-Adwaita#11) | one hairline on a pixel row, the text colour at 15% over the menu (50% in high contrast) |
 | Menu bar menus opened on the release; a click outside reached the window under it; context menus closed when the right button came up; Escape didn't close context menus | audited against GTK 4 under Mutter: menu bar titles and context menus open on the press and stay open on its release (on 0.32 the theme drops that release, as master does; master is told by `-[NSImage isTemplate]`); a press outside closes them and goes nowhere else; Escape closes the menu bar's, ☰ and context menus. ☰ opens on the release, as GTK's menu buttons do |
 | A click on a pop-up button opened its menu and closed it again at once, keeping the current item (from the second click on: the first time, making the menu's window let the release come before the tracking) | pop-up menus open on the press and get the menu bar's treatment: the opening click's release is ignored (`-doesProcessEventsForPopUpMenu` in master, dropped by the theme in 0.32), Escape or a press outside closes them; QuirkProbe `popup-click-stays-open` |
+| With libs-gui master (gui ff49ac8) alerts were right-aligned, table header titles sat centred (about 110pt in) and menu shortcuts were centred (30pt from the edge): master (3237efda8) numbers `NSTextAlignment` as AppKit does, swapping centre and right, so the constants of a theme built against 0.32 meant the other alignment | `GnomeThemeCenterTextAlignment()` and `GnomeThemeRightTextAlignment()` take the values from `NSParagraphStyle`'s class version (4 since the change); QuirkProbe passes against 0.32 and master, its alert check measuring the heading's ink |
 | Menus drew rounded corners on an opaque window, black under a compositor | square, with the border, unless the window has an alpha channel and a compositing manager runs; then menus (10pt) and tool tips (libadwaita's 9pt, with its light outline) are rounded. The alpha channel needs the libs-back patch (`GSBackBorderlessWindowAlpha`) |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
@@ -147,10 +148,6 @@ window, compared with the GNUstep theme). Still open:
   `org.gnome.desktop.a11y.interface high-contrast`, and libadwaita keeps
   the light or dark palette with stronger borders and outlines. The header
   bar draws libadwaita's details in whichever palette is active.
-- **Check libs-gui master before its next release.** On 2026-09-25 the
-  probe's `table-header` check failed against master (gui ff49ac8): header
-  text starts about 110pt in and isn't dimmed. Everything else, including
-  the header bar and ☰ checks, passed.
 
 ## GNUstep issues to report upstream
 

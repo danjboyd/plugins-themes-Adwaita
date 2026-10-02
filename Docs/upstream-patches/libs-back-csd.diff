@@ -1,8 +1,8 @@
 diff --git a/ChangeLog b/ChangeLog
-index 2b1b779..d83c6c0 100644
+index 2b1b779..1257eb4 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,83 @@
+@@ -1,3 +1,88 @@
 +2026-10-02 Daniel Boyd <danieljboyd@icloud.com>
 +
 +	Window shadows, rounded corners and window manager functions for
@@ -42,6 +42,9 @@ index 2b1b779..d83c6c0 100644
 +	(-_updateShadowOf:): New.  Set _GTK_FRAME_EXTENTS to the margin, and
 +	an input shape of the visible part and, for a resizable window, a
 +	12 pixel band round it, which the gui uses to resize.
++	(shadowScale, shadowScaled): New.  The margin, the corner radius and
++	the resize band are in points: multiply them by the gui's scale
++	factor (GSScaleFactor), as GTK's grow with its scale.
 +	(-window::::): Create such windows with the 32-bit visual, and the
 +	margin where they have one.
 +	(-placewindow::): Reshape the input region when the size changes:
@@ -53,13 +56,13 @@ index 2b1b779..d83c6c0 100644
 +	(-_shadowSizeChangedFor:, -_settleShadowOf:, -_shadowSettled:): New.
 +	After the margin changed the window manager fits the X window to it,
 +	usually configuring it for the old margin first: hold the frame from
-+	the gui until the ConfigureNotify events stop (20 ms with none, 200 ms
++	the gui until the ConfigureNotify events stop (50 ms with none, 300 ms
 +	at most), then send it once, so a maximize is one resize rather than
 +	three, and expose the whole window from the buffers, which have the
-+	margin now.  On the XFixes selection event for _NET_WM_CM_S<n>, call
-+	-_compositorChanged.
-+	* Headers/x11/XGServerWindow.h: Add shadow_settling and
-+	shadow_settle_start.
++	margin now.  On ConfigureNotify also look for a margin change, as the
++	window manager may configure the window before the PropertyNotify for
++	its new state arrives.  On the XFixes selection event for
++	_NET_WM_CM_S<n>, call -_compositorChanged.
 +	* Source/x11/XGServer.m: Watch the _NET_WM_CM_S<n> selection with
 +	XFixes.
 +	* Headers/x11/XGServer.h: Add xfixesEventBase.
@@ -71,15 +74,17 @@ index 2b1b779..d83c6c0 100644
 +	* Tests/x11/GNUmakefile: Add it.
 +	* Source/cairo/XGCairoModernSurface.m (shadow_alpha, shadow_template,
 +	create_shadow): New.  The shadow, as libadwaita's under Mutter, put
-+	together in the X server from corners and edges computed once.
++	together in the X server from corners and edges computed once, its
++	fall-off scaled with the window's scale factor.
 +	(-initWithDevice:): Make the shadow for a window with a margin.
 +	(-handleExposeRect:): Copy the window's contents and the shadow as
 +	rectangles, and the four corners through a rounded clip.
 +	* Headers/cairo/XGCairoModernSurface.h: Add _shadowSurface.
 +	* Headers/x11/XGServerWindow.h: Add shadow, corner_radius,
-+	shadow_eligible and shadow_resizable to gswindow_device_t.  Declare
-+	-_offsets::::for:, -_updateShadowOf:, -_updateShadowSizeOf:,
-+	-_shadowSizeChangedFor:, -_compositorRuns and -_compositorChanged.
++	shadow_scale, shadow_eligible, shadow_resizable, shadow_settling and
++	shadow_settle_start to gswindow_device_t.  Declare -_offsets::::for:,
++	-_updateShadowOf:, -_updateShadowSizeOf:, -_shadowSizeChangedFor:,
++	-_shadowSettled:, -_compositorRuns and -_compositorChanged.
 +	* Headers/x11/XGGeneric.h: Add the _GTK_FRAME_EXTENTS and
 +	_GTK_EDGE_CONSTRAINTS atoms.
 +
@@ -138,7 +143,7 @@ index c57a7bb..1026b62 100644
    unsigned          monitorsCount;
  }
 diff --git a/Headers/x11/XGServerWindow.h b/Headers/x11/XGServerWindow.h
-index adca517..365bf55 100644
+index adca517..81bbd7b 100644
 --- a/Headers/x11/XGServerWindow.h
 +++ b/Headers/x11/XGServerWindow.h
 @@ -32,6 +32,8 @@
@@ -150,7 +155,7 @@ index adca517..365bf55 100644
  /*
   * WindowMaker window manager interaction
   *
-@@ -97,6 +99,22 @@ typedef struct _gswindow_device_t {
+@@ -97,6 +99,25 @@ typedef struct _gswindow_device_t {
    NSBackingStoreType    type;          /* Backing type */
    NSRect                xframe;        /* Window frame in X11 coordinates */
    NSRect                osframe;       /* Window frame in OpenStep coordinates */
@@ -160,6 +165,9 @@ index adca517..365bf55 100644
 +					  decorations (_GTK_FRAME_EXTENTS) */
 +  int                   corner_radius; /* Rounds the visible part's corners
 +					  while it has that margin */
++  float                 shadow_scale;  /* The gui's scale factor, which
++					  that margin, the radius and the
++					  resize band grow with */
 +  BOOL                  shadow_eligible; /* Gets that margin when the window
 +					  manager has it neither maximized,
 +					  fullscreen nor tiled */
@@ -173,7 +181,7 @@ index adca517..365bf55 100644
  
    unsigned int          buffer_width;  /* Size in pixels of the current buffers. */
    unsigned int          buffer_height;
-@@ -133,6 +151,14 @@ typedef struct _gswindow_device_t {
+@@ -133,6 +154,14 @@ typedef struct _gswindow_device_t {
  + (gswindow_device_t *) _windowForXParent: (Window)xWindow;
  + (gswindow_device_t *) _windowWithTag: (int)windowNumber;
  - (void) _addExposedRectangle: (XRectangle)rectangle : (int)win : (BOOL) ignoreBacking;
@@ -189,10 +197,10 @@ index adca517..365bf55 100644
  - (void) _initializeCursorForXWindow: (Window) win;
  - (void) _destroyServerWindows;
 diff --git a/Source/cairo/XGCairoModernSurface.m b/Source/cairo/XGCairoModernSurface.m
-index a722168..9f5dea3 100644
+index a722168..186ed31 100644
 --- a/Source/cairo/XGCairoModernSurface.m
 +++ b/Source/cairo/XGCairoModernSurface.m
-@@ -27,9 +27,216 @@
+@@ -27,9 +27,221 @@
  #include "x11/XGServerWindow.h"
  #include "cairo/XGCairoModernSurface.h"
  #include <cairo-xlib.h>
@@ -229,7 +237,7 @@ index a722168..9f5dea3 100644
 + */
 +static double
 +shadow_alpha(double px, double py, double x0, double x1, double y0, double y1,
-+	     double radius)
++	     double radius, double scale)
 +{
 +  double dx, dy, corner, d, vertical, side;
 +
@@ -242,7 +250,8 @@ index a722168..9f5dea3 100644
 +    {
 +      return 0.0;
 +    }
-+  d = MAX(corner - radius, 0.0);
++  /* The fall-off lengths are GNOME's at scale 1. */
++  d = MAX(corner - radius, 0.0) / scale;
 +  vertical = corner > 0.0 ? dy / corner : 0.0;
 +  side = 0.19 * exp(-d / 10.0);
 +  if (py < y0 + radius)
@@ -272,11 +281,13 @@ index a722168..9f5dea3 100644
 +#define SHADOW_TILE 64
 +
 +static cairo_surface_t *
-+shadow_template(cairo_surface_t *similar, const int *margin, int radius)
++shadow_template(cairo_surface_t *similar, const int *margin, int radius,
++		double scale)
 +{
 +  static cairo_surface_t *cached = NULL;
 +  static Display *cachedDisplay = NULL;
 +  static int cachedMargin[4], cachedRadius = -1;
++  static double cachedScale = 0.0;
 +  int width = margin[0] + 2 * radius + SHADOW_TILE + margin[1];
 +  int height = margin[2] + 2 * radius + SHADOW_TILE + margin[3];
 +  double x0 = margin[0], x1 = width - margin[1];
@@ -288,7 +299,7 @@ index a722168..9f5dea3 100644
 +  int stride, x, y;
 +
 +  if (cached != NULL && cachedDisplay == display && cachedRadius == radius
-+    && memcmp(cachedMargin, margin, sizeof(cachedMargin)) == 0)
++    && cachedScale == scale && memcmp(cachedMargin, margin, sizeof(cachedMargin)) == 0)
 +    {
 +      return cached;
 +    }
@@ -307,7 +318,8 @@ index a722168..9f5dea3 100644
 +
 +      for (x = 0; x < width; x++)
 +	{
-+	  row[x] = shadow_pixel(shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1, radius));
++	  row[x] = shadow_pixel(shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1, radius,
++						    scale));
 +	}
 +    }
 +  cairo_surface_mark_dirty(image);
@@ -325,6 +337,7 @@ index a722168..9f5dea3 100644
 +  cachedDisplay = display;
 +  memcpy(cachedMargin, margin, sizeof(cachedMargin));
 +  cachedRadius = radius;
++  cachedScale = scale;
 +  return cached;
 +}
 +
@@ -355,7 +368,7 @@ index a722168..9f5dea3 100644
 + */
 +static cairo_surface_t *
 +create_shadow(cairo_surface_t *similar, int width, int height,
-+	      const int *margin, int radius)
++	      const int *margin, int radius, double scale)
 +{
 +  int l = margin[0], r = margin[1], t = margin[2], b = margin[3];
 +  cairo_surface_t *template, *shadow;
@@ -367,7 +380,7 @@ index a722168..9f5dea3 100644
 +    {
 +      return NULL;
 +    }
-+  template = shadow_template(similar, margin, radius);
++  template = shadow_template(similar, margin, radius, scale);
 +  if (template == NULL)
 +    {
 +      return NULL;
@@ -409,7 +422,7 @@ index a722168..9f5dea3 100644
  @implementation XGCairoModernSurface
  
  - (id) initWithDevice: (void *)device
-@@ -83,6 +290,15 @@
+@@ -83,6 +295,16 @@
  					      CAIRO_CONTENT_COLOR_ALPHA,
  					      GSWINDEVICE->xframe.size.width,
  					      GSWINDEVICE->xframe.size.height);
@@ -420,12 +433,13 @@ index a722168..9f5dea3 100644
 +					 GSWINDEVICE->xframe.size.width,
 +					 GSWINDEVICE->xframe.size.height,
 +					 GSWINDEVICE->shadow,
-+					 GSWINDEVICE->corner_radius);
++					 GSWINDEVICE->corner_radius,
++					 GSWINDEVICE->shadow_scale);
 +	}
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
  	(int) cairo_surface_get_type(_windowSurface),
-@@ -101,6 +317,10 @@
+@@ -101,6 +323,10 @@
      {
        cairo_surface_destroy(_windowSurface);
      }
@@ -436,7 +450,7 @@ index a722168..9f5dea3 100644
    [super dealloc];
  }
  
-@@ -127,9 +347,65 @@
+@@ -127,9 +353,65 @@
    // FIXME: should round
    cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
    cairo_clip(windowCtx);
@@ -603,7 +617,7 @@ index ef59b43..fcbb5fe 100644
    return self;
  }
 diff --git a/Source/x11/XGServerEvent.m b/Source/x11/XGServerEvent.m
-index c98ecb3..ff24348 100644
+index c98ecb3..93ac1e8 100644
 --- a/Source/x11/XGServerEvent.m
 +++ b/Source/x11/XGServerEvent.m
 @@ -63,6 +63,9 @@
@@ -633,9 +647,18 @@ index c98ecb3..ff24348 100644
    o.x = x.x + l;
    o.y = NSHeight(win->xframe) - x.y + b;
  
-@@ -998,6 +1002,11 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -997,7 +1001,20 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+               }
  
              cWin->xframe = x;
++            /* A window manager may configure the window for a new state
++               (maximized, restored) before the PropertyNotify for it
++               arrives: the margin changes here then. */
++            if (!cWin->shadow_settling && cWin->shadow_eligible
++              && [self _updateShadowSizeOf: cWin])
++              {
++                [self _shadowSizeChangedFor: cWin];
++              }
              n = [self _XFrameToOSFrame: x for: cWin];
 +            if (!NSEqualSizes(r.size, x.size))
 +              {
@@ -645,7 +668,7 @@ index c98ecb3..ff24348 100644
              NSDebugLLog(@"Moving",
                          @"Update win %lu:\n   original:%@\n   new:%@",
                          cWin->number, NSStringFromRect(r), 
-@@ -1022,6 +1031,14 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1022,6 +1039,14 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
                  cWin->siz_hints.y = h.origin.y;
                }
  
@@ -660,7 +683,7 @@ index c98ecb3..ff24348 100644
              /*
               * create GNUstep event(s)
               */
-@@ -1218,6 +1235,17 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1218,6 +1243,17 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
                {
                  NSRect rect;
                  NSTimeInterval ts = (NSTimeInterval)generic.lastMotion;
@@ -678,7 +701,7 @@ index c98ecb3..ff24348 100644
                  
                  rect = [self _XWinRectToOSWinRect: NSMakeRect(
                          rectangle.x, rectangle.y, rectangle.width, rectangle.height)
-@@ -1618,6 +1646,18 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1618,6 +1654,18 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
          NSDebugLLog(@"NSEvent", @"%lu PropertyNotify - '%s'\n",
                      xEvent.xproperty.window,
                      XGetAtomName(dpy, xEvent.xproperty.atom));
@@ -697,7 +720,7 @@ index c98ecb3..ff24348 100644
  	if (xEvent.xproperty.atom == generic.WM_STATE_ATOM)
  	  {
  	    if (cWin == 0 || xEvent.xproperty.window != cWin->ident)
-@@ -1923,6 +1963,15 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1923,6 +1971,15 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
  
              // We shouldn't get here unless we forgot to trap an event above
        default:
@@ -713,7 +736,7 @@ index c98ecb3..ff24348 100644
  #ifdef XSHM
          if (xEvent.type == XShmGetEventBase(dpy)+ShmCompletion
              && [gcontext respondsToSelector: @selector(gotShmCompletion:)])
-@@ -2649,6 +2698,106 @@ process_modifier_flags(unsigned int state)
+@@ -2649,6 +2706,106 @@ process_modifier_flags(unsigned int state)
    return [XGDragView sharedDragView];
  }
  
@@ -729,8 +752,8 @@ index c98ecb3..ff24348 100644
 + * it changes the state, while the window has no margin: the gui sees that
 + * resize too.)
 + */
-+static const NSTimeInterval GSShadowSettleQuiet = 0.02;
-+static const NSTimeInterval GSShadowSettleLimit = 0.2;
++static const NSTimeInterval GSShadowSettleQuiet = 0.05;
++static const NSTimeInterval GSShadowSettleLimit = 0.3;
 +
 +- (void) _settleShadowOf: (gswindow_device_t *)win
 +{
@@ -821,7 +844,7 @@ index c98ecb3..ff24348 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 19c5e9e..f198529 100644
+index 19c5e9e..fd45429 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -40,6 +40,7 @@
@@ -903,7 +926,7 @@ index 19c5e9e..f198529 100644
    o = x;
    o.origin.y = xScreenSize.height - x.origin.y;
    o.origin.y = o.origin.y - x.size.height - b;
-@@ -590,6 +605,353 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -590,6 +605,373 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -937,6 +960,25 @@ index 19c5e9e..f198529 100644
 + * resizing from the shadow (GTK 4 under Mutter: 12 pixels).
 + */
 +static const int shadowResizeBand = 12;
++
++/* The gui's scale factor: GSScaleFactor, else 1 (-resolutionForScreen:
++ * answers 72 dpi). The margin, corner radius and resize band are in
++ * points, as GTK's are in its logical pixels: they grow with it.
++ */
++static float
++shadowScale(void)
++{
++  float scale = [[NSUserDefaults standardUserDefaults]
++    floatForKey: @"GSScaleFactor"];
++
++  return scale > 0.0 ? scale : 1.0;
++}
++
++static int
++shadowScaled(int length, float scale)
++{
++  return (int)floor(length * scale + 0.5);
++}
 +
 +/*
 + * A 32-bit visual with an alpha channel, and a colormap for it, for windows
@@ -1167,7 +1209,7 @@ index 19c5e9e..f198529 100644
 +    }
 +  for (i = 0; i < 4; i++)
 +    {
-+      int wanted = flat ? 0 : shadowMargin[i];
++      int wanted = flat ? 0 : shadowScaled(shadowMargin[i], win->shadow_scale);
 +
 +      if (win->shadow[i] != wanted)
 +	{
@@ -1234,7 +1276,8 @@ index 19c5e9e..f198529 100644
 +      for (i = 0; i < 4; i++)
 +	{
 +	  band[i] = win->shadow_resizable
-+	    ? MIN(shadowResizeBand, win->shadow[i]) : 0;
++	    ? MIN(shadowScaled(shadowResizeBand, win->shadow_scale),
++		  win->shadow[i]) : 0;
 +	}
 +      visible.x = win->shadow[0] - band[0];
 +      visible.y = win->shadow[2] - band[2];
@@ -1257,7 +1300,7 @@ index 19c5e9e..f198529 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2048,6 +2410,20 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2048,6 +2430,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
@@ -1268,17 +1311,20 @@ index 19c5e9e..f198529 100644
 +
 +      window->shadow_eligible = YES;
 +      window->shadow_resizable = (style & NSResizableWindowMask) != 0;
++      window->shadow_scale = shadowScale();
 +      for (i = 0; i < 4; i++)
 +	{
-+	  window->shadow[i] = shadowMargin[i];
++	  window->shadow[i] = shadowScaled(shadowMargin[i],
++					   window->shadow_scale);
 +	}
-+      window->corner_radius = MAX(0, [[NSUserDefaults standardUserDefaults]
-+	integerForKey: @"GSBackWindowCornerRadius"]);
++      window->corner_radius = shadowScaled(MAX(0,
++	[[NSUserDefaults standardUserDefaults]
++	  integerForKey: @"GSBackWindowCornerRadius"]), window->shadow_scale);
 +    }
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2074,17 +2450,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2074,17 +2473,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
  
    window->xwn_attrs.override_redirect = False;
  
@@ -1331,7 +1377,7 @@ index 19c5e9e..f198529 100644
  
    /*
     * Mark the window as the application with name & class so the WM can group it
-@@ -2098,6 +2498,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2098,6 +2521,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1340,7 +1386,7 @@ index 19c5e9e..f198529 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2842,8 +3244,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2842,8 +3267,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
      }
  #endif
  
@@ -1350,7 +1396,7 @@ index 19c5e9e..f198529 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3489,6 +3890,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3489,6 +3913,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1364,7 +1410,7 @@ index 19c5e9e..f198529 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -3933,8 +4341,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3933,8 +4364,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  
@@ -1376,10 +1422,10 @@ index 19c5e9e..f198529 100644
    width = NSWidth(rect);
 diff --git a/Tests/x11/shadowmargin.m b/Tests/x11/shadowmargin.m
 new file mode 100644
-index 0000000..7bf74e9
+index 0000000..80f3e67
 --- /dev/null
 +++ b/Tests/x11/shadowmargin.m
-@@ -0,0 +1,470 @@
+@@ -0,0 +1,493 @@
 +/* The shadow margin of windows the gui decorates (GSBackWindowShadows):
 + * a transparent margin round the frame with a 32-bit visual,
 + * _GTK_FRAME_EXTENTS telling the window manager where the window is, an
@@ -1773,6 +1819,29 @@ index 0000000..7bf74e9
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"30 30 24 36",
 +    "the margin comes back with a compositing manager");
 +  [srv termwindow: win];
++
++  /* The margin, the corners and the band are in points: they grow with
++     the gui's scale factor. */
++  [defs setFloat: 2.0 forKey: @"GSScaleFactor"];
++  win = [srv window: NSMakeRect(100, 100, 400, 300)
++		   : NSBackingStoreBuffered : styled : 0];
++  xwin = (Window)[srv windowDevice: win];
++  [srv orderwindow: NSWindowAbove : 0 : win];
++  spin();
++  PASS_EQUAL(frameExtents(dpy, xwin), @"60 60 48 72",
++    "with GSScaleFactor 2 the margin is twice as wide");
++  shape = inputShape(dpy, xwin);
++  PASS(NSEqualRects(shape, NSMakeRect(36, 24, 448, 348)),
++    "with GSScaleFactor 2 the resize band is 24 pixels (%s)",
++    [NSStringFromRect(shape) UTF8String]);
++  setMaximized(dpy, xwin, YES);
++  spin();
++  setMaximized(dpy, xwin, NO);
++  spin();
++  PASS_EQUAL(frameExtents(dpy, xwin), @"60 60 48 72",
++    "with GSScaleFactor 2 the margin comes back twice as wide");
++  [srv termwindow: win];
++  [defs removeObjectForKey: @"GSScaleFactor"];
 +
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
 +		   : NSBackingStoreNonretained : styled : 0];
