@@ -67,7 +67,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-mutter palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-mutter check-mutter-shadow palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -90,6 +90,16 @@ check-quirks:
 # Xvfb display; see the script).
 check-mutter:
 	bash Tests/Scripts/run-mutter-check.sh
+
+# The same against a libs-gui and libs-back that draw GNOME's shadow
+# (phase 2b in Docs/HANDOFF_HEADER_BAR.md), with checks of the shadow,
+# corners, maximised and restored margins, resize band and click-through.
+# Skipped when they aren't there.
+MUTTER_CHECK_GUI ?= $(HOME)/git/gnustep/libs-gui-csd/Source/obj
+MUTTER_CHECK_BACK ?= $(HOME)/git/gnustep/libs-back-csd/Source/libgnustep-back-032.bundle
+check-mutter-shadow:
+	MUTTER_CHECK_GUI="$(MUTTER_CHECK_GUI)" MUTTER_CHECK_BACK="$(MUTTER_CHECK_BACK)" \
+	  bash Tests/Scripts/run-mutter-check.sh --shadow
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install

@@ -274,7 +274,7 @@ with `GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix` and
 never delete their directories across file systems (the check script's
 cleanup shows how).
 
-## Phase 2b in progress (started 2026-09-25; steps 1 and 2 done 2026-10-02)
+## Phase 2b in progress (started 2026-09-25; steps 1 to 3 done 2026-10-02)
 
 Work in two new git worktrees, on local branches, **nothing committed or
 pushed**, nothing installed system-wide:
@@ -394,11 +394,25 @@ window behind, and a tiled window still resizes from inside its free
 edge. `make check-quirks` and `make check-mutter` (installed libraries)
 pass.
 
+Step 3 done (2026-10-02): `make check-mutter-shadow` runs
+`Tests/Scripts/run-mutter-check.sh --shadow` against `MUTTER_CHECK_GUI`
+and `MUTTER_CHECK_BACK` (by default the two worktrees' builds; skipped
+when they aren't there). GNUstep's user defaults and user Library are
+scratch directories (an isolated GNUstep.conf; libs-base takes an
+absolute `GNUSTEP_USER_DIR_LIBRARY`), so the theme alone asks for the
+decorations and nothing is linked into `~/GNUstep`; the check confirms
+the libraries loaded from `/proc/PID/maps`. GNOME Shell's settings are a
+scratch keyfile with a solid #777777 background, so the shadow can be
+measured. Ten checks: allowed actions; a 32-bit window with extents 30,
+30, 24, 36; darker 3px outside the edge, the background 40px out, the
+top left corner rounded off; maximised, extents 0 and a square corner;
+restored, the same frame and extents; Mutter's move; the right edge
+resizing from 6px out, not from 3px in; and the window under the pointer
+12px out but not 13px out. `make check-mutter` (installed libraries)
+takes positions from the visible window too and still passes.
+
 Not yet tested (next steps, in order):
 
-3. `make check-mutter` against the patched libraries; extend it with
-   shadow checks (depth 32, frame extents, a shadow pixel, a rounded
-   corner pixel, extents 0 when maximised).
 4. Other window kinds with a shadow: panels, alerts (NSDocModalWindowMask
    gets one), sheets, menus and tool tips (borderless: none).
 5. Try it on the real desktop (GNOME Wayland, Xwayland), then the style
