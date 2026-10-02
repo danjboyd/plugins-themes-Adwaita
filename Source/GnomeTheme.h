@@ -30,6 +30,14 @@
    method up for `baseClass`, the class the override was installed on, instead. */
 IMP GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass);
 
+/* Centred and right-aligned text as the running libs-gui numbers them.
+   libs-gui after 0.32 numbers NSTextAlignment as AppKit does (centre 1,
+   right 2; 0.32 has right 1, centre 2), so the constants a theme built
+   against one release's headers mean the other alignment with the other
+   release. */
+NSTextAlignment GnomeThemeCenterTextAlignment(void);
+NSTextAlignment GnomeThemeRightTextAlignment(void);
+
 /* YES for the application-name item GNUstep puts first in a horizontal
    (NSWindows95InterfaceStyle) main menu (see -organizeMenu:isHorizontal:). The
    theme draws it as a GNOME main-menu icon instead of the app's name. */

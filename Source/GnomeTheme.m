@@ -68,6 +68,32 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
   return [theme overriddenMethod: selector for: prototype];
 }
 
+/* NSParagraphStyle's class version went to 4 when libs-gui renumbered
+   NSTextAlignment. */
+static BOOL
+GnomeThemeUsesAppKitAlignments(void)
+{
+  static int appKit = -1;
+
+  if (appKit < 0)
+    {
+      appKit = [NSParagraphStyle version] >= 4 ? 1 : 0;
+    }
+  return appKit == 1;
+}
+
+NSTextAlignment
+GnomeThemeCenterTextAlignment(void)
+{
+  return GnomeThemeUsesAppKitAlignments () ? 1 : 2;
+}
+
+NSTextAlignment
+GnomeThemeRightTextAlignment(void)
+{
+  return GnomeThemeUsesAppKitAlignments () ? 2 : 1;
+}
+
 const CGFloat GnomeThemeApplicationMenuIconWidth = 16.0;
 
 /* The title GSTheme gives the application item (-organizeMenu:isHorizontal:). */

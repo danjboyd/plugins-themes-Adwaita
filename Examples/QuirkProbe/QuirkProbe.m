@@ -3673,6 +3673,9 @@ QuirkProbeVisibleMenus (void)
   NSButton *remove = nil, *cancel = nil;
   NSUInteger visibleIcons = 0, visibleLines = 0;
   NSTextField *heading = (NSTextField *)QuirkProbeFindText ([panel contentView], @"Remove this library?");
+  QuirkProbeInk headingInk = { 0 };
+  CGFloat leftGap = 0.0, rightGap = 0.0;
+  BOOL centred = NO;
   NSString *detail;
 
   while ((view = [enumerator nextObject]) != nil)
@@ -3697,15 +3700,25 @@ QuirkProbeVisibleMenus (void)
             visibleIcons++;
         }
     }
-  detail = [NSString stringWithFormat: @"%lu icons, %lu lines; Remove %@, Cancel %@; heading %@",
+  /* Measured from the drawing, not -alignment: libs-gui after 0.32 numbers
+     NSTextAlignment differently, so the constants this probe was built with
+     may mean another alignment to the libs-gui it runs with. */
+  if (heading != nil)
+    {
+      headingInk = QuirkProbeTextInk (heading);
+      leftGap = headingInk.minX;
+      rightGap = NSWidth ([heading bounds]) - headingInk.minX - headingInk.width;
+      centred = headingInk.count > 0 && fabs (leftGap - rightGap) <= 3.0;
+    }
+  detail = [NSString stringWithFormat: @"%lu icons, %lu lines; Remove %@, Cancel %@; heading %@ (ink %.0f from the left, %.0f from the right)",
     (unsigned long)visibleIcons, (unsigned long)visibleLines,
     NSStringFromRect ([remove frame]), NSStringFromRect ([cancel frame]),
-    [heading alignment] == NSCenterTextAlignment ? @"centred" : @"not centred"];
+    centred ? @"centred" : @"not centred", leftGap, rightGap];
   if (remove != nil && cancel != nil && visibleIcons == 0 && visibleLines == 0
     && NSWidth ([remove frame]) == NSWidth ([cancel frame])
     && NSMinY ([remove frame]) == NSMinY ([cancel frame])
     && NSMinX ([remove frame]) > NSMaxX ([cancel frame])
-    && [heading alignment] == NSCenterTextAlignment)
+    && centred)
     {
       [self pass: @"alert-adwaita-layout" detail: detail];
     }

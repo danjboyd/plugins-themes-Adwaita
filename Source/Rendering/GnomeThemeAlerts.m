@@ -72,7 +72,7 @@ static void
 GnomeThemeAlertStyleText(NSTextField *field, NSFont *font)
 {
   [field setFont: font];
-  [field setAlignment: NSCenterTextAlignment];
+  [field setAlignment: GnomeThemeCenterTextAlignment ()];
   [[field cell] setWraps: YES];
   [[field cell] setLineBreakMode: NSLineBreakByWordWrapping];
 }

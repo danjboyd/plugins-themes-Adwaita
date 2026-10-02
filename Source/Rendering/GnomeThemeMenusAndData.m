@@ -775,7 +775,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   [cell setTextColor: [self tableHeaderTextColorForState: state]];
   /* GNUstep centres header titles by default; GNOME (and Cocoa) start them
      at the leading edge. Titles an app aligned left or right keep that. */
-  if ([cell alignment] == NSCenterTextAlignment)
+  if ([cell alignment] == GnomeThemeCenterTextAlignment ())
     {
       [cell setAlignment: NSLeftTextAlignment];
     }
@@ -1222,7 +1222,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
     }
 
   paragraph = AUTORELEASE ([[NSMutableParagraphStyle alloc] init]);
-  [paragraph setAlignment: NSRightTextAlignment];
+  [paragraph setAlignment: GnomeThemeRightTextAlignment ()];
   attributes = [NSDictionary dictionaryWithObjectsAndKeys:
                   GnomeThemePhase67MenuShortcutFont (theme), NSFontAttributeName,
                   foregroundColor, NSForegroundColorAttributeName,

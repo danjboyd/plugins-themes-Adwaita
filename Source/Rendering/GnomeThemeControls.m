@@ -3580,7 +3580,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       labelRect.origin.y = floor (NSMidY (content) - label.height / 2.0);
     }
   style = AUTORELEASE ([[NSParagraphStyle defaultParagraphStyle] mutableCopy]);
-  [style setAlignment: NSCenterTextAlignment];
+  [style setAlignment: GnomeThemeCenterTextAlignment ()];
   attributes = [NSDictionary dictionaryWithObjectsAndKeys:
     GnomeThemeToolbarLabelFont (toolbar), NSFontAttributeName,
     ([item isEnabled] && [toolbar displayMode] != NSToolbarDisplayModeLabelOnly)
