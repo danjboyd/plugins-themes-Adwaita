@@ -58,11 +58,17 @@ it was found. Compare against the libadwaita reference with
 | Push buttons narrower than their padding clipped short titles (ScreenshotTool's 64pt "12" drew as "1", a 44pt "20" drew nothing: plugins-themes-Adwaita#3) | rounded buttons are padded once (GTK's 17px, from the bezel margins), not again by the title rect; in a frame too narrow for it the padding shrinks to 4pt before the title is cut; `sizeToFit` buttons are about 15pt narrower |
 | Steppers at Cocoa's size (about 19x27pt) drew "−" and "+" side by side in 9pt each (plugins-themes-Adwaita#6) | a stepper taller than it is wide has an up half above a down half, with chevrons; wider ones keep GTK's spin button "−" and "+"; a button that can't change the value is dimmed, as in GTK |
 | Colour wells drew NeXT's bevelled well (plugins-themes-Adwaita#2) | GTK's colour button: the theme's push button (pressed while the colour panel is attached) holding a rounded swatch with a faint inner border |
-| Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); the corners stay square (see below) |
-| Clicking a menu bar title (and the bar's ☰) opened its menu and the release closed it again (libs-gui 0.32, upstream item 8; plugins-themes-Adwaita#5) | as for the primary menu's ☰: the title is highlighted on the press and its menu opens on the release, staying open until a click picks an item or lands elsewhere; Escape closes it; press, drag and release still work |
+| Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); square corners, rounded where the window has an alpha channel (see the row on menus and tool tips) |
+| Clicking a menu bar title (and the bar's ☰) opened its menu and the release closed it again (libs-gui 0.32, upstream item 8; plugins-themes-Adwaita#5) | first fixed by opening the menu on the release; now as GTK's menu bar (see the row on menu tracking) |
 | With the menu bar style, every window that could become main got the app's menus, Preferences windows included (ScreenshotTool's: plugins-themes-Adwaita#4) | windows titled Preferences or Settings get no menu bar or ☰ (unless they're the app's only window that can be main); a window delegate's `-windowShouldShowMenuBar:` decides instead when it's implemented (README, "Windows without the menu bar") |
 | Toolbars were libs-gui's fixed heights: 62pt with labels (empty ones included), about 40pt icon only; views taller than 32pt (GNOME's 34pt buttons) disappeared; images were forced to 32x32; view items' labels were black, unreadable in the dark palette (plugins-themes-Adwaita#8, upstream item 9) | with GNOME metrics, items are sized from their content: libadwaita's 46pt row with 34pt buttons for icons or labels alone, an icon over a caption-sized label otherwise (no label row for empty labels), images at their own size up to 24pt (16pt small), views kept with the row growing to fit; every item gets the row's height; labels in the text colour. Compact metrics keep libs-gui's layout |
 | The selected segment of a segmented control was 2/255 darker than the others in the dark palette, and only a little darker in the light one (plugins-themes-Adwaita#7) | libadwaita's checked linked button: the text colour at 30% over the window background, darker in the light palette and lighter in the dark one; checked in the light, dark and high contrast runs |
+| Toolbar items with a custom view and no `-sizeToFit` (ScreenshotTool's colour, Copy, Preferences and zoom items) shrank to nothing (plugins-themes-Adwaita#9) | libs-gui sets each view to its slot less 10pt insets after every layout; the theme gives it back its slot less its own 3pt insets, within the item's minSize and maxSize |
+| Menu shortcuts touched the menu's right edge (plugins-themes-Adwaita#10) | shortcuts and submenu arrows end 12pt inside the row, as in libadwaita's popover menus |
+| Menu separators were two rows of mid grey (plugins-themes-Adwaita#11) | one hairline on a pixel row, the text colour at 15% over the menu (50% in high contrast) |
+| Menu bar menus opened on the release; a click outside reached the window under it; context menus closed when the right button came up; Escape didn't close context menus | audited against GTK 4 under Mutter: menu bar titles and context menus open on the press and stay open on its release (on 0.32 the theme drops that release, as master does; master is told by `-[NSImage isTemplate]`); a press outside closes them and goes nowhere else; Escape closes the menu bar's, ☰ and context menus. ☰ and pop-up buttons open on the release, as GTK's menu buttons do |
+| Menus drew rounded corners on an opaque window, black under a compositor | square, with the border, unless the window has an alpha channel and a compositing manager runs; then menus (10pt) and tool tips (libadwaita's 9pt, with its light outline) are rounded. The alpha channel needs the libs-back patch (`GSBackBorderlessWindowAlpha`) |
+| GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -79,11 +85,12 @@ spacing) are in the Fixed table. Still different from GNOME:
   wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
 - **Alerts keep a title bar.** `AdwAlertDialog` has none; GNUstep's panel
   has the window manager's.
-- **Tool tips have square corners.** libadwaita's are rounded and
-  translucent. GNUstep's tool tip window is opaque (libs-back gives
-  ARGB visuals only to windows it draws a shadow for, and only with the
-  phase 2b patches), so the theme paints the colour libadwaita's 80% black
-  makes over the window background.
+- **Tool tips are opaque.** libadwaita's are translucent (80% black). The
+  theme paints the colour that makes over the window background; with the
+  libs-back patch and a compositor they are rounded, still opaque.
+- **Menus have no shadow,** and 10pt corners where libadwaita's popover
+  menus have 15px corners and a soft shadow.
+- **Context menus open at the pointer;** GTK's open just below it.
 
 ## Gorm and other nib-based apps
 
@@ -99,7 +106,6 @@ window, compared with the GNUstep theme). Still open:
   `-GnomeThemeMetrics gnome`, where its own inspectors are cramped. The
   Adwaita palette (`Palettes/Adwaita`, see the README) provides controls at
   GNOME's sizes; roomier inspectors would need changes in Gorm itself.
-- **The primary menu's separators** are darker than GNOME's.
 - **Gorm's CustomView palette item** draws as a pale disabled button instead
   of a dark tile.
 
@@ -129,10 +135,11 @@ window, compared with the GNUstep theme). Still open:
   or libs-gui stops shrinking them (libs-gui#964). When a libs-gui release
   sizes toolbar items from their content (upstream item 9), drop the
   toolbar layout overrides (`GSToolbarButton`/`GSToolbarBackView` -layout,
-  `GSToolbarView -_handleBackViewsFrame`). When a libs-gui release
-  has a84b42471 (upstream item 8), ☰ and the menu bar's titles can open on
-  the press again and track with GNUstep's own first-release rule (keep
-  the Escape timer: GNUstep's menu tracking ignores keys).
+  `GSToolbarView -_handleBackViewsFrame`). Once no supported libs-gui
+  release lacks a84b42471 (upstream item 8), drop the release-dropping
+  `-[NSApplication nextEventMatchingMask:...]` hook for 0.32 in
+  GnomeThemePrimaryMenu.m (keep the Escape timer and the press outside:
+  GNUstep's menu tracking ignores keys and passes that press on).
 - **High contrast as current GNOME does it.** The theme's high contrast
   palette is white on black, chosen by a `gtk-theme` name containing
   "HighContrast" (GNOME 3's). GNOME now sets
@@ -150,7 +157,9 @@ Confirmed on 2026-09-24 with a minimal program under the default theme, both on
 the installed gui 0.32.0 / base 1.31.1 and on master (gui ff49ac8, base
 a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
 
-1. **libs-gui: a toolbar view item loses its view's image.** The cause is
+1. **libs-gui: a toolbar view item loses its view's image.** Not filed:
+   fixed by [libs-gui#952](https://github.com/gnustep/libs-gui/pull/952),
+   which we confirmed on 2026-10-02. The cause is
    `-[NSToolbarItem _layout]`. It re-applies the item's own image, which is
    nil for a view item, and `GSToolbarBackView -setImage:` passes that nil to
    the view. The item isn't copied or archived. Workaround: also call
@@ -162,7 +171,8 @@ a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
    (`-[GnomeTheme windowNeedsMainMenu:]`); elsewhere, apps call
    `[window setMenu: [NSApp mainMenu]]`.
 3. **libs-base: the main dispatch queue is drained only in
-   `NSDefaultRunLoopMode`.** Main-queue blocks stall in the modal-panel and
+   `NSDefaultRunLoopMode`.** Filed as
+   [gnustep/libs-base#806](https://github.com/gnustep/libs-base/issues/806). Main-queue blocks stall in the modal-panel and
    event-tracking modes, so they wait while a sheet, a modal panel or menu
    tracking is active (`NSRunLoop.m`, where the drainer is registered).
 4. **libs-gui: `-[GSTheme overriddenMethod:for:]` matches only the receiver's
