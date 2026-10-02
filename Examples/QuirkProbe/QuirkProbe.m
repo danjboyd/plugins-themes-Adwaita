@@ -482,6 +482,61 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 - (void) checkPrimaryMenuInHeaderBar;
 @end
 
+/* An icon-only toolbar as a GNOME-style app makes it: an image item and a
+   34pt button (libadwaita's size) as a view item. */
+@interface QuirkProbeRowToolbarDelegate : NSObject
+{
+@public
+  BOOL _emptyLabels;
+}
+@end
+
+@implementation QuirkProbeRowToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: _emptyLabels ? @"" : identifier];
+  if ([identifier isEqualToString: @"Image"])
+    {
+      NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (16, 16)]);
+
+      [image lockFocus];
+      [[NSColor blackColor] set];
+      NSRectFill (NSMakeRect (0, 0, 16, 16));
+      [image unlockFocus];
+      [item setImage: image];
+      [item setTarget: self];
+      [item setAction: @selector(description)];
+    }
+  else
+    {
+      NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (0, 0, 34, 34)]);
+
+      [button setTitle: @"B"];
+      [item setView: button];
+      [item setMinSize: NSMakeSize (34, 34)];
+      [item setMaxSize: NSMakeSize (34, 34)];
+    }
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Image", NSToolbarSeparatorItemIdentifier, @"Button",
+                   NSToolbarFlexibleSpaceItemIdentifier, nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 @implementation QuirkProbe
 
 - (id) init
@@ -1064,6 +1119,82 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
   else
     {
       [self fail: @"colorwell-adwaita" detail: detail];
+    }
+}
+
+/* A toolbar's row as libadwaita's: 46pt for icons or labels alone, sized
+   to the content for icons with labels, keeping a 34pt button view, with
+   spaces and separators not setting the height (plugins-themes-Adwaita#8). */
+- (NSString *) measureToolbarRowMode: (NSToolbarDisplayMode)mode
+                                size: (NSToolbarSizeMode)sizeMode
+                         emptyLabels: (BOOL)emptyLabels
+                              height: (CGFloat *)height
+                                  ok: (BOOL *)ok
+{
+  /* Toolbars don't retain their delegate; the windows live on. */
+  QuirkProbeRowToolbarDelegate *delegate = [QuirkProbeRowToolbarDelegate new];
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 300, 360, 120) title: @"QuirkProbe Toolbar Row"];
+  NSString *identifier = [NSString stringWithFormat: @"QuirkProbeRow%d%d%d", (int)mode, (int)sizeMode, (int)emptyLabels];
+  NSToolbar *toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: identifier]);
+  NSView *frameView, *toolbarView, *buttonView;
+  NSRect toolbarFrame, contentFrame;
+  NSSize imageSize;
+  BOOL viewShown;
+
+  delegate->_emptyLabels = emptyLabels;
+  [toolbar setDelegate: delegate];
+  [toolbar setDisplayMode: mode];
+  [toolbar setSizeMode: sizeMode];
+  [window setToolbar: toolbar];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  toolbarView = QuirkProbeFindViewOfClass (frameView, NSClassFromString (@"GSToolbarView"));
+  buttonView = [[[toolbar items] objectAtIndex: 2] view];
+  imageSize = [[[[toolbar items] objectAtIndex: 0] image] size];
+  toolbarFrame = [frameView convertRect: [toolbarView bounds] fromView: toolbarView];
+  contentFrame = [frameView convertRect: [[window contentView] bounds] fromView: [window contentView]];
+  viewShown = ([buttonView window] == window);
+  *height = NSHeight (toolbarFrame);
+  *ok = (toolbarView != nil && NSMaxY (contentFrame) <= NSMinY (toolbarFrame) + 0.5
+    && (viewShown || mode == NSToolbarDisplayModeLabelOnly)
+    && imageSize.width <= (sizeMode == NSToolbarSizeModeSmall ? 16 : 24));
+  [window orderOut: nil];
+  return [NSString stringWithFormat: @"%gpt%@, image %gx%g", NSHeight (toolbarFrame),
+    viewShown ? @"" : @" (no button view)", imageSize.width, imageSize.height];
+}
+
+- (void) checkToolbarRowHeight
+{
+  CGFloat iconOnly, emptyLabels, labelOnly, small, labelled;
+  BOOL ok1, ok2, ok3, ok4, ok5;
+  NSString *detail = [NSString stringWithFormat: @"icon only %@; icon and label, empty labels %@; label only %@; "
+    @"small icon only %@; icon and label %@",
+    [self measureToolbarRowMode: NSToolbarDisplayModeIconOnly size: NSToolbarSizeModeRegular emptyLabels: NO
+                         height: &iconOnly ok: &ok1],
+    [self measureToolbarRowMode: NSToolbarDisplayModeIconAndLabel size: NSToolbarSizeModeRegular emptyLabels: YES
+                         height: &emptyLabels ok: &ok2],
+    [self measureToolbarRowMode: NSToolbarDisplayModeLabelOnly size: NSToolbarSizeModeRegular emptyLabels: NO
+                         height: &labelOnly ok: &ok3],
+    [self measureToolbarRowMode: NSToolbarDisplayModeIconOnly size: NSToolbarSizeModeSmall emptyLabels: NO
+                         height: &small ok: &ok4],
+    [self measureToolbarRowMode: NSToolbarDisplayModeIconAndLabel size: NSToolbarSizeModeRegular emptyLabels: NO
+                         height: &labelled ok: &ok5]];
+
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"] isEqualToString: @"compact"])
+    {
+      [self skip: @"toolbar-row-height" detail: @"compact metrics keep libs-gui's toolbar layout"];
+    }
+  else if (ok1 && ok2 && ok3 && ok4 && ok5
+    && iconOnly >= 46 && iconOnly <= 48 && emptyLabels >= 46 && emptyLabels <= 48
+    && labelOnly >= 46 && labelOnly <= 48 && small >= 46 && small <= 48
+    && labelled > 48 && labelled < 62)
+    {
+      [self pass: @"toolbar-row-height" detail: detail];
+    }
+  else
+    {
+      [self fail: @"toolbar-row-height" detail: detail];
     }
 }
 
@@ -2844,6 +2975,7 @@ QuirkProbeVisibleMenus (void)
   [self checkTableDensity];
   [self checkTabView];
   [self checkToolbarDisplayMode];
+  [self checkToolbarRowHeight];
   [self checkApplicationMenuPosition];
   [self checkCocoaApplicationMenu];
   [self checkGormControls];

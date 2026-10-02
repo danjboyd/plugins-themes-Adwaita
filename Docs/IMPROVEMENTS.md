@@ -61,6 +61,7 @@ it was found. Compare against the libadwaita reference with
 | Tool tips were GNUstep's pale yellow box with a black border (plugins-themes-Adwaita#1) | libadwaita's: dark (80% black over the window background, in every palette), white text, 6px by 10px padding, no border (a white one in high contrast); the corners stay square (see below) |
 | Clicking a menu bar title (and the bar's ☰) opened its menu and the release closed it again (libs-gui 0.32, upstream item 8; plugins-themes-Adwaita#5) | as for the primary menu's ☰: the title is highlighted on the press and its menu opens on the release, staying open until a click picks an item or lands elsewhere; Escape closes it; press, drag and release still work |
 | With the menu bar style, every window that could become main got the app's menus, Preferences windows included (ScreenshotTool's: plugins-themes-Adwaita#4) | windows titled Preferences or Settings get no menu bar or ☰ (unless they're the app's only window that can be main); a window delegate's `-windowShouldShowMenuBar:` decides instead when it's implemented (README, "Windows without the menu bar") |
+| Toolbars were libs-gui's fixed heights: 62pt with labels (empty ones included), about 40pt icon only; views taller than 32pt (GNOME's 34pt buttons) disappeared; images were forced to 32x32; view items' labels were black, unreadable in the dark palette (plugins-themes-Adwaita#8, upstream item 9) | with GNOME metrics, items are sized from their content: libadwaita's 46pt row with 34pt buttons for icons or labels alone, an icon over a caption-sized label otherwise (no label row for empty labels), images at their own size up to 24pt (16pt small), views kept with the row growing to fit; every item gets the row's height; labels in the text colour. Compact metrics keep libs-gui's layout |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -125,6 +126,9 @@ window, compared with the GNUstep theme). Still open:
   `showsBorderOnlyWhileMouseInside`. Drop the `GSTTPanel` and
   `GSDragView` overrides once Mutter thaws unmapped windows (GNOME/mutter#5080)
   or libs-gui stops shrinking them (libs-gui#964). When a libs-gui release
+  sizes toolbar items from their content (upstream item 9), drop the
+  toolbar layout overrides (`GSToolbarButton`/`GSToolbarBackView` -layout,
+  `GSToolbarView -_handleBackViewsFrame`). When a libs-gui release
   has a84b42471 (upstream item 8), ☰ and the menu bar's titles can open on
   the press again and track with GNUstep's own first-release rule (keep
   the Escape timer: GNUstep's menu tracking ignores keys).
@@ -193,6 +197,12 @@ Found on 2026-09-25 while building the header bar; already fixed on master.
    menu bar menus and ☰ closed as soon as the click that opened them was
    released. Fixed on master by a84b42471; not in a release yet. The theme
    works around it for ☰ (see `8-libs-gui-menu-click-closes-fixed-on-master.md`).
+
+9. **libs-gui: toolbar heights are fixed constants.** Items get a 60pt (50pt
+   small) slot whatever their content, empty labels still take a label row,
+   views taller than 32pt are removed and images are made 32x32; there's no
+   theme hook. The theme lays toolbars out itself with GNOME metrics (see
+   `9-libs-gui-toolbar-fixed-heights.md`, with the repro `toolbar_heights.m`).
 
 ### Reported by OneDriveServiceManager: withdrawn
 

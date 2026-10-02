@@ -33,6 +33,12 @@
 - (NSToolbarItem *) toolbarItem;
 @end
 
+/* An item's slot in the toolbar (a GSToolbarButton or GSToolbarBackView),
+   private to libs-gui. */
+@interface NSToolbarItem (GnomeThemeToolbarPrivate)
+- (NSView *) _backView;
+@end
+
 /* Associated-object keys on a toolbar button: its hover tracking-rect tag,
    and whether the pointer is over it. */
 static char GnomeThemeToolbarButtonTrackingKey;
@@ -3289,6 +3295,304 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
    setShowsBorderOnlyWhileMouseInside:] is a FIXME), so add one whenever the
    button is laid out; the rect is in view coordinates, so only size changes
    need a new one. */
+/* Toolbars (plugins-themes-Adwaita#8). libs-gui gives every item a fixed
+   60pt (50pt small) slot with a label row even for empty labels, drops
+   views taller than 32pt and makes images 32x32 (upstream item 9). Under
+   GNOME's metrics the theme sizes items from their content instead, as GTK
+   (and macOS) do:
+   - icon only and label only: libadwaita's 46pt row, 34pt buttons with 6pt
+     above and below and 3pt either side;
+   - icon and label: the image over a caption-sized label, as in
+     AdwViewSwitcher's narrow buttons, with 3pt above and below and no label
+     row when the item has no label;
+   - images keep their own size up to 24pt (16pt in small mode);
+   - views stay however tall they are, and the row grows to fit them.
+   Every item in a toolbar then gets the tallest one's height, so the row is
+   even. Compact metrics (Gorm and nib-based apps) keep libs-gui's layout. */
+static const CGFloat GnomeThemeToolbarRowHeight = 46.0;
+static const CGFloat GnomeThemeToolbarButtonSize = 34.0;
+static const CGFloat GnomeThemeToolbarSpacing = 3.0;
+static const CGFloat GnomeThemeToolbarIconPadding = 5.0;
+static const CGFloat GnomeThemeToolbarLabelPadding = 12.0;
+static const CGFloat GnomeThemeToolbarLabelGap = 2.0;
+/* On an item's image: its own size, before libs-gui first resized it. */
+static char GnomeThemeToolbarImageSizeKey;
+
+static BOOL
+GnomeThemeLaysOutToolbar(NSToolbar *toolbar)
+{
+  return toolbar != nil && [[GnomeThemeActiveTheme () metrics] compact] == NO;
+}
+
+/* Spaces and separators: sized by libs-gui, given the row's height. */
+static BOOL
+GnomeThemeToolbarItemIsSpace(NSToolbarItem *item)
+{
+  NSString *identifier = [item itemIdentifier];
+
+  return [identifier isEqualToString: NSToolbarSpaceItemIdentifier]
+    || [identifier isEqualToString: NSToolbarFlexibleSpaceItemIdentifier]
+    || [identifier isEqualToString: NSToolbarSeparatorItemIdentifier];
+}
+
+static BOOL
+GnomeThemeToolbarShowsLabels(NSToolbar *toolbar)
+{
+  return [toolbar displayMode] != NSToolbarDisplayModeIconOnly;
+}
+
+/* The label's font: the interface font alone, or libadwaita's caption size
+   (82%) under an icon. Kept: GSToolbarBackView doesn't retain its font. */
+static NSFont *
+GnomeThemeToolbarLabelFont(NSToolbar *toolbar)
+{
+  static NSFont *regular = nil;
+  static NSFont *caption = nil;
+
+  if (regular == nil || [regular pointSize] != [NSFont systemFontSize])
+    {
+      ASSIGN (regular, [NSFont systemFontOfSize: [NSFont systemFontSize]]);
+      ASSIGN (caption, [NSFont systemFontOfSize: floor ([NSFont systemFontSize] * 0.82 + 0.5)]);
+    }
+  return ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly) ? regular : caption;
+}
+
+static NSSize
+GnomeThemeToolbarLabelSize(NSToolbarItem *item)
+{
+  NSToolbar *toolbar = [item toolbar];
+  NSString *label = [item label];
+  NSSize size;
+
+  if (GnomeThemeToolbarShowsLabels (toolbar) == NO || [label length] == 0)
+    {
+      return NSZeroSize;
+    }
+  size = [label sizeWithAttributes: [NSDictionary dictionaryWithObject: GnomeThemeToolbarLabelFont (toolbar)
+                                                                forKey: NSFontAttributeName]];
+  return NSMakeSize (ceil (size.width), ceil (size.height));
+}
+
+/* The size an item's image is drawn at: its own, scaled down to fit 24pt
+   (16pt in small mode). */
+static NSSize
+GnomeThemeToolbarImageSize(NSImage *image, NSToolbar *toolbar)
+{
+  NSValue *own;
+  NSSize size;
+  CGFloat limit = ([toolbar sizeMode] == NSToolbarSizeModeSmall) ? 16.0 : 24.0;
+
+  if (image == nil)
+    {
+      return NSZeroSize;
+    }
+  own = objc_getAssociatedObject (image, &GnomeThemeToolbarImageSizeKey);
+  if (own == nil)
+    {
+      own = [NSValue valueWithSize: [image size]];
+      objc_setAssociatedObject (image, &GnomeThemeToolbarImageSizeKey, own, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+  size = [own sizeValue];
+  if (size.width > limit || size.height > limit)
+    {
+      CGFloat scale = limit / MAX (size.width, size.height);
+
+      size = NSMakeSize (floor (size.width * scale), floor (size.height * scale));
+    }
+  return size;
+}
+
+/* An item's content: the button an image item is drawn as, or a view item's
+   view (with its label under it). */
+static NSSize
+GnomeThemeToolbarContentSize(NSToolbarItem *item)
+{
+  NSToolbar *toolbar = [item toolbar];
+  NSSize label = GnomeThemeToolbarLabelSize (item);
+  NSView *view = [item view];
+  NSSize content;
+
+  if ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly)
+    {
+      return NSMakeSize (label.width + 2.0 * GnomeThemeToolbarLabelPadding, GnomeThemeToolbarButtonSize);
+    }
+  if (view != nil)
+    {
+      content = [view frame].size;
+    }
+  else
+    {
+      NSSize image = GnomeThemeToolbarImageSize ([item image], toolbar);
+
+      content = NSMakeSize (image.width + 2.0 * GnomeThemeToolbarIconPadding,
+                            image.height + 2.0 * GnomeThemeToolbarIconPadding);
+      if (label.height == 0.0)
+        {
+          content.width = MAX (content.width, GnomeThemeToolbarButtonSize);
+          content.height = MAX (content.height, GnomeThemeToolbarButtonSize);
+        }
+    }
+  if (label.height > 0.0)
+    {
+      content.width = MAX (content.width, label.width + 2.0 * GnomeThemeToolbarSpacing);
+      content.height += GnomeThemeToolbarLabelGap + label.height;
+    }
+  return content;
+}
+
+/* The height an item's slot needs. */
+static CGFloat
+GnomeThemeToolbarItemHeight(NSToolbarItem *item)
+{
+  NSSize content = GnomeThemeToolbarContentSize (item);
+  CGFloat padding = (GnomeThemeToolbarLabelSize (item).height > 0.0
+    && [[item toolbar] displayMode] != NSToolbarDisplayModeLabelOnly) ? 3.0 : 6.0;
+
+  return MAX (GnomeThemeToolbarRowHeight, content.height + 2.0 * padding);
+}
+
+/* Where an item's content sits in its slot: centred. */
+static NSRect
+GnomeThemeToolbarContentRect(NSToolbarItem *item, NSRect slot)
+{
+  NSSize content = GnomeThemeToolbarContentSize (item);
+
+  return NSMakeRect (floor (NSMidX (slot) - content.width / 2.0),
+                     floor (NSMidY (slot) - content.height / 2.0),
+                     content.width, content.height);
+}
+
+/* Puts a view item's view in its slot, above its label. */
+static void
+GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
+{
+  NSView *view = [item view];
+  NSRect content;
+
+  if (view == nil || [view superview] != backView)
+    {
+      return;
+    }
+  content = GnomeThemeToolbarContentRect (item, [backView bounds]);
+  [view setFrameOrigin: NSMakePoint (floor (NSMidX (content) - NSWidth ([view frame]) / 2.0),
+                                     NSMaxY (content) - NSHeight ([view frame]))];
+}
+
+- (void) _overrideGSToolbarBackViewMethod_layout
+{
+  typedef void (*LayoutIMP)(id, SEL);
+  LayoutIMP originalIMP = (LayoutIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarBackView"));
+  NSView *backView = (NSView *)self;
+  NSToolbarItem *item = [(id<GnomeThemeToolbarButton>)backView toolbarItem];
+  NSToolbar *toolbar = [item toolbar];
+  NSView *view = [item view];
+  NSSize content;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeLaysOutToolbar (toolbar) == NO)
+    {
+      return;
+    }
+  /* libs-gui drops a view taller than 32pt (24pt small): keep it. */
+  if (view != nil && [view superview] == nil && [toolbar displayMode] != NSToolbarDisplayModeLabelOnly)
+    {
+      [backView addSubview: view];
+    }
+  content = GnomeThemeToolbarContentSize (item);
+  [backView setFrameSize: NSMakeSize (content.width + 2.0 * GnomeThemeToolbarSpacing,
+                                      GnomeThemeToolbarItemHeight (item))];
+  GnomeThemePlaceToolbarView (backView, item);
+}
+
+/* A view item's label, under the view (or alone, centred), in the text
+   colour: libs-gui draws it black, which is lost in the dark palette. */
+- (void) _overrideGSToolbarBackViewMethod_drawRect: (NSRect)rect
+{
+  typedef void (*DrawIMP)(id, SEL, NSRect);
+  DrawIMP originalIMP = (DrawIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarBackView"));
+  NSView *backView = (NSView *)self;
+  NSToolbarItem *item = [(id<GnomeThemeToolbarButton>)backView toolbarItem];
+  NSToolbar *toolbar = [item toolbar];
+  NSSize label;
+  NSRect content, labelRect;
+  NSMutableParagraphStyle *style;
+  NSDictionary *attributes;
+
+  if (GnomeThemeLaysOutToolbar (toolbar) == NO)
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, rect);
+        }
+      return;
+    }
+  label = GnomeThemeToolbarLabelSize (item);
+  if (label.height == 0.0)
+    {
+      return;
+    }
+  content = GnomeThemeToolbarContentRect (item, [backView bounds]);
+  labelRect = NSMakeRect (NSMinX ([backView bounds]), NSMinY (content), NSWidth ([backView bounds]), label.height);
+  if ([toolbar displayMode] == NSToolbarDisplayModeLabelOnly)
+    {
+      labelRect.origin.y = floor (NSMidY (content) - label.height / 2.0);
+    }
+  style = AUTORELEASE ([[NSParagraphStyle defaultParagraphStyle] mutableCopy]);
+  [style setAlignment: NSCenterTextAlignment];
+  attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+    GnomeThemeToolbarLabelFont (toolbar), NSFontAttributeName,
+    ([item isEnabled] && [toolbar displayMode] != NSToolbarDisplayModeLabelOnly)
+      ? [NSColor controlTextColor] : [NSColor disabledControlTextColor], NSForegroundColorAttributeName,
+    style, NSParagraphStyleAttributeName, nil];
+  [[item label] drawInRect: labelRect withAttributes: attributes];
+}
+
+/* After libs-gui places the items: every slot gets the row's height (the
+   tallest item's), so the row is even and spaces don't set it. */
+- (void) _overrideGSToolbarViewMethod__handleBackViewsFrame
+{
+  typedef void (*HandleIMP)(id, SEL);
+  HandleIMP originalIMP = (HandleIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSToolbar *toolbar = [(id)self toolbar];
+  NSEnumerator *enumerator;
+  NSToolbarItem *item;
+  CGFloat row = GnomeThemeToolbarRowHeight;
+  Ivar heightIvar;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeLaysOutToolbar (toolbar) == NO)
+    {
+      return;
+    }
+  enumerator = [[toolbar items] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      if (GnomeThemeToolbarItemIsSpace (item) == NO)
+        {
+          row = MAX (row, GnomeThemeToolbarItemHeight (item));
+        }
+    }
+  enumerator = [[toolbar items] objectEnumerator];
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      NSView *backView = [item _backView];
+
+      [backView setFrameSize: NSMakeSize (NSWidth ([backView frame]), row)];
+      GnomeThemePlaceToolbarView (backView, item);
+    }
+  heightIvar = class_getInstanceVariable ([self class], "_heightFromLayout");
+  if (heightIvar != NULL)
+    {
+      *(CGFloat *)((char *)self + ivar_getOffset (heightIvar)) = row;
+    }
+}
+
 - (void) _overrideGSToolbarButtonMethod_layout
 {
   typedef void (*LayoutIMP)(id, SEL);
@@ -3296,9 +3600,40 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSButton *button = (NSButton *)self;
   NSNumber *tag = objc_getAssociatedObject (button, &GnomeThemeToolbarButtonTrackingKey);
 
+  NSToolbarItem *toolbarItem = [button respondsToSelector: @selector(toolbarItem)]
+    ? [(id<GnomeThemeToolbarButton>)button toolbarItem] : nil;
+  BOOL laysOut = GnomeThemeLaysOutToolbar ([toolbarItem toolbar]);
+
+  /* Note the image's own size before libs-gui makes it 32x32. */
+  if (laysOut)
+    {
+      GnomeThemeToolbarImageSize ([toolbarItem image], [toolbarItem toolbar]);
+    }
   if (originalIMP != NULL)
     {
       originalIMP (self, _cmd);
+    }
+  if (laysOut)
+    {
+      NSToolbar *toolbar = [toolbarItem toolbar];
+
+      if (GnomeThemeToolbarItemIsSpace (toolbarItem))
+        {
+          [button setFrameSize: NSMakeSize (NSWidth ([button frame]), GnomeThemeToolbarRowHeight)];
+        }
+      else
+        {
+          NSSize image = GnomeThemeToolbarImageSize ([toolbarItem image], toolbar);
+
+          if (NSEqualSizes (image, NSZeroSize) == NO)
+            {
+              [[toolbarItem image] setSize: image];
+            }
+          [button setFont: GnomeThemeToolbarLabelFont (toolbar)];
+          [button setFrameSize: NSMakeSize (GnomeThemeToolbarContentSize (toolbarItem).width
+                                              + 2.0 * GnomeThemeToolbarSpacing,
+                                            GnomeThemeToolbarItemHeight (toolbarItem))];
+        }
     }
   /* The pressed state is the darker background drawn below; GNUstep's own
      highlight (NSChangeGrayCellMask) turned the label white on it. */
@@ -3337,7 +3672,17 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSButtonCell *cell = (NSButtonCell *)self;
   GnomeTheme *theme = GnomeThemeActiveTheme ();
   NSWindow *window = [controlView window];
+  NSToolbarItem *toolbarItem = [controlView respondsToSelector: @selector(toolbarItem)]
+    ? [(id<GnomeThemeToolbarButton>)controlView toolbarItem] : nil;
+  NSRect buttonRect = NSInsetRect (cellFrame, 1.0, 1.0);
 
+  /* With the theme's toolbar layout, the button is the item's content,
+     centred in its slot, and its image and label are drawn there. */
+  if (GnomeThemeLaysOutToolbar ([toolbarItem toolbar]) && GnomeThemeToolbarItemIsSpace (toolbarItem) == NO)
+    {
+      cellFrame = GnomeThemeToolbarContentRect (toolbarItem, cellFrame);
+      buttonRect = cellFrame;
+    }
   if (theme != nil && window != nil && [cell isEnabled])
     {
       BOOL pressed = [cell isHighlighted];
@@ -3348,7 +3693,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
           NSColor *background = [theme toolbarBackgroundColor];
           NSColor *textColor = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
 
-          GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (cellFrame, 1.0, 1.0),
+          GnomeThemeFillAndStrokeRoundedRect (buttonRect,
                                               6.0,
                                               GnomeThemeBlend (background, textColor, pressed ? 0.16 : 0.07),
                                               nil,
