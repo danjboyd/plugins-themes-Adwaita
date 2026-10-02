@@ -47,9 +47,10 @@
 # 32-bit window with GNOME's frame extents, a shadow outside the edge and
 # rounded corners; a menu with rounded corners (a borderless window with an
 # alpha channel); maximised, no margin and square corners; restored, the
-# margin back and the same frame; the edges resize from the band outside
-# the window (not from inside), and a press further out in the shadow
-# goes to what is behind.
+# margin back, the shadow drawn and the same frame, the app seeing one
+# resize on the maximise and two at most on the restore; the edges resize
+# from the band outside the window (not from inside), and a press further
+# out in the shadow goes to what is behind.
 #
 #   bash Tests/Scripts/run-mutter-check.sh [--no-build] [--shadow]
 
@@ -177,7 +178,7 @@ if [ "$SHADOW" = YES ]; then
   chmod 600 "$WORK/GNUstep.conf"
   GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf" LD_LIBRARY_PATH="$MUTTER_CHECK_GUI:${LD_LIBRARY_PATH:-}" \
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
-    "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow >"$WORK/demo.log" 2>&1 &
+    "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES >"$WORK/demo.log" 2>&1 &
 else
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
     "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO >"$WORK/demo.log" 2>&1 &
@@ -326,11 +327,13 @@ if [ "$SHADOW" = YES ]; then
 fi
 
 BEFORE="$(geometry)"
+RESIZES_BEFORE="$(grep -c '^ThemeDemo-resize' "$WORK/demo.log")"
 read -r PX PY <<<"$(bar_point)"
 xdotool mousemove "$PX" "$PY" click --repeat 2 --delay 120 1
 sleep 1.5
 STATE="$(xprop -id "$WINDOW" _NET_WM_STATE)"
 MAXIMISED="$(geometry)"
+RESIZES_MAXIMISED="$(grep -c '^ThemeDemo-resize' "$WORK/demo.log")"
 if echo "$STATE" | grep -q MAXIMIZED_VERT && echo "$STATE" | grep -q MAXIMIZED_HORZ; then
   report PASS "$NAME-maximise" "$BEFORE -> $MAXIMISED, maximised by Mutter"
 else
@@ -360,6 +363,37 @@ if ! echo "$STATE" | grep -q MAXIMIZED && [ "$AFTER" = "$BEFORE" ] \
   report PASS "$NAME-restore" "back to $AFTER, frame extents $EXTENTS"
 else
   report FAIL "$NAME-restore" "$AFTER (was $BEFORE), frame extents $EXTENTS; $STATE"
+fi
+
+if [ "$SHADOW" = YES ]; then
+  # The margin goes and comes back as Mutter fits the window, which it
+  # configures for the old margin first: on a maximise the app should see
+  # one resize, to the frame the window ends with, not three. On a restore
+  # Mutter configures the restored size before the margin comes back, so
+  # the app sees that and then the margin (its buffers follow the X
+  # window): two at most.
+  RESIZES_AFTER="$(grep -c '^ThemeDemo-resize' "$WORK/demo.log")"
+  SEEN="$(grep '^ThemeDemo-resize' "$WORK/demo.log" | tail -n +$((RESIZES_BEFORE + 1)) | cut -d' ' -f2- | paste -sd';')"
+  ON_MAXIMISE=$((RESIZES_MAXIMISED - RESIZES_BEFORE))
+  ON_RESTORE=$((RESIZES_AFTER - RESIZES_MAXIMISED))
+  if [ "$ON_MAXIMISE" -eq 1 ] && [ "$ON_RESTORE" -ge 1 ] && [ "$ON_RESTORE" -le 2 ]; then
+    report PASS "$NAME-few-resizes" "$ON_MAXIMISE resize on maximise, $ON_RESTORE on restore: $SEEN"
+  else
+    report FAIL "$NAME-few-resizes" "$ON_MAXIMISE resizes on maximise (want 1), $ON_RESTORE on restore (want 1 or 2): $SEEN"
+  fi
+
+  # Restored, the shadow and rounded corners are drawn again.
+  read -r VX VY VW VH <<<"$(visible)"
+  NEAR="$(pixel $((VX + VW + 3)) $((VY + VH / 2)))"
+  FAR="$(pixel $((VX + VW + 40)) $((VY + VH / 2)))"
+  CORNER="$(pixel "$VX" "$VY")"
+  EDGE="$(pixel $((VX + 40)) "$VY")"
+  DETAIL="r+g+b 3px out $NEAR, 40px out $FAR; top left corner $CORNER, top edge $EDGE"
+  if [ "$NEAR" -le $((FAR - 20)) ] && [ "$CORNER" -le 600 ] && [ "$EDGE" -ge 700 ]; then
+    report PASS "$NAME-restored-shadow" "$DETAIL"
+  else
+    report FAIL "$NAME-restored-shadow" "$DETAIL"
+  fi
 fi
 
 # A drag on the bar, 350px to the left: Mutter moves the window, past the

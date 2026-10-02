@@ -203,9 +203,23 @@ ThemeDemoPrintLine(NSString *line)
   [self buildMenuBar];
 }
 
+/* With -ThemeDemoLogFrames YES, each resize of the window as a line on
+   stderr (run-mutter-check.sh counts them). */
+- (void) logWindowResize: (NSNotification *)notification
+{
+  fprintf (stderr, "ThemeDemo-resize %s\n", [NSStringFromRect ([_window frame]) UTF8String]);
+}
+
 - (void) applicationDidFinishLaunching: (NSNotification *)notification
 {
   [self buildWindowAndTabs];
+  if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ThemeDemoLogFrames"])
+    {
+      [[NSNotificationCenter defaultCenter] addObserver: self
+                                               selector: @selector(logWindowResize:)
+                                                   name: NSWindowDidResizeNotification
+                                                 object: _window];
+    }
   if ([self performRequestedCaptureIfNeeded])
     {
       return;

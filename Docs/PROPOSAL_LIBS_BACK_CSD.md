@@ -175,9 +175,16 @@ item 4.
   compositing manager stopping and starting, non-retained and borderless
   windows, a window manager without `_GTK_FRAME_EXTENTS`, and the Motif
   hints (16 checks; 11 fail without the patch).
-- *Known limitations:* maximizing or restoring changes the margin before
-  the window manager re-fits the window, so the application sees two
-  resizes; only Mutter has been tried as the window manager (KWin,
+- *Frame changes:* when the margin changes the window manager re-fits
+  the window, usually configuring it for the old margin first. libs-back
+  holds the frame from the gui until those ConfigureNotify events stop
+  (20 ms with none, 200 ms at most) and sends it once, then exposes the
+  whole window from the new buffers: a maximize is one resize, not
+  three. A restore is two, since Mutter configures the restored size
+  before it changes the state, while the window still has no margin
+  (`make check-mutter-shadow` in the theme counts them, and checks the
+  shadow is drawn again).
+- *Known limitations:* only Mutter has been tried as the window manager (KWin,
   Xfwm and others with a compositor are untested); the art and xlib
   graphics backends don't define XRENDER and never make 32-bit windows; the
   scale factor (`GSScaleFactor`) with a margin is untested.
