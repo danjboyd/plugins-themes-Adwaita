@@ -23,7 +23,7 @@ code pointers; read it before starting.
   `86fefbe`. Nothing in the theme binary has changed since.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
   The shadow and rounded corners need the patched libs-back (below).
-- All suites pass: `make check-quirks` (6 configurations),
+- All suites pass: `make check-quirks` (7 configurations),
   `make check-mutter`, `make check-mutter-shadow` (14 checks), and the
   QuirkProbe run against libs-gui master.
 
@@ -104,7 +104,7 @@ asked for the push.
 ```
 . /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
 make                      # the theme
-make check-quirks         # QuirkProbe, 6 configurations, private Xvfb
+make check-quirks         # QuirkProbe, 7 configurations, private Xvfb
 make check-mutter         # GNOME Shell (X11) on a private Xvfb, stock libs
 make check-mutter-shadow  # the same against the patched libs-gui/libs-back
 ```
