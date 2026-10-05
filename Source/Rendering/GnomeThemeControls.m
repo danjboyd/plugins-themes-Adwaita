@@ -3204,6 +3204,17 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
         {
           destinationRect = [view centerScanRect: destinationRect];
         }
+      /* A template (symbolic) image in the segment's text colour, as a
+         button's (plugins-themes-Adwaita#37). */
+      if (GnomeThemeImageIsTemplate (segmentImage))
+        {
+          BOOL enabled = [cell isEnabled] && [cell isEnabledForSegment: segmentIndex];
+          NSColor *text = [[cell _nonAutoreleasedTypingAttributes] objectForKey: NSForegroundColorAttributeName];
+
+          segmentImage = GnomeThemeTintedImage (segmentImage,
+                                                GnomeThemeTemplateImageColorInView ((controlView != nil) ? controlView : view,
+                                                                                    enabled == NO, text));
+        }
 
       [segmentImage drawInRect: destinationRect
                       fromRect: NSZeroRect

@@ -4030,6 +4030,39 @@ QuirkProbeButtonImageColor(NSButton *button)
     {
       colors[i] = QuirkProbeButtonImageColor ([[[window contentView] subviews] objectAtIndex: i]);
     }
+  /* A segmented control's segments, one selected (plugins-themes-Adwaita#37). */
+  {
+    NSSegmentedControl *segments = AUTORELEASE ([[NSSegmentedControl alloc] initWithFrame: NSMakeRect (10, 0, 120, 30)]);
+    NSBitmapImageRep *rep;
+    NSInteger bits;
+    CGFloat maxValue;
+    NSInteger start;
+    NSUInteger pixel[5];
+    int k;
+
+    [segments setSegmentCount: 2];
+    [segments setImage: QuirkProbeRedImage (@"QuirkProbeSegmentTemplate") forSegment: 0];
+    [segments setImage: QuirkProbeRedImage (@"quirk-probe-segment-symbolic") forSegment: 1];
+    [segments setWidth: 60 forSegment: 0];
+    [segments setWidth: 60 forSegment: 1];
+    [segments setSelectedSegment: 1];
+    [[window contentView] addSubview: segments];
+    [window display];
+    rep = QuirkProbeRender (segments);
+    bits = [rep bitsPerSample];
+    maxValue = (bits >= 16) ? 65535.0 : (CGFloat)((1u << bits) - 1);
+    start = ([rep hasAlpha] && ([rep bitmapFormat] & NSAlphaFirstBitmapFormat)) ? 1 : 0;
+    for (k = 0; k < 2; k++)
+      {
+        CGFloat r, g, b;
+
+        [rep getPixel: pixel atX: (NSInteger)(([rep pixelsWide] / 4.0) * (1 + 2 * k)) y: [rep pixelsHigh] / 2];
+        r = pixel[start] / maxValue; g = pixel[start + 1] / maxValue; b = pixel[start + 2] / maxValue;
+        ok = ok && fabs (r - g) < 0.08 && fabs (g - b) < 0.08 && (darkText ? r < 0.5 : r > 0.5);
+        [parts addObject: [NSString stringWithFormat: @"segment %d%@ %.2f/%.2f/%.2f", k,
+                                   k == 1 ? @" (selected)" : @"", r, g, b]];
+      }
+  }
   [window orderOut: nil];
 
   for (i = 0; i < 4; i++)

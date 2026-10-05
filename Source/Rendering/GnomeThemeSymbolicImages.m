@@ -95,6 +95,43 @@ GnomeThemeTintedImage(NSImage *image, NSColor *color)
   return result;
 }
 
+/* Whether the control is in a toolbar shown in the header bar. */
+static BOOL
+GnomeThemeViewIsInHeaderBarToolbar(NSView *controlView)
+{
+  NSView *view;
+
+  for (view = controlView; view != nil; view = [view superview])
+    {
+      if ([view respondsToSelector: @selector(toolbar)] && [view isKindOfClass: [NSControl class]] == NO)
+        {
+          NSToolbar *toolbar = [(id)view toolbar];
+
+          return [toolbar isKindOfClass: [NSToolbar class]] && GnomeThemeToolbarInHeaderBar (toolbar);
+        }
+    }
+  return NO;
+}
+
+/* A template image's colour in a control: the header bar's for one in a
+   toolbar in the bar (dimmed in the backdrop state), the disabled text
+   colour when `dimmed`, else `text`. For buttons and segmented controls. */
+NSColor *
+GnomeThemeTemplateImageColorInView(NSView *controlView, BOOL dimmed, NSColor *text)
+{
+  if (GnomeThemeViewIsInHeaderBarToolbar (controlView))
+    {
+      NSColor *color = GnomeThemeHeaderBarTextColor ([controlView window]);
+
+      return dimmed ? [color colorWithAlphaComponent: [color alphaComponent] * 0.5] : color;
+    }
+  if (dimmed)
+    {
+      return [NSColor disabledControlTextColor];
+    }
+  return text != nil ? text : [NSColor controlTextColor];
+}
+
 @implementation GnomeTheme (SymbolicImages)
 
 /* The colour the cell's title is drawn in: the header bar's for its
@@ -103,7 +140,6 @@ GnomeThemeTintedImage(NSImage *image, NSColor *color)
 static NSColor *
 GnomeThemeTemplateImageColor(NSButtonCell *cell, NSView *controlView)
 {
-  NSView *view;
   BOOL enabled = [cell isEnabled];
   /* A cell that dims its image itself (libs-gui draws it at half
      opacity) gets the enabled colour. */
@@ -118,24 +154,9 @@ GnomeThemeTemplateImageColor(NSButtonCell *cell, NSView *controlView)
         }
       return [cell isHighlighted] ? [NSColor selectedMenuItemTextColor] : [NSColor controlTextColor];
     }
-  for (view = controlView; view != nil; view = [view superview])
+  if (dimmed || GnomeThemeViewIsInHeaderBarToolbar (controlView))
     {
-      if ([view respondsToSelector: @selector(toolbar)] && [view isKindOfClass: [NSControl class]] == NO)
-        {
-          NSToolbar *toolbar = [(id)view toolbar];
-
-          if ([toolbar isKindOfClass: [NSToolbar class]] && GnomeThemeToolbarInHeaderBar (toolbar))
-            {
-              NSColor *color = GnomeThemeHeaderBarTextColor ([controlView window]);
-
-              return dimmed ? [color colorWithAlphaComponent: [color alphaComponent] * 0.5] : color;
-            }
-          break;
-        }
-    }
-  if (dimmed)
-    {
-      return [NSColor disabledControlTextColor];
+      return GnomeThemeTemplateImageColorInView (controlView, dimmed, nil);
     }
   if (enabled && ([keyEquivalent isEqualToString: @"\r"] || [keyEquivalent isEqualToString: @"\n"]
                   || (controlView != nil && [[controlView window] defaultButtonCell] == cell)))

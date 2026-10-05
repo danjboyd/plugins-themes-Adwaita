@@ -74,6 +74,9 @@ BOOL GnomeThemeImageIsTemplate(NSImage *image);
 BOOL GnomeThemeUsesOverlayScrollers(void);
 BOOL GnomeThemeDrawOverlayScrollerIfNeeded(NSScroller *scroller);
 NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
+/* A template image's colour in a control: the header bar's in a toolbar
+   in the bar, the disabled colour when `dimmed`, else `text`. */
+NSColor *GnomeThemeTemplateImageColorInView(NSView *controlView, BOOL dimmed, NSColor *text);
 
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is
