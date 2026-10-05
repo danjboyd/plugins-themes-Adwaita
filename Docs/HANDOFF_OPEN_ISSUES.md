@@ -13,6 +13,12 @@ code pointers; read it before starting.
 - #15 is done (2026-10-05) in the theme and the libs-back patch, not yet
   pushed or installed: the theme types windows as GTK does, and the patch
   (item 5 of `Docs/PROPOSAL_LIBS_BACK_CSD.md`) does most of it itself.
+- Also done on 2026-10-05, not yet pushed or installed: #33 (toolbar item
+  views that act on the release, in the header bar), #31 (a document
+  window's title is its file's name), #30 (the toolbar-in-the-bar setting
+  for all apps, applied live) and #32 (template images tinted). #34 (a
+  toolbar hide/show crash) reproduces with GNUstep's own theme too: not
+  the theme's; see the issue. #14 has its first results (`make check-wms`).
 - The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
   `86fefbe`. Nothing in the theme binary has changed since.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
