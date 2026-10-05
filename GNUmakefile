@@ -78,8 +78,8 @@ probe:
 	$(MAKE) -C Examples/QuirkProbe
 
 # Menu bar and primary menu, each with the window manager's title bar and
-# with the theme's header bar; then the header bar's checks in the dark and
-# high contrast palettes.
+# with the theme's header bar; then the header bar's checks in the dark
+# palette and in high contrast over the light and the dark palette.
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
@@ -87,6 +87,7 @@ check-quirks:
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # The header bar with Mutter as the window manager (GNOME Shell on a private
 # Xvfb display; see the script).

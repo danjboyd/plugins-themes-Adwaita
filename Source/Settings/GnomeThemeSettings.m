@@ -344,11 +344,36 @@ GnomeThemeResolveFont(NSString *preferredName,
       fontSize = compact;
     }
 
-  if ([gtkThemeName rangeOfString: @"HighContrast"
-                          options: NSCaseInsensitiveSearch].location != NSNotFound)
-    {
-      highContrast = YES;
-    }
+  /* Current GNOME: an accessibility setting, with the light or dark
+     palette. Without it, GNOME 3's themes: HighContrast (dark on light)
+     and HighContrastInverse (light on dark). */
+  {
+    GSettingsSchema *a11ySchema = NULL;
+    GSettings *a11y = GnomeThemeCreateDesktopSettings ("org.gnome.desktop.a11y.interface", &a11ySchema);
+
+    if (a11y != NULL && a11ySchema != NULL && g_settings_schema_has_key (a11ySchema, "high-contrast"))
+      {
+        highContrast = g_settings_get_boolean (a11y, "high-contrast") ? YES : NO;
+      }
+    if (a11y != NULL)
+      {
+        g_object_unref (a11y);
+      }
+    if (a11ySchema != NULL)
+      {
+        g_settings_schema_unref (a11ySchema);
+      }
+    if ([gtkThemeName rangeOfString: @"HighContrast"
+                            options: NSCaseInsensitiveSearch].location != NSNotFound)
+      {
+        highContrast = YES;
+        if ([gtkThemeName rangeOfString: @"Inverse" options: NSCaseInsensitiveSearch].location != NSNotFound
+          && colorScheme == GnomeThemeColorSchemeDefault)
+          {
+            colorScheme = GnomeThemeColorSchemePreferDark;
+          }
+      }
+  }
 
   if (colorScheme == GnomeThemeColorSchemeDefault)
     {

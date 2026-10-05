@@ -1507,13 +1507,14 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
   detail = [NSString stringWithFormat: @"separator %ld row(s), r+g+b %lu on %lu; shortcut ends %gpt, chevron %gpt "
     @"from the row's right edge (row %@)", (long)rows, (unsigned long)line, (unsigned long)background,
     shortcutGap, chevronGap, NSStringFromRect (rects[0])];
-  /* Light: libadwaita's #e0e0e1 on white is 93 below it (15%); high
-     contrast is 50%, about 380. The shortcut's box ends 16pt in, its ink
-     a side bearing further; the arrow's 16pt box ends there too, its
-     glyph centred in it. */
+  /* Light: libadwaita's #e0e0e1 on white is 93 below it (15%). High
+     contrast is 50%: half the text's contrast with the menu (about 380 in
+     the light palette, 290 in the dark). The shortcut's box ends 16pt
+     in, its ink a side bearing further; the arrow's 16pt box ends there
+     too, its glyph centred in it. */
   highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
   contrast = labs ((long)line - (long)background);
-  if (rows == 1 && (highContrast ? (contrast >= 300 && contrast <= 460) : (contrast >= 50 && contrast <= 140))
+  if (rows == 1 && (highContrast ? (contrast >= 260 && contrast <= 460) : (contrast >= 50 && contrast <= 140))
     && shortcutGap >= 16 && shortcutGap <= 20 && chevronGap >= 18 && chevronGap <= 26)
     {
       [self pass: @"menu-separator-and-shortcut" detail: detail];

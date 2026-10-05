@@ -384,8 +384,7 @@ static NSPoint GnomeThemeToolTipShift = { 0.0, 0.0 };
 }
 
 /* libadwaita's tool tip: a dark box with light text, padded, without
-   GNUstep's black border (a white one in high contrast, where the box is
-   as black as the windows). Its 9pt rounded corners, 1pt light outline
+   GNUstep's black border (the same in high contrast). Its 9pt rounded corners, 1pt light outline
    (white at 10%) and translucent box only where the tip's window has an
    alpha channel (a libs-back with GSBackBorderlessWindowAlpha, under a
    compositor): an opaque window would show the corners black. Otherwise
@@ -399,9 +398,6 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
   Ivar textIvar = class_getInstanceVariable ([view class], "_text");
   NSAttributedString *text = textIvar != NULL ? object_getIvar (view, textIvar) : nil;
   NSRect bounds = [view bounds];
-  GnomeTheme *theme = (GnomeTheme *)[GSTheme theme];
-
-  BOOL highContrast = [theme isKindOfClass: [GnomeTheme class]] && [[theme settings] highContrastEnabled];
 
   if (text == nil)
     {
@@ -416,10 +412,10 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
       NSRectFillUsingOperation (bounds, NSCompositeClear);
       /* libadwaita's own colour, 80% black, which the palette's
          toolTipColor is over the window background: what is behind the
-         tip shows through, as GTK's. (High contrast: opaque.) */
-      [(highContrast ? [NSColor toolTipColor] : [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8]) set];
+         tip shows through, as GTK's. */
+      [[NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8] set];
       [box fill];
-      [(highContrast ? [NSColor toolTipTextColor] : [NSColor colorWithCalibratedWhite: 1.0 alpha: 0.10]) set];
+      [[NSColor colorWithCalibratedWhite: 1.0 alpha: 0.10] set];
       [box setLineWidth: 1.0];
       [box stroke];
     }
@@ -427,11 +423,6 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
     {
       [[NSColor toolTipColor] set];
       NSRectFill (bounds);
-      if (highContrast)
-        {
-          [[NSColor toolTipTextColor] set];
-          NSFrameRect (bounds);
-        }
     }
   [text drawInRect: NSInsetRect (bounds, GnomeThemeToolTipPaddingX, GnomeThemeToolTipPaddingY)];
 }

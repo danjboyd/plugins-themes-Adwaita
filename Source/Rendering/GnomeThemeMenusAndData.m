@@ -638,12 +638,17 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                   @"selectedInactiveColor",
                                   [NSColor selectedControlColor]);
       NSRect selectionRect = NSInsetRect (cellFrame, 4.0, 2.0);
+      /* High contrast outlines the row, as libadwaita's hovered menu
+         items (the border colour: text at 50%). */
+      BOOL highContrast = [[self settings] highContrastEnabled];
 
       GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (selectionRect, 0.5, 0.5),
                                                  7.0,
                                                  fillColor,
-                                                 nil,
-                                                 0.0);
+                                                 highContrast ? GnomeThemePhase67Color (self, @"menuBorderColor",
+                                                                                        [NSColor controlShadowColor])
+                                                   : nil,
+                                                 highContrast ? 1.0 : 0.0);
     }
 }
 

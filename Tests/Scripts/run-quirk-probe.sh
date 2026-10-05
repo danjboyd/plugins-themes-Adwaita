@@ -123,11 +123,15 @@ fi
 # header bar checks want every window button.
 # QUIRK_PROBE_STYLE=dark or high-contrast changes the look, for runs of the
 # header bar checks alone (-ProbeOnly header-bar).
+# High contrast is current GNOME's accessibility setting, over the light
+# palette (high-contrast-dark: over the dark one).
 COLOR_SCHEME=default
 GTK_THEME_NAME=Adwaita
+HIGH_CONTRAST=false
 case "${QUIRK_PROBE_STYLE:-}" in
   dark) COLOR_SCHEME=prefer-dark ;;
-  high-contrast) GTK_THEME_NAME=HighContrast ;;
+  high-contrast) HIGH_CONTRAST=true ;;
+  high-contrast-dark) HIGH_CONTRAST=true; COLOR_SCHEME=prefer-dark ;;
 esac
 mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
 cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<KEYFILE
@@ -136,6 +140,9 @@ color-scheme='$COLOR_SCHEME'
 gtk-theme='$GTK_THEME_NAME'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'
+
+[org/gnome/desktop/a11y/interface]
+high-contrast=$HIGH_CONTRAST
 
 [org/gnome/desktop/wm/preferences]
 button-layout='appmenu:minimize,maximize,close'
@@ -158,7 +165,7 @@ fi
 if [ -n "$XVFB_PID" ]; then
   PROBE_ARGS+=(-ProbeOwnsDisplay YES)
 fi
-if [ "${QUIRK_PROBE_STYLE:-}" = high-contrast ]; then
+if [ "$HIGH_CONTRAST" = true ]; then
   PROBE_ARGS+=(-ProbeHighContrast YES)
 fi
 if [ -n "$OUTPUT" ]; then

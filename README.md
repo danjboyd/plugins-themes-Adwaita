@@ -167,6 +167,11 @@ designed):
   toolbar's row. Apps don't need to set their toolbars again.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
+High contrast follows GNOME's accessibility setting
+(`org.gnome.desktop.a11y.interface high-contrast`), as libadwaita does: the
+light or dark palette with stronger borders and separators. GNOME 3's
+`HighContrast` and `HighContrastInverse` themes still turn it on.
+
 ### Symbolic icons
 
 A template image is drawn in the colour of the text around it, as GTK
@@ -297,12 +302,13 @@ pop-up titles, and the size of hidden tool tip and drag windows), prints one
 PASS/FAIL/KNOWN/SKIP line per check, and exits with the number of failures.
 KNOWN marks a GNUstep bug the theme can't fix (see `Docs/upstream-issues/`).
 Add `--output DIR` to save a PNG of each probe window. `make check-quirks`
-runs the probe six times: with the menu bar and with the primary menu
+runs the probe seven times: with the menu bar and with the primary menu
 (`QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary"`), each with the window
 manager's title bar and with the theme's header bar
 (`-GSX11HandlesWindowDecorations NO`), then the header bar's checks alone in
-the dark and high contrast palettes (`QUIRK_PROBE_STYLE=dark` or
-`high-contrast` with `-ProbeOnly header-bar`). The probe sets the decoration
+the dark palette and in high contrast over the light and the dark palette
+(`QUIRK_PROBE_STYLE=dark`, `high-contrast` or `high-contrast-dark` with
+`-ProbeOnly header-bar`). The probe sets the decoration
 flag itself, so a user default doesn't change the runs.
 
 Useful helpers:

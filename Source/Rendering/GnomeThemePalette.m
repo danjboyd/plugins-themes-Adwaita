@@ -153,47 +153,33 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
 }
 
+/* libadwaita's high contrast keeps the light or dark palette and makes
+   its lines stronger (its base-hc.css): borders and separators are the
+   text colour at 50% instead of 15%, and disabled controls fade to 40%
+   instead of 50%, so they stand apart from enabled ones. */
 static void
-GnomeThemePopulateHighContrastPalette(NSColorList *colors)
+GnomeThemeApplyHighContrast(NSColorList *colors)
 {
-  [colors setColor: [NSColor blackColor] forKey: @"windowBackgroundColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"controlBackgroundColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"controlColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"controlHighlightColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"controlLightHighlightColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"controlTextColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#c0c0c0") forKey: @"disabledControlTextColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"selectedControlColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"selectedControlTextColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"secondarySelectedControlColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#2a2a2a") forKey: @"selectedInactiveColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"selectedMenuItemColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"selectedMenuItemTextColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"menuBackgroundColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"menuItemBackgroundColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"menuSeparatorColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"menuBarBackgroundColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"menuBarBorderColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"toolbarBackgroundColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"toolbarBorderColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"menuBorderColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"scrollBarColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"textBackgroundColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"textColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"keyboardFocusIndicatorColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"highlightColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"windowFrameTextColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"windowFrameColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"gridColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"highlightedTableRowBackgroundColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"highlightedTableRowTextColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"rowBackgroundColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"alternateRowBackgroundColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"headerColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"headerTextColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"labelColor"];
-  [colors setColor: [NSColor blackColor] forKey: @"toolTipColor"];
-  [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
+  NSColor *text = [colors colorWithKey: @"controlTextColor"];
+  NSColor *background = [colors colorWithKey: @"windowBackgroundColor"];
+  NSColor *border = [background blendedColorWithFraction: 0.5 ofColor: text];
+  NSColor *strongBorder = [background blendedColorWithFraction: 0.7 ofColor: text];
+  NSColor *disabled = [background blendedColorWithFraction: 0.4 ofColor: text];
+  NSArray *borders = [NSArray arrayWithObjects: @"controlShadowColor", @"menuBorderColor", @"menuBarBorderColor",
+                              @"toolbarBorderColor", @"menuSeparatorColor", @"gridColor", nil];
+  NSEnumerator *enumerator = [borders objectEnumerator];
+  NSString *key;
+
+  if (text == nil || background == nil)
+    {
+      return;
+    }
+  while ((key = [enumerator nextObject]) != nil)
+    {
+      [colors setColor: border forKey: key];
+    }
+  [colors setColor: strongBorder forKey: @"controlDarkShadowColor"];
+  [colors setColor: disabled forKey: @"disabledControlTextColor"];
 }
 
 @implementation GnomeThemePalette
@@ -203,17 +189,17 @@ GnomeThemePopulateHighContrastPalette(NSColorList *colors)
   NSColorList *colors = AUTORELEASE ([[NSColorList alloc] initWithName: @"System"
                                                               fromFile: nil]);
 
-  if ([settings highContrastEnabled])
-    {
-      GnomeThemePopulateHighContrastPalette (colors);
-    }
-  else if ([settings prefersDarkAppearance])
+  if ([settings prefersDarkAppearance])
     {
       GnomeThemePopulateDarkPalette (colors);
     }
   else
     {
       GnomeThemePopulateLightPalette (colors);
+    }
+  if ([settings highContrastEnabled])
+    {
+      GnomeThemeApplyHighContrast (colors);
     }
 
   return colors;

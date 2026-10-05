@@ -78,6 +78,7 @@ it was found. Compare against the libadwaita reference with
 | Alerts weren't modal dialogs of the window they interrupt: Mutter didn't attach them (no centring on the window, no dimming it) (plugins-themes-Adwaita#22) | before an alert is shown the theme makes it transient for the app's main window with `_NET_WM_STATE_MODAL` and the window's `_NET_WM_USER_TIME`, as GTK does, and asks for the focus again once it's mapped (libs-back's first request comes too early and it ignores the window manager's offer). With the header bar the alert already had no bar (a border only). `make check-mutter` `alert-attached` |
 | Tool tips were the opaque colour 80% black makes over the window background, wrong over anything else (plugins-themes-Adwaita#21) | where the tip's window has an alpha channel under a compositor (the installed backend gives it one with the header bar) it is libadwaita's 80% black, translucent; opaque otherwise, and in high contrast. `make check-mutter` `tooltip` measures one over the desktop |
 | Menus had 10pt corners and no shadow; libadwaita's popover menus have 15px corners and a soft shadow (plugins-themes-Adwaita#19) | 15px corners; with the header bar the theme marks menu windows as popovers, and the libs-back patch (`GSBackPopoverShadows`) draws libadwaita's popover shadow in a transparent margin round them, as GTK 4 does (Mutter draws none for a 32-bit window). Under Mutter, KWin and Xfwm4; none where the window manager lacks `_GTK_FRAME_EXTENTS`. `make check-mutter-shadow` `menu-shadow`; libs-back `Tests/x11/shadowmargin.m` |
+| High contrast was GNOME 3's: a white-on-black palette chosen by a `gtk-theme` name with "HighContrast" (plugins-themes-Adwaita#18) | current GNOME's `org.gnome.desktop.a11y.interface high-contrast` (the theme names remain a fallback, HighContrastInverse dark) over the light or dark palette, as libadwaita's base-hc.css: borders and separators the text colour at 50%, disabled controls at 40%, hovered menu items outlined; tool tips as in normal contrast. `make check-quirks` runs high contrast over both palettes |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
@@ -148,12 +149,6 @@ window, compared with the GNUstep theme). Still open:
   `-[NSApplication nextEventMatchingMask:...]` hook for 0.32 in
   GnomeThemePrimaryMenu.m (keep the Escape timer and the press outside:
   GNUstep's menu tracking ignores keys and passes that press on).
-- **High contrast as current GNOME does it.** ([#18](https://github.com/danjboyd/plugins-themes-Adwaita/issues/18)) The theme's high contrast
-  palette is white on black, chosen by a `gtk-theme` name containing
-  "HighContrast" (GNOME 3's). GNOME now sets
-  `org.gnome.desktop.a11y.interface high-contrast`, and libadwaita keeps
-  the light or dark palette with stronger borders and outlines. The header
-  bar draws libadwaita's details in whichever palette is active.
 
 ## GNUstep issues to report upstream
 
