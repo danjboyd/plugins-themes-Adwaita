@@ -1672,12 +1672,13 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
 
 /* A document window's header bar shows the file's name, not GNUstep's
    "name  --  ~/folder", with the folder on hover, as GNOME's
-   AdwWindowTitle (plugins-themes-Adwaita#31). */
+   AdwWindowTitle (plugins-themes-Adwaita#31), and a dot before it while
+   the document has unsaved changes (#39). */
 - (void) checkHeaderBarDocumentTitle
 {
   NSWindow *window;
   NSView *frameView;
-  QuirkProbeInk document, plain;
+  QuirkProbeInk document, plain, edited, saved;
   NSString *folder = nil;
   NSString *detail;
 
@@ -1699,12 +1700,19 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
   [window setTitle: @"white.png"];
   plain = QuirkProbeHeaderTitleInk (window);
+  /* Unsaved changes: a dot before the title, gone once saved
+     (plugins-themes-Adwaita#39). */
+  [window setDocumentEdited: YES];
+  edited = QuirkProbeHeaderTitleInk (window);
+  [window setDocumentEdited: NO];
+  saved = QuirkProbeHeaderTitleInk (window);
   [window orderOut: nil];
   detail = [NSString stringWithFormat: @"title \"%@\" drawn %ldpx wide (\"white.png\" alone %ldpx); "
-    @"folder on hover \"%@\"", @"white.png  --  /tmp/Probe Folder", (long)document.width, (long)plain.width,
-    folder ?: @"(none)"];
+    @"folder on hover \"%@\"; edited %ldpx, saved again %ldpx", @"white.png  --  /tmp/Probe Folder",
+    (long)document.width, (long)plain.width, folder ?: @"(none)", (long)edited.width, (long)saved.width];
   if (document.count > 0 && labs ((long)document.width - (long)plain.width) <= 1
-    && [folder isEqualToString: @"/tmp/Probe Folder"])
+    && [folder isEqualToString: @"/tmp/Probe Folder"]
+    && edited.width >= plain.width + 6 && labs ((long)saved.width - (long)plain.width) <= 1)
     {
       [self pass: @"header-bar-document-title" detail: detail];
     }

@@ -629,6 +629,16 @@ GnomeThemeResizeCursor(NSUInteger edges)
   return self;
 }
 
+/* The title shows the unsaved-changes dot. */
+- (void) setDocumentEdited: (BOOL)flag
+{
+  [super setDocumentEdited: flag];
+  if (hasTitleBar)
+    {
+      [self setNeedsDisplayInRect: titleBarRect];
+    }
+}
+
 - (void) dealloc
 {
   if (_titleFolder != nil)
@@ -1074,20 +1084,28 @@ GnomeThemeResizeCursor(NSUInteger edges)
 /* GNUstep titles a document window "name  --  ~/folder"
    (-setTitleWithRepresentedFilename:). GNOME shows the file's name, with
    the folder as AdwWindowTitle's subtitle; here the folder shows on hover
-   over the title. Other titles are left as they are. */
+   over the title. Other titles are left as they are, but for the
+   unsaved-changes dot. */
 static NSString *
 GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
 {
   NSString *path = [window representedFilename];
+  NSString *title = [window title];
 
   *folder = nil;
   if ([path length] > 0 && [window respondsToSelector: @selector(_hasTitleWithRepresentedFilename)]
     && [window _hasTitleWithRepresentedFilename])
     {
       *folder = [[path stringByDeletingLastPathComponent] stringByAbbreviatingWithTildeInPath];
-      return [[NSFileManager defaultManager] displayNameAtPath: path];
+      title = [[NSFileManager defaultManager] displayNameAtPath: path];
     }
-  return [window title];
+  /* Unsaved changes (-setDocumentEdited:): a dot before the title, as
+     GNOME's document apps mark them (plugins-themes-Adwaita#39). */
+  if ([title length] > 0 && [window isDocumentEdited])
+    {
+      title = [@"\u2022 " stringByAppendingString: title];
+    }
+  return title;
 }
 
 - (NSString *) view: (NSView *)view
