@@ -3833,6 +3833,111 @@ QuirkProbeVisibleMenus (void)
   [self checkHiddenWindow: [dragView window] ident: @"drag-image-hide-keeps-size"];
 }
 
+/* A red square, named `name`. */
+static NSImage *
+QuirkProbeRedImage(NSString *name)
+{
+  NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (16, 16)]);
+
+  [image lockFocus];
+  [[NSColor colorWithCalibratedRed: 1.0 green: 0.0 blue: 0.0 alpha: 1.0] set];
+  NSRectFill (NSMakeRect (0, 0, 16, 16));
+  [image unlockFocus];
+  [image setName: name];
+  return image;
+}
+
+/* The colour at a button's centre, where its image is. */
+static NSColor *
+QuirkProbeButtonImageColor(NSButton *button)
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (button);
+  NSInteger bits = [rep bitsPerSample];
+  CGFloat maxValue = (bits >= 16) ? 65535.0 : (CGFloat)((1u << bits) - 1);
+  BOOL alphaFirst = [rep hasAlpha] && ([rep bitmapFormat] & NSAlphaFirstBitmapFormat) != 0;
+  NSInteger start = alphaFirst ? 1 : 0;
+  NSUInteger pixel[5];
+
+  if ([rep samplesPerPixel] < 3 || [rep samplesPerPixel] > 5)
+    {
+      return [NSColor clearColor];
+    }
+  [rep getPixel: pixel atX: [rep pixelsWide] / 2 y: [rep pixelsHigh] / 2];
+  return [NSColor colorWithCalibratedRed: pixel[start] / maxValue green: pixel[start + 1] / maxValue
+                                    blue: pixel[start + 2] / maxValue alpha: 1.0];
+}
+
+/* Template (symbolic) images are tinted with the text colour: red ones
+   named "...Template" or "...-symbolic" come out neutral (dark in the
+   light palette, light in the dark one), and in the title colour on a
+   suggested button; an image that isn't a template keeps its colours
+   (plugins-themes-Adwaita#32). */
+- (void) checkTemplateImages
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 300, 80) title: @"Probe Templates"];
+  /* Image names are unique: -setName: refuses one already in use. */
+  NSString *names[4] = { @"QuirkProbeIconTemplate", @"quirk-probe-icon-symbolic", @"QuirkProbeIcon",
+                         @"QuirkProbeDefaultIconTemplate" };
+  NSColor *colors[4];
+  NSColor *text = [[NSColor controlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *suggested = [[NSColor selectedControlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL darkText = text == nil || [text brightnessComponent] < 0.5;
+  BOOL darkSuggested = suggested != nil && [suggested brightnessComponent] < 0.5;
+  BOOL ok = YES;
+  NSMutableArray *parts = [NSMutableArray array];
+  int i;
+
+  for (i = 0; i < 4; i++)
+    {
+      NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10 + 70 * i, 20, 60, 34)]);
+
+      [button setImage: QuirkProbeRedImage (names[i])];
+      [button setImagePosition: NSImageOnly];
+      [button setBezelStyle: NSRoundedBezelStyle];
+      if (i == 3)
+        {
+          [button setKeyEquivalent: @"\r"];
+        }
+      [[window contentView] addSubview: button];
+    }
+  [window orderFront: nil];
+  [window display];
+  for (i = 0; i < 4; i++)
+    {
+      colors[i] = QuirkProbeButtonImageColor ([[[window contentView] subviews] objectAtIndex: i]);
+    }
+  [window orderOut: nil];
+
+  for (i = 0; i < 4; i++)
+    {
+      NSColor *c = colors[i];
+      CGFloat r = [c redComponent], g = [c greenComponent], b = [c blueComponent];
+      BOOL neutral = fabs (r - g) < 0.08 && fabs (g - b) < 0.08;
+      BOOL want;
+
+      switch (i)
+        {
+          case 0: case 1: want = neutral && (darkText ? r < 0.5 : r > 0.5); break;
+          case 2: want = r > 0.8 && g < 0.2 && b < 0.2; break;
+          /* The default button's title colour, whatever the palette
+             makes it. */
+          default: want = darkSuggested ? (r < 0.3 && g < 0.3 && b < 0.3) : (neutral && r > 0.85); break;
+        }
+      ok = ok && want;
+      [parts addObject: [NSString stringWithFormat: @"%@ %.2f/%.2f/%.2f",
+                                 (i == 0 ? @"...Template" : i == 1 ? @"...-symbolic" : i == 2 ? @"not a template"
+                                  : @"...Template on the default button"), r, g, b]];
+    }
+  if (ok)
+    {
+      [self pass: @"template-images" detail: [parts componentsJoinedByString: @"; "]];
+    }
+  else
+    {
+      [self fail: @"template-images" detail: [parts componentsJoinedByString: @"; "]];
+    }
+}
+
 /* The window types the theme gives windows, as GTK's
    (_NET_WM_WINDOW_TYPE, plugins-themes-Adwaita#15). The probe's display
    has no window manager to set them for, so this asks the theme what it
@@ -3931,6 +4036,7 @@ QuirkProbeVisibleMenus (void)
   [self checkHeaderBarToolbarLive];
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
+      [self checkTemplateImages];
       [self finish];
       return;
     }
@@ -3973,6 +4079,7 @@ QuirkProbeVisibleMenus (void)
   [self checkToolTip];
   [self checkHiddenWindows];
   [self checkWindowTypes];
+  [self checkTemplateImages];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

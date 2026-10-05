@@ -167,6 +167,18 @@ designed):
   toolbar's row. Apps don't need to set their toolbars again.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
+### Symbolic icons
+
+A template image is drawn in the colour of the text around it, as GTK
+draws symbolic icons: the button's or menu's text colour, the header bar's
+(dimmed while the window isn't focused), the title colour on a suggested
+(default) button, and the disabled text colour. An app can ship one
+monochrome icon set, drawn in any colour (only its shape is used), and it
+follows the light, dark and high contrast palettes. An image is a template
+when `-[NSImage isTemplate]` says so (libs-gui after 0.32), or when its
+name ends in `Template` (Cocoa's convention) or `-symbolic` (GNOME's), for
+example `[NSImage imageNamed: @"zoom-in-symbolic"]`.
+
 ### Windows without the menu bar
 
 GNOME apps keep their menus in the main window. The theme leaves the menu

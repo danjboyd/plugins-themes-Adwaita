@@ -66,6 +66,11 @@ BOOL GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar);
 BOOL GnomeThemeHeaderBarToolbarEnabled(void);
 void GnomeThemeHeaderBarToolbarSettingChanged(void);
 
+/* Template (symbolic) images: whether `image` is one (-isTemplate, or a
+   name ending in "Template" or "-symbolic"), and its shape in `color`. */
+BOOL GnomeThemeImageIsTemplate(NSImage *image);
+NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
+
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is
    mirrored, as GTK mirrors it. */
