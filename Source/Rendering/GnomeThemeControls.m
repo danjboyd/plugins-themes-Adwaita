@@ -2401,6 +2401,62 @@ GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
   [path stroke];
 }
 
+/* libadwaita's switch: a 46x26 pill (3pt round a 20pt knob), the text
+   colour at 15% when off (30% in high contrast), the accent when on; the
+   knob white (a little darker in the dark palette) with a soft shadow, at
+   the start when off and the end when on. Disabled, it fades to 50% (40%
+   in high contrast). Smaller frames shrink it; larger ones centre it.
+   (plugins-themes-Adwaita#35) */
+- (void) drawSwitchInRect: (NSRect)rect
+                 forState: (NSControlStateValue)state
+                  enabled: (BOOL)enabled
+{
+  CGFloat scale = MIN (1.0, MIN (NSWidth (rect) / 46.0, NSHeight (rect) / 26.0));
+  NSRect track = NSMakeRect (floor (NSMidX (rect) - 23.0 * scale), floor (NSMidY (rect) - 13.0 * scale),
+                             floor (46.0 * scale), floor (26.0 * scale));
+  CGFloat padding = 3.0 * scale;
+  CGFloat knobSize = NSHeight (track) - 2.0 * padding;
+  BOOL on = (state == NSControlStateValueOn);
+  BOOL highContrast = [[self settings] highContrastEnabled];
+  CGFloat opacity = enabled ? 1.0 : (highContrast ? 0.4 : 0.5);
+  NSColor *text = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
+  NSColor *background = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  NSColor *view = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
+  NSColor *accent = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
+  /* In RGB: a palette colour may ignore -colorWithAlphaComponent:. */
+  NSColor *trackColor = [(on ? accent : GnomeThemeBlend (background, text, highContrast ? 0.30 : 0.15))
+                          colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *knobColor = [GnomeThemeBlend ([NSColor whiteColor], view, 0.2)
+                          colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSView *focusView = [NSView focusView];
+  BOOL flipped = [focusView isFlipped];
+  NSRect knob = NSMakeRect (on ? NSMaxX (track) - padding - knobSize : NSMinX (track) + padding,
+                            NSMinY (track) + padding, knobSize, knobSize);
+
+  if (NSIsEmptyRect (track))
+    {
+      return;
+    }
+  [[trackColor colorWithAlphaComponent: opacity] set];
+  [[NSBezierPath bezierPathWithRoundedRect: track xRadius: NSHeight (track) / 2.0 yRadius: NSHeight (track) / 2.0] fill];
+  /* The knob's shadow, 0 2px 4px black at 20%, as two soft rings below it. */
+  if (enabled)
+    {
+      CGFloat drop = flipped ? 1.0 * scale : -1.0 * scale;
+
+      [[NSColor colorWithCalibratedWhite: 0.0 alpha: 0.08] set];
+      [[NSBezierPath bezierPathWithOvalInRect: NSOffsetRect (NSInsetRect (knob, -1.0, -1.0), 0.0, 2.0 * drop)] fill];
+      [[NSColor colorWithCalibratedWhite: 0.0 alpha: 0.10] set];
+      [[NSBezierPath bezierPathWithOvalInRect: NSOffsetRect (knob, 0.0, drop)] fill];
+    }
+  [[knobColor colorWithAlphaComponent: opacity] set];
+  [[NSBezierPath bezierPathWithOvalInRect: knob] fill];
+  if (enabled && GnomeThemeViewShowsFocusRing (focusView))
+    {
+      GnomeThemeDrawFocusRing (self, NSInsetRect (track, -3.0, -3.0), NSHeight (track) / 2.0 + 3.0);
+    }
+}
+
 - (NSRect) stepperUpButtonRectWithFrame: (NSRect)frame
 {
   if (GnomeThemeStepperIsVertical (frame))
@@ -2580,48 +2636,6 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   [fillColor set];
   [path fill];
   [self drawStepperDownButton: aRect];
-}
-
-- (void) drawSwitchInRect: (NSRect)rect
-                 forState: (NSControlStateValue)state
-                  enabled: (BOOL)enabled
-{
-  NSRect trackRect = NSInsetRect (rect, 4.0, 6.0);
-  CGFloat radius = floor (trackRect.size.height / 2.0);
-  CGFloat knobSize = trackRect.size.height - 4.0;
-  NSRect knobRect = NSMakeRect (trackRect.origin.x + 2.0,
-                                trackRect.origin.y + 2.0,
-                                knobSize,
-                                knobSize);
-  NSColor *trackFill = nil;
-  NSColor *trackStroke = GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]);
-
-  if (state == NSOnState)
-    {
-      trackFill = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
-      knobRect.origin.x = NSMaxX (trackRect) - knobSize - 2.0;
-    }
-  else
-    {
-      trackFill = GnomeThemeBlend ([NSColor controlColor], [NSColor controlBackgroundColor], 0.25);
-    }
-
-  if (enabled == NO)
-    {
-      trackFill = GnomeThemeBlend (trackFill, [NSColor controlBackgroundColor], 0.35);
-      trackStroke = GnomeThemeBlend (trackStroke, [NSColor controlBackgroundColor], 0.35);
-    }
-
-  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (trackRect, 0.5, 0.5),
-                                      radius,
-                                      trackFill,
-                                      trackStroke,
-                                      1.0);
-  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (knobRect, 0.5, 0.5),
-                                      knobSize / 2.0,
-                                      [NSColor textBackgroundColor],
-                                      trackStroke,
-                                      1.0);
 }
 
 - (void) drawPopUpButtonCellInteriorWithFrame: (NSRect)cellFrame

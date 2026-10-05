@@ -260,7 +260,8 @@ if [ "$SHADOW" = YES ]; then
     -ThemeDemoCommandFIFO "$WORK/commands" >"$WORK/demo.log" 2>&1 &
 else
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
-    "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO -ThemeDemoCommandFIFO "$WORK/commands" \
+    "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO -ThemeDemoLogFrames YES \
+    -ThemeDemoCommandFIFO "$WORK/commands" \
     >"$WORK/demo.log" 2>&1 &
 fi
 DEMO_PID=$!
@@ -296,8 +297,11 @@ fi
 # A shadow margin is expected with the shadow-drawing libraries when the
 # window manager lists _GTK_FRAME_EXTENTS (Mutter, KWin, Xfwm4; not
 # Openbox). Each runs a compositing manager here.
+# Without --shadow it is whatever the installed libraries do (a system
+# with the patched libs-back gives the window a margin too).
 MARGIN=NO
-if [ "$SHADOW" = YES ] && xprop -root _NET_SUPPORTED | grep -q _GTK_FRAME_EXTENTS; then
+if xprop -root _NET_SUPPORTED | grep -q _GTK_FRAME_EXTENTS \
+  && { [ "$SHADOW" = YES ] || xprop -id "$WINDOW" _GTK_FRAME_EXTENTS 2>/dev/null | grep -q '='; }; then
   MARGIN=YES
 fi
 

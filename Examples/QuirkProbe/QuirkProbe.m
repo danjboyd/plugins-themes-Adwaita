@@ -4095,6 +4095,106 @@ QuirkProbeButtonImageColor(NSButton *button)
     }
 }
 
+/* r, g, b (0-255) at a view's pixel, from the top left. */
+static void
+QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rgb[3])
+{
+  NSInteger bits = [rep bitsPerSample];
+  NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
+  NSInteger start = ([rep hasAlpha] && ([rep bitmapFormat] & NSAlphaFirstBitmapFormat)) ? 1 : 0;
+  NSUInteger pixel[5];
+  int i;
+
+  [rep getPixel: pixel atX: x y: y];
+  for (i = 0; i < 3; i++)
+    {
+      rgb[i] = pixel[start + i] * 255 / maxValue;
+    }
+}
+
+/* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
+   the knob at the end, a neutral track when off with the knob at the start
+   (plugins-themes-Adwaita#35). */
+- (void) checkSwitch
+{
+  Class switchClass = NSClassFromString (@"NSSwitch");
+  NSWindow *window;
+  NSControl *offSwitch, *onSwitch, *disabledSwitch;
+  NSBitmapImageRep *offRep, *onRep, *disabledRep;
+  NSUInteger onTrack[3], onKnob[3], offTrack[3], offKnob[3], disabledTrack[3];
+  NSString *detail;
+  BOOL ok;
+
+  if (switchClass == Nil)
+    {
+      [self skip: @"switch-adwaita" detail: @"no NSSwitch in this libs-gui"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 60, 200, 80) title: @"Probe Switch"];
+  offSwitch = AUTORELEASE ([[switchClass alloc] initWithFrame: NSMakeRect (10, 20, 46, 26)]);
+  onSwitch = AUTORELEASE ([[switchClass alloc] initWithFrame: NSMakeRect (80, 20, 46, 26)]);
+  [(id)onSwitch setState: NSOnState];
+  /* libs-gui 0.32's NSSwitch starts disabled (its _enabled isn't set). */
+  [offSwitch setEnabled: YES];
+  [onSwitch setEnabled: YES];
+  disabledSwitch = AUTORELEASE ([[switchClass alloc] initWithFrame: NSMakeRect (140, 20, 46, 26)]);
+  [(id)disabledSwitch setState: NSOnState];
+  [disabledSwitch setEnabled: NO];
+  [[window contentView] addSubview: offSwitch];
+  [[window contentView] addSubview: onSwitch];
+  [[window contentView] addSubview: disabledSwitch];
+  [window orderFront: nil];
+  [window display];
+  offRep = QuirkProbeRender (offSwitch);
+  onRep = QuirkProbeRender (onSwitch);
+  /* The track's free end (6px in from it), and the knob's centre. */
+  QuirkProbePixelAt (onRep, 6, [onRep pixelsHigh] / 2, onTrack);
+  QuirkProbePixelAt (onRep, [onRep pixelsWide] - 13, [onRep pixelsHigh] / 2, onKnob);
+  QuirkProbePixelAt (offRep, [offRep pixelsWide] - 6, [offRep pixelsHigh] / 2, offTrack);
+  QuirkProbePixelAt (offRep, 13, [offRep pixelsHigh] / 2, offKnob);
+  /* Rendered with the window under it: it's translucent. */
+  {
+    NSView *frameView = [[window contentView] superview];
+    NSRect inWindow = [disabledSwitch convertRect: [disabledSwitch bounds] toView: nil];
+
+    disabledRep = QuirkProbeRender (frameView);
+    QuirkProbePixelAt (disabledRep, (NSInteger)NSMinX (inWindow) + 6,
+                       (NSInteger)(NSHeight ([frameView bounds]) - NSMidY (inWindow)), disabledTrack);
+  }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"on: track %lu/%lu/%lu, knob %lu/%lu/%lu; off: track %lu/%lu/%lu, knob %lu/%lu/%lu; "
+    @"disabled on: track %lu/%lu/%lu",
+    (unsigned long)onTrack[0], (unsigned long)onTrack[1], (unsigned long)onTrack[2],
+    (unsigned long)onKnob[0], (unsigned long)onKnob[1], (unsigned long)onKnob[2],
+    (unsigned long)offTrack[0], (unsigned long)offTrack[1], (unsigned long)offTrack[2],
+    (unsigned long)offKnob[0], (unsigned long)offKnob[1], (unsigned long)offKnob[2],
+    (unsigned long)disabledTrack[0], (unsigned long)disabledTrack[1], (unsigned long)disabledTrack[2]];
+  /* On: blue track, a light knob. Off: a grey track 15-30% of the way
+     from the window to the text (darker in the light palette, lighter in
+     the dark), the knob lighter than the track. Disabled: closer to the
+     window than the enabled one, still blue. */
+  {
+    NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+    long window = (long)([windowColor redComponent] * 255.0);
+    long offStep = labs ((long)offTrack[0] - window);
+
+    ok = onTrack[2] > onTrack[0] + 60 && onKnob[0] > 200 && onKnob[1] > 200 && onKnob[2] > 200
+      && labs ((long)offTrack[0] - (long)offTrack[2]) < 12 && offStep >= 20 && offStep <= 80
+      && offKnob[0] > offTrack[0] + 15
+      && disabledTrack[2] > disabledTrack[0]
+      && labs ((long)disabledTrack[0] - window) < labs ((long)onTrack[0] - window);
+  }
+  if (ok)
+    {
+      [self pass: @"switch-adwaita" detail: detail];
+    }
+  else
+    {
+      [self fail: @"switch-adwaita" detail: detail];
+    }
+}
+
 /* Overlay scrollbars (GNOME's overlay-scrolling): the content runs under
    the scroller, which isn't drawn and lets presses through at rest; it
    shows (and takes presses) once the content scrolls, and fades out a
@@ -4262,6 +4362,7 @@ QuirkProbeButtonImageColor(NSButton *button)
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkSwitch];
       [self finish];
       return;
     }
@@ -4307,6 +4408,7 @@ QuirkProbeButtonImageColor(NSButton *button)
   [self checkWindowTypes];
   [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkSwitch];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
