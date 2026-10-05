@@ -385,10 +385,12 @@ static NSPoint GnomeThemeToolTipShift = { 0.0, 0.0 };
 
 /* libadwaita's tool tip: a dark box with light text, padded, without
    GNUstep's black border (a white one in high contrast, where the box is
-   as black as the windows). Its 9pt rounded corners and 1pt light outline
-   (white at 10%) only where the tip's window has an alpha channel (a
-   libs-back with GSBackBorderlessWindowAlpha, under a compositor): an
-   opaque window would show the corners black. */
+   as black as the windows). Its 9pt rounded corners, 1pt light outline
+   (white at 10%) and translucent box only where the tip's window has an
+   alpha channel (a libs-back with GSBackBorderlessWindowAlpha, under a
+   compositor): an opaque window would show the corners black. Otherwise
+   the box is the colour the translucent one makes over the window
+   background. */
 static const CGFloat GnomeThemeToolTipRadius = 9.0;
 
 - (void) _overrideGSTTViewMethod_drawRect: (NSRect)dirtyRect
@@ -412,7 +414,10 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
                                                           yRadius: GnomeThemeToolTipRadius];
 
       NSRectFillUsingOperation (bounds, NSCompositeClear);
-      [[NSColor toolTipColor] set];
+      /* libadwaita's own colour, 80% black, which the palette's
+         toolTipColor is over the window background: what is behind the
+         tip shows through, as GTK's. (High contrast: opaque.) */
+      [(highContrast ? [NSColor toolTipColor] : [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8]) set];
       [box fill];
       [(highContrast ? [NSColor toolTipTextColor] : [NSColor colorWithCalibratedWhite: 1.0 alpha: 0.10]) set];
       [box setLineWidth: 1.0];

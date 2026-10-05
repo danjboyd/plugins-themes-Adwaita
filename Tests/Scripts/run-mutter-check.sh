@@ -457,6 +457,39 @@ if [ "$SHADOW" = YES ]; then
   fi
 fi
 
+# A tool tip over the desktop: with an alpha channel (a 32-bit window, under
+# a compositor; the installed 0.32 backend gives tool tips one too)
+# libadwaita's 80% black, the grey behind it showing through; opaque
+# without (#323232, which 80% black makes over the window background).
+# (plugins-themes-Adwaita#21)
+read -r VX VY VW VH <<<"$(visible)"
+echo "tooltip $((VX + VW + 60)) $((VY + 100))" >"$WORK/commands"
+sleep 1.5
+TIP=""
+for w in $(xdotool search --onlyvisible --class ThemeDemo 2>/dev/null); do
+  if xprop -id "$w" _NET_WM_WINDOW_TYPE 2>/dev/null | grep -q _NET_WM_WINDOW_TYPE_TOOLTIP; then
+    TIP="$w"
+  fi
+done
+if [ -n "$TIP" ]; then
+  eval "$(xwininfo -id "$TIP" | awk '/Absolute upper-left X/ {print "TX=" $NF} /Absolute upper-left Y/ {print "TY=" $NF} /Height:/ {print "TH=" $NF}')"
+  INSIDE="$(pixel $((TX + 4)) $((TY + TH / 2)))"
+  TIP_DEPTH="$(xwininfo -id "$TIP" | awk '/Depth:/ {print $2}')"
+fi
+echo tooltip-hide >"$WORK/commands"
+sleep 0.5
+DETAIL="tool tip ${TIP:-none}, depth ${TIP_DEPTH:-?}, over the desktop (r+g+b $((3 * BACKGROUND))): r+g+b ${INSIDE:-?} inside"
+if [ "${TIP_DEPTH:-}" = 32 ]; then
+  WANT_LOW=$((3 * BACKGROUND / 5 - 15)); WANT_HIGH=$((3 * BACKGROUND / 5 + 15))
+else
+  WANT_LOW=140; WANT_HIGH=160
+fi
+if [ -n "$TIP" ] && [ "$INSIDE" -ge "$WANT_LOW" ] && [ "$INSIDE" -le "$WANT_HIGH" ]; then
+  report PASS "$NAME-tooltip" "$DETAIL"
+else
+  report FAIL "$NAME-tooltip" "$DETAIL (want $WANT_LOW-$WANT_HIGH)"
+fi
+
 BEFORE="$(geometry)"
 RESIZES_BEFORE="$(grep -c '^ThemeDemo-resize' "$WORK/demo.log")"
 read -r PX PY <<<"$(bar_point)"

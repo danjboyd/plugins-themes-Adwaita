@@ -675,6 +675,38 @@ ThemeDemoPrintLine(NSString *line)
       [self captureDropdownNamed: [parts objectAtIndex: 1]
                           toPath: [parts objectAtIndex: 2]];
     }
+  else if ([command isEqualToString: @"tooltip"] && [parts count] >= 3)
+    {
+      /* A tool tip shown as GSToolTips shows it, then moved so its top
+         left corner is at X Y (X11 screen coordinates), for a test to
+         look at what's behind it. */
+      NSView *anchor = [_window contentView];
+      NSString *text = @"Zoom: Fit to Window";
+      NSTimer *fake = [NSTimer timerWithTimeInterval: 1000 target: self selector: @selector(description)
+                                            userInfo: text repeats: NO];
+      NSEnumerator *enumerator;
+      NSWindow *window;
+
+      [anchor setToolTip: text];
+      _toolTips = [NSClassFromString (@"GSToolTips") performSelector: @selector(tipsForView:) withObject: anchor];
+      [_toolTips performSelector: @selector(_timedOut:) withObject: fake];
+      enumerator = [[NSApp windows] objectEnumerator];
+      while ((window = [enumerator nextObject]) != nil)
+        {
+          if ([window isKindOfClass: NSClassFromString (@"GSTTPanel")] && [window isVisible])
+            {
+              [window setFrameTopLeftPoint:
+                        NSMakePoint ([[parts objectAtIndex: 1] doubleValue],
+                                     NSHeight ([[window screen] frame]) - [[parts objectAtIndex: 2] doubleValue])];
+            }
+        }
+    }
+  else if ([command isEqualToString: @"tooltip-hide"])
+    {
+      [_toolTips performSelector: @selector(_endDisplay)];
+      [[_window contentView] setToolTip: nil];
+      _toolTips = nil;
+    }
   else if ([command isEqualToString: @"alert"])
     {
       /* An alert over the main window, for a test to look at; it logs how
