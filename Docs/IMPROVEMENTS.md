@@ -79,6 +79,7 @@ it was found. Compare against the libadwaita reference with
 | Tool tips were the opaque colour 80% black makes over the window background, wrong over anything else (plugins-themes-Adwaita#21) | where the tip's window has an alpha channel under a compositor (the installed backend gives it one with the header bar) it is libadwaita's 80% black, translucent; opaque otherwise, and in high contrast. `make check-mutter` `tooltip` measures one over the desktop |
 | Menus had 10pt corners and no shadow; libadwaita's popover menus have 15px corners and a soft shadow (plugins-themes-Adwaita#19) | 15px corners; with the header bar the theme marks menu windows as popovers, and the libs-back patch (`GSBackPopoverShadows`) draws libadwaita's popover shadow in a transparent margin round them, as GTK 4 does (Mutter draws none for a 32-bit window). Under Mutter, KWin and Xfwm4; none where the window manager lacks `_GTK_FRAME_EXTENTS`. `make check-mutter-shadow` `menu-shadow`; libs-back `Tests/x11/shadowmargin.m` |
 | High contrast was GNOME 3's: a white-on-black palette chosen by a `gtk-theme` name with "HighContrast" (plugins-themes-Adwaita#18) | current GNOME's `org.gnome.desktop.a11y.interface high-contrast` (the theme names remain a fallback, HighContrastInverse dark) over the light or dark palette, as libadwaita's base-hc.css: borders and separators the text colour at 50%, disabled controls at 40%, hovered menu items outlined; tool tips as in normal contrast. `make check-quirks` runs high contrast over both palettes |
+| Scrollbars always took a strip beside the content and showed while it overflowed; libadwaita's are overlay indicators (plugins-themes-Adwaita#17) | with GNOME's `overlay-scrolling` on, the clip view (and a table's header) runs under the scrollers, which draw nothing and let presses through at rest; they show on scrolling or with the pointer over them (an 8px slider in a trough then, 3px otherwise) and fade out after a second. The clip view redraws instead of copying on scroll (the scroller's pixels would be copied along) and nested tiling from auto-hiding scrollers is skipped. `GnomeThemeOverlayScrollbars NO` keeps classic ones. QuirkProbe `overlay-scrollers` |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
@@ -119,14 +120,6 @@ window, compared with the GNUstep theme). Still open:
   of a dark tile.
 
 ## Theme follow-ups
-
-- **Scrollbars that hide until needed.** ([#17](https://github.com/danjboyd/plugins-themes-Adwaita/issues/17)) libadwaita shows its overlay
-  indicators only after the pointer moves or the view scrolls, widens them
-  under the pointer, and lets content run underneath. GNUstep's
-  `NSTrackingArea` is declared but not wired into `NSView`, so hover needs
-  legacy tracking rects kept up to date by hand, and content under the
-  scrollers needs `-[NSScrollView tile]` changes. The indicator stays visible
-  while content overflows, in a strip of its own.
 
 - **Install after merging.** Apps load `~/GNUstep/Library/Themes/Adwaita.theme`.
   On 2026-09-24 that copy was from Jul 27, and all of OneDriveServiceManager's

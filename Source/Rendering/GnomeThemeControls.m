@@ -2822,6 +2822,11 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       return;
     }
 
+  if (GnomeThemeDrawOverlayScrollerIfNeeded (scroller))
+    {
+      return;
+    }
+
   if (GnomeThemeScrollerShowsOverflow (scroller) == NO)
     {
       GnomeThemeEraseScrollerRect (scroller, rect);
@@ -2842,8 +2847,9 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
   (void)flag;
 
-  if (theme == nil)
+  if (theme == nil || GnomeThemeUsesOverlayScrollers ())
     {
+      /* Overlay scrollers draw everything from -drawRect:. */
       return;
     }
 

@@ -252,6 +252,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   CGFloat monoSize = 0.0;
   GnomeThemeColorScheme colorScheme = GnomeThemeColorSchemeDefault;
   BOOL highContrast = NO;
+  BOOL overlayScrolling = YES;
   NSString *gtkThemeName = @"Adwaita";
   CGFloat fontScale = GnomeThemeResolvedFontScale ();
 
@@ -285,6 +286,11 @@ GnomeThemeResolveFont(NSString *preferredName,
               gtkThemeName = [NSString stringWithUTF8String: value];
               g_free (value);
             }
+        }
+
+      if (g_settings_schema_has_key (schema, "overlay-scrolling"))
+        {
+          overlayScrolling = g_settings_get_boolean (settings, "overlay-scrolling") ? YES : NO;
         }
 
       if (g_settings_schema_has_key (schema, "color-scheme"))
@@ -390,6 +396,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   ASSIGNCOPY (_gtkThemeName, gtkThemeName);
   _colorScheme = colorScheme;
   _highContrast = highContrast;
+  _overlayScrolling = overlayScrolling;
 
   [self reloadWindowManagerPreferences];
 }
@@ -515,6 +522,11 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (BOOL) highContrastEnabled
 {
   return _highContrast;
+}
+
+- (BOOL) overlayScrollingEnabled
+{
+  return _overlayScrolling;
 }
 
 - (NSFont *) interfaceFont

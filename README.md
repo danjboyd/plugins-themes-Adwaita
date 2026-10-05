@@ -167,6 +167,13 @@ designed):
   toolbar's row. Apps don't need to set their toolbars again.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
+Scrollbars are GNOME's overlay scrollbars while GNOME's `overlay-scrolling`
+setting is on (its default): the content runs under them, and they show
+only while it scrolls or the pointer is over them (wider then), fading out
+a second later. `GnomeThemeOverlayScrollbars NO` (for an app, or in
+`NSGlobalDomain`) keeps classic scrollbars, beside the content and shown
+while it overflows.
+
 High contrast follows GNOME's accessibility setting
 (`org.gnome.desktop.a11y.interface high-contrast`), as libadwaita does: the
 light or dark palette with stronger borders and separators. GNOME 3's

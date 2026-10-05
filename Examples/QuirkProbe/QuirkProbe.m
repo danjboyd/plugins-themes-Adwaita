@@ -3939,6 +3939,72 @@ QuirkProbeButtonImageColor(NSButton *button)
     }
 }
 
+/* Overlay scrollbars (GNOME's overlay-scrolling): the content runs under
+   the scroller, which isn't drawn and lets presses through at rest; it
+   shows (and takes presses) once the content scrolls, and fades out a
+   second later (plugins-themes-Adwaita#17). */
+- (void) checkOverlayScrollers
+{
+  NSWindow *window;
+  NSScrollView *scrollView;
+  NSView *document;
+  NSScroller *scroller;
+  NSRect strip, clip;
+  NSString *detail;
+  NSView *hitRest, *hitShown, *hitFaded;
+  NSUInteger inkRest, inkShown;
+  BOOL under;
+
+  if ([[NSUserDefaults standardUserDefaults] objectForKey: @"GnomeThemeOverlayScrollbars"] != nil
+    && [[NSUserDefaults standardUserDefaults] boolForKey: @"GnomeThemeOverlayScrollbars"] == NO)
+    {
+      [self skip: @"overlay-scrollers" detail: @"GnomeThemeOverlayScrollbars is NO"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 200, 300, 200) title: @"Probe Overlay Scrollers"];
+  scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 280, 180)]);
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setBorderType: NSBezelBorder];
+  document = AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 280, 1000)]);
+  [document setAutoresizingMask: NSViewWidthSizable];
+  [scrollView setDocumentView: document];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [window display];
+  scroller = [scrollView verticalScroller];
+  strip = [scroller frame];
+  clip = [[scrollView contentView] frame];
+  under = NSMaxX (clip) >= NSMaxX (strip) && NSMinX (strip) >= NSMinX (clip);
+  hitRest = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
+                                                             fromView: scrollView]];
+  inkRest = QuirkProbeMeasure (QuirkProbeRender (scroller), QuirkProbeIsInk).count;
+
+  [document scrollPoint: NSMakePoint (0, 300)];
+  [window display];
+  hitShown = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
+                                                              fromView: scrollView]];
+  QuirkProbeInkBackground = 750;
+  inkShown = QuirkProbeMeasure (QuirkProbeRender (scrollView), QuirkProbeIsInk).count;
+
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 1.6]];
+  hitFaded = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
+                                                               fromView: scrollView]];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"clip %@ %@ the scroller %@; a press on it at rest: %@, shown: %@, faded: %@; "
+    @"slider ink %lu at rest, %lu shown",
+    NSStringFromRect (clip), under ? @"runs under" : @"stops short of", NSStringFromRect (strip),
+    [hitRest class], [hitShown class], [hitFaded class], (unsigned long)inkRest, (unsigned long)inkShown];
+  if (under && hitRest != scroller && hitShown == scroller && hitFaded != scroller && inkRest == 0 && inkShown > 0)
+    {
+      [self pass: @"overlay-scrollers" detail: detail];
+    }
+  else
+    {
+      [self fail: @"overlay-scrollers" detail: detail];
+    }
+}
+
 /* The window types the theme gives windows, as GTK's
    (_NET_WM_WINDOW_TYPE, plugins-themes-Adwaita#15). The probe's display
    has no window manager to set them for, so this asks the theme what it
@@ -4038,6 +4104,7 @@ QuirkProbeButtonImageColor(NSButton *button)
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
+  [self checkOverlayScrollers];
       [self finish];
       return;
     }
@@ -4081,6 +4148,7 @@ QuirkProbeButtonImageColor(NSButton *button)
   [self checkHiddenWindows];
   [self checkWindowTypes];
   [self checkTemplateImages];
+  [self checkOverlayScrollers];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

@@ -69,6 +69,10 @@ void GnomeThemeHeaderBarToolbarSettingChanged(void);
 /* Template (symbolic) images: whether `image` is one (-isTemplate, or a
    name ending in "Template" or "-symbolic"), and its shape in `color`. */
 BOOL GnomeThemeImageIsTemplate(NSImage *image);
+/* Overlay scrollbars (GNOME's overlay-scrolling): whether they're in use,
+   and drawing one (YES when the scroller is an overlay one). */
+BOOL GnomeThemeUsesOverlayScrollers(void);
+BOOL GnomeThemeDrawOverlayScrollerIfNeeded(NSScroller *scroller);
 NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
 
 /* YES when the app's first preferred language is written right to left

@@ -61,7 +61,8 @@ Adwaita_OBJC_FILES = \
 	Source/Adapters/GnomeThemeWindowManager.m \
 	Source/Rendering/GnomeThemeMenusAndData.m \
 	Source/Rendering/GnomeThemeWindowTypes.m \
-	Source/Rendering/GnomeThemeSymbolicImages.m
+	Source/Rendering/GnomeThemeSymbolicImages.m \
+	Source/Rendering/GnomeThemeOverlayScrollers.m
 
 -include GNUmakefile.preamble
 

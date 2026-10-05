@@ -1,0 +1,487 @@
+/*
+   Copyright (C) 2026 Daniel Boyd
+
+   This file is part of the GNUstep Adwaita theme.
+
+   This library is free software; you can redistribute it and/or
+   modify it under the terms of the GNU Lesser General Public
+   License as published by the Free Software Foundation; either
+   version 2 of the License, or (at your option) any later version.
+
+   This library is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+   Lesser General Public License for more details.
+
+   You should have received a copy of the GNU Lesser General Public
+   License along with this library; see the file COPYING.LIB.
+   If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* libadwaita's overlay scrollbars: the content runs under them, and they
+   show only while the content scrolls or the pointer is over them, then
+   fade out. At rest a 3px slider 4px from the edge; under the pointer an
+   8px one in a faint trough (base.css, scrollbar.overlay-indicator).
+
+   With GNOME's overlay-scrolling off (or GnomeThemeOverlayScrollbars NO)
+   the scrollers keep their strips and stay visible while the content
+   overflows, as before.
+
+   libs-gui lays the scroll view out (-tile) with the scrollers beside the
+   content; here the clip view (and a table's header) is widened under
+   them and they're put on top. Overlapping the content brings three
+   things to take care of: the clip view must redraw rather than copy its
+   pixels on scrolling (it would copy the scroller's along), a scroller's
+   redraws go through the scroll view (it's no longer opaque), and a
+   hidden scroller lets presses through to the content. */
+
+#import "../GnomeTheme.h"
+#import "../Settings/GnomeThemeSettings.h"
+
+#import <AppKit/AppKit.h>
+#import <objc/runtime.h>
+
+/* How long the scrollers stay after the last scroll, and how long they
+   take to fade. */
+static const NSTimeInterval GnomeThemeOverlayLinger = 1.0;
+static const NSTimeInterval GnomeThemeOverlayFade = 0.2;
+static const NSTimeInterval GnomeThemeOverlayStep = 0.04;
+
+static char GnomeThemeOverlayStateKey;
+
+@interface NSObject (GnomeThemeOverlayScrollers)
+- (NSView *) headerView;
+@end
+
+BOOL
+GnomeThemeUsesOverlayScrollers(void)
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  GSTheme *theme = [GSTheme theme];
+
+  if ([theme isKindOfClass: [GnomeTheme class]] == NO)
+    {
+      return NO;
+    }
+  if ([defaults objectForKey: @"GnomeThemeOverlayScrollbars"] != nil)
+    {
+      return [defaults boolForKey: @"GnomeThemeOverlayScrollbars"];
+    }
+  return [[(GnomeTheme *)theme settings] overlayScrollingEnabled];
+}
+
+/* A scroll view's overlay scrollers: shown how much, the pointer over
+   which, when to start fading. */
+@interface GnomeThemeOverlayState : NSObject
+{
+@public
+  NSScrollView *scrollView;     /* Not retained: it holds this. */
+  CGFloat alpha;
+  NSScroller *hovered;          /* Not retained: a subview of scrollView. */
+  NSDate *hideAt;
+  NSTimer *timer;
+  NSPoint origin;
+  BOOL originKnown;
+  /* Widening the clip view has libs-gui reflect the scroll and, with
+     auto-hiding scrollers, tile again: that nested tile is skipped. */
+  BOOL adjusting;
+  NSTrackingRectTag tags[2];
+}
+- (void) reveal;
+- (void) redisplay;
+@end
+
+static GnomeThemeOverlayState *
+GnomeThemeOverlayStateFor(NSScrollView *scrollView, BOOL create)
+{
+  GnomeThemeOverlayState *state = objc_getAssociatedObject (scrollView, &GnomeThemeOverlayStateKey);
+
+  if (state == nil && create)
+    {
+      state = AUTORELEASE ([GnomeThemeOverlayState new]);
+      state->scrollView = scrollView;
+      objc_setAssociatedObject (scrollView, &GnomeThemeOverlayStateKey, state, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+  return state;
+}
+
+@implementation GnomeThemeOverlayState
+
+- (void) dealloc
+{
+  [timer invalidate];
+  RELEASE (timer);
+  RELEASE (hideAt);
+  [super dealloc];
+}
+
+/* The scrollers' strips, redrawn from the scroll view: they aren't
+   opaque, and what's under them has to be drawn first. */
+- (void) redisplay
+{
+  NSScroller *scrollers[2] = { [scrollView verticalScroller], [scrollView horizontalScroller] };
+  int i;
+
+  for (i = 0; i < 2; i++)
+    {
+      if (scrollers[i] != nil && [scrollers[i] superview] == scrollView && [scrollers[i] isHidden] == NO)
+        {
+          [scrollView setNeedsDisplayInRect: [scrollers[i] frame]];
+        }
+    }
+}
+
+- (void) startTimer
+{
+  if (timer == nil)
+    {
+      timer = RETAIN ([NSTimer timerWithTimeInterval: GnomeThemeOverlayStep
+                                              target: self
+                                            selector: @selector(tick:)
+                                            userInfo: nil
+                                             repeats: YES]);
+      [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSDefaultRunLoopMode];
+      [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSEventTrackingRunLoopMode];
+      [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSModalPanelRunLoopMode];
+    }
+}
+
+- (void) reveal
+{
+  ASSIGN (hideAt, [NSDate dateWithTimeIntervalSinceNow: GnomeThemeOverlayLinger]);
+  if (alpha < 1.0)
+    {
+      alpha = 1.0;
+      [self redisplay];
+    }
+  [self startTimer];
+}
+
+- (void) tick: (NSTimer *)aTimer
+{
+  NSTimeInterval left = [hideAt timeIntervalSinceNow];
+
+  /* Kept while the pointer is over a scroller or its knob is dragged. */
+  if (hovered != nil || [[scrollView verticalScroller] hitPart] == NSScrollerKnob
+    || [[scrollView horizontalScroller] hitPart] == NSScrollerKnob)
+    {
+      ASSIGN (hideAt, [NSDate dateWithTimeIntervalSinceNow: GnomeThemeOverlayLinger]);
+      return;
+    }
+  if (left > 0.0)
+    {
+      return;
+    }
+  alpha = MAX (0.0, 1.0 + left / GnomeThemeOverlayFade);
+  [self redisplay];
+  if (alpha <= 0.0)
+    {
+      [timer invalidate];
+      DESTROY (timer);
+    }
+}
+
+@end
+
+/* The scroller's slider (and, under the pointer, its trough), at the
+   state's opacity. */
+static void
+GnomeThemeDrawOverlayScroller(NSScroller *scroller, GnomeThemeOverlayState *state)
+{
+  NSRect bounds = [scroller bounds];
+  BOOL horizontal = NSWidth (bounds) >= NSHeight (bounds);
+  BOOL hovering = state != nil && state->hovered == scroller;
+  BOOL dragging = [scroller hitPart] == NSScrollerKnob;
+  CGFloat alpha = state != nil ? state->alpha : 0.0;
+  CGFloat thickness = hovering || dragging ? 8.0 : 3.0;
+  CGFloat edge = hovering || dragging ? 3.0 : 4.0;
+  NSColor *text = [[NSColor controlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSRect knob = [scroller rectForPart: NSScrollerKnob];
+  NSRect slot = [scroller rectForPart: NSScrollerKnobSlot];
+  NSRect slider, trough;
+  CGFloat inset = 2.0;
+
+  if (alpha <= 0.0 || [scroller knobProportion] >= 0.999 || [scroller isEnabled] == NO || text == nil)
+    {
+      return;
+    }
+  if (horizontal)
+    {
+      CGFloat y = [scroller isFlipped] ? NSMaxY (bounds) - edge - thickness : NSMinY (bounds) + edge;
+
+      slider = NSMakeRect (NSMinX (knob) + inset, y, MAX (0.0, NSWidth (knob) - 2.0 * inset), thickness);
+      trough = NSMakeRect (NSMinX (slot) + inset, y, MAX (0.0, NSWidth (slot) - 2.0 * inset), thickness);
+    }
+  else
+    {
+      CGFloat x = NSMaxX (bounds) - edge - thickness;
+
+      slider = NSMakeRect (x, NSMinY (knob) + inset, thickness, MAX (0.0, NSHeight (knob) - 2.0 * inset));
+      trough = NSMakeRect (x, NSMinY (slot) + inset, thickness, MAX (0.0, NSHeight (slot) - 2.0 * inset));
+    }
+  if (hovering || dragging)
+    {
+      [[text colorWithAlphaComponent: [text alphaComponent] * 0.10 * alpha] set];
+      [[NSBezierPath bezierPathWithRoundedRect: trough xRadius: thickness / 2.0 yRadius: thickness / 2.0] fill];
+    }
+  /* The text colour at 20% (40% under the pointer, 60% dragged), with a
+     faint dark outline so it shows over any content. */
+  [[text colorWithAlphaComponent: [text alphaComponent] * (dragging ? 0.6 : hovering ? 0.4 : 0.2) * alpha] set];
+  [[NSBezierPath bezierPathWithRoundedRect: slider xRadius: thickness / 2.0 yRadius: thickness / 2.0] fill];
+  [[NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5 * (hovering || dragging ? 0.6 : 0.35) * alpha] set];
+  [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect (slider, -0.5, -0.5)
+                                   xRadius: thickness / 2.0 + 0.5
+                                   yRadius: thickness / 2.0 + 0.5] stroke];
+}
+
+/* Tracking rects on the scrollers' strips (whose presses the scrollers
+   take only while shown): the pointer reveals and widens them. Owned by
+   the scroll view, so they go with it. */
+static void
+GnomeThemeUpdateOverlayTracking(NSScrollView *scrollView, GnomeThemeOverlayState *state)
+{
+  NSScroller *scrollers[2] = { [scrollView verticalScroller], [scrollView horizontalScroller] };
+  BOOL has[2] = { [scrollView hasVerticalScroller], [scrollView hasHorizontalScroller] };
+  int i;
+
+  for (i = 0; i < 2; i++)
+    {
+      if (state->tags[i] != 0)
+        {
+          [scrollView removeTrackingRect: state->tags[i]];
+          state->tags[i] = 0;
+        }
+      if ([scrollView window] != nil && has[i] && scrollers[i] != nil && [scrollers[i] isHidden] == NO)
+        {
+          state->tags[i] = [scrollView addTrackingRect: [scrollers[i] frame]
+                                                 owner: scrollView
+                                              userData: (void *)scrollers[i]
+                                          assumeInside: NO];
+        }
+    }
+}
+
+@implementation GnomeTheme (OverlayScrollers)
+
+- (void) _overrideNSScrollViewMethod_tile
+{
+  typedef void (*TileIMP)(id, SEL);
+  TileIMP originalIMP = (TileIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+  NSScrollView *scrollView = (NSScrollView *)self;
+  NSClipView *clip;
+  NSRect content;
+  NSScroller *vertical, *horizontal;
+  id documentView;
+  GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor (scrollView, NO);
+
+  if (state != nil && state->adjusting)
+    {
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeUsesOverlayScrollers () == NO)
+    {
+      return;
+    }
+  state = GnomeThemeOverlayStateFor (scrollView, YES);
+  state->adjusting = YES;
+  clip = [scrollView contentView];
+  content = [clip frame];
+  vertical = [scrollView hasVerticalScroller] ? [scrollView verticalScroller] : nil;
+  horizontal = [scrollView hasHorizontalScroller] ? [scrollView horizontalScroller] : nil;
+  if (vertical != nil && [vertical superview] == scrollView)
+    {
+      NSRect strip = [vertical frame];
+
+      content = NSUnionRect (content, NSMakeRect (NSMinX (strip), NSMinY (content), NSWidth (strip), NSHeight (content)));
+    }
+  if (horizontal != nil && [horizontal superview] == scrollView)
+    {
+      NSRect strip = [horizontal frame];
+
+      content = NSUnionRect (content, NSMakeRect (NSMinX (content), NSMinY (strip), NSWidth (content), NSHeight (strip)));
+    }
+  /* Inside the scroll view's border. */
+  content = NSIntersectionRect (content, NSInsetRect ([scrollView bounds], 1.0, 1.0));
+  if (NSEqualRects (content, [clip frame]) == NO)
+    {
+      [clip setFrame: content];
+    }
+  [clip setCopiesOnScroll: NO];
+  /* A table's header runs as wide as its rows. */
+  documentView = [scrollView documentView];
+  if ([documentView respondsToSelector: @selector(headerView)])
+    {
+      NSView *headerClip = [[documentView headerView] superview];
+
+      if ([headerClip superview] == scrollView)
+        {
+          NSRect header = [headerClip frame];
+
+          header.origin.x = NSMinX (content);
+          header.size.width = NSWidth (content);
+          [headerClip setFrame: header];
+        }
+    }
+  /* Above the content they overlap. */
+  if (vertical != nil && [vertical superview] == scrollView && [[scrollView subviews] lastObject] != vertical)
+    {
+      RETAIN (vertical);
+      [vertical removeFromSuperviewWithoutNeedingDisplay];
+      [scrollView addSubview: vertical];
+      RELEASE (vertical);
+    }
+  if (horizontal != nil && [horizontal superview] == scrollView && [[scrollView subviews] lastObject] != horizontal
+    && [[scrollView subviews] lastObject] != vertical)
+    {
+      RETAIN (horizontal);
+      [horizontal removeFromSuperviewWithoutNeedingDisplay];
+      [scrollView addSubview: horizontal positioned: NSWindowBelow relativeTo: vertical];
+      RELEASE (horizontal);
+    }
+  state->adjusting = NO;
+  GnomeThemeUpdateOverlayTracking (scrollView, state);
+}
+
+- (void) _overrideNSScrollViewMethod_viewDidMoveToWindow
+{
+  typedef void (*MovedIMP)(id, SEL);
+  MovedIMP originalIMP = (MovedIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+  GnomeThemeOverlayState *state;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  state = GnomeThemeOverlayStateFor ((NSScrollView *)self, NO);
+  if (state != nil && GnomeThemeUsesOverlayScrollers ())
+    {
+      GnomeThemeUpdateOverlayTracking ((NSScrollView *)self, state);
+    }
+}
+
+/* The content scrolled (by the wheel, the keyboard, the app): show the
+   scrollers for a while. The first call only records where it is. */
+- (void) _overrideNSScrollViewMethod_reflectScrolledClipView: (NSClipView *)clipView
+{
+  typedef void (*ReflectIMP)(id, SEL, NSClipView *);
+  ReflectIMP originalIMP = (ReflectIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+  GnomeThemeOverlayState *state;
+  NSPoint origin;
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, clipView);
+    }
+  if (GnomeThemeUsesOverlayScrollers () == NO)
+    {
+      return;
+    }
+  state = GnomeThemeOverlayStateFor ((NSScrollView *)self, YES);
+  origin = [[(NSScrollView *)self contentView] bounds].origin;
+  if (state->originKnown && NSEqualPoints (origin, state->origin) == NO)
+    {
+      [state reveal];
+    }
+  state->origin = origin;
+  state->originKnown = YES;
+}
+
+- (void) _overrideNSScrollViewMethod_mouseEntered: (NSEvent *)event
+{
+  typedef void (*MouseIMP)(id, SEL, NSEvent *);
+  GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor ((NSScrollView *)self, NO);
+
+  if (state != nil && ([event trackingNumber] == state->tags[0] || [event trackingNumber] == state->tags[1])
+    && [event trackingNumber] != 0)
+    {
+      state->hovered = (NSScroller *)[event userData];
+      [state reveal];
+      [state redisplay];
+      return;
+    }
+  {
+    MouseIMP originalIMP = (MouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+
+    if (originalIMP != NULL)
+      {
+        originalIMP (self, _cmd, event);
+      }
+  }
+}
+
+- (void) _overrideNSScrollViewMethod_mouseExited: (NSEvent *)event
+{
+  typedef void (*MouseIMP)(id, SEL, NSEvent *);
+  GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor ((NSScrollView *)self, NO);
+
+  if (state != nil && ([event trackingNumber] == state->tags[0] || [event trackingNumber] == state->tags[1])
+    && [event trackingNumber] != 0)
+    {
+      state->hovered = nil;
+      [state reveal];
+      [state redisplay];
+      return;
+    }
+  {
+    MouseIMP originalIMP = (MouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+
+    if (originalIMP != NULL)
+      {
+        originalIMP (self, _cmd, event);
+      }
+  }
+}
+
+/* Over the content: see-through. */
+- (BOOL) _overrideNSScrollerMethod_isOpaque
+{
+  typedef BOOL (*OpaqueIMP)(id, SEL);
+  OpaqueIMP originalIMP;
+
+  if (GnomeThemeUsesOverlayScrollers () && [[(NSView *)self superview] isKindOfClass: [NSScrollView class]])
+    {
+      return NO;
+    }
+  originalIMP = (OpaqueIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+  return originalIMP != NULL ? originalIMP (self, _cmd) : YES;
+}
+
+/* Hidden, a scroller lets presses through to the content under it. */
+- (NSView *) _overrideNSScrollerMethod_hitTest: (NSPoint)point
+{
+  typedef NSView *(*HitIMP)(id, SEL, NSPoint);
+  HitIMP originalIMP = (HitIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+  NSView *superview = [(NSView *)self superview];
+
+  if (GnomeThemeUsesOverlayScrollers () && [superview isKindOfClass: [NSScrollView class]])
+    {
+      GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor ((NSScrollView *)superview, NO);
+
+      if (state == nil || (state->alpha <= 0.0 && state->hovered != (id)self))
+        {
+          return nil;
+        }
+    }
+  return originalIMP != NULL ? originalIMP (self, _cmd, point) : nil;
+}
+
+@end
+
+/* For GnomeThemeControls.m's scroller drawing: YES when it drew (or left
+   transparent) an overlay scroller. */
+BOOL
+GnomeThemeDrawOverlayScrollerIfNeeded(NSScroller *scroller)
+{
+  NSView *superview = [scroller superview];
+
+  if (GnomeThemeUsesOverlayScrollers () == NO || [superview isKindOfClass: [NSScrollView class]] == NO)
+    {
+      return NO;
+    }
+  GnomeThemeDrawOverlayScroller (scroller, GnomeThemeOverlayStateFor ((NSScrollView *)superview, NO));
+  return YES;
+}
