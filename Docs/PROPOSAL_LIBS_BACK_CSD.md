@@ -264,7 +264,10 @@ picom key their shadow, opacity and fade rules on the type.
 **Patch:** `-_setWindowType:`, split out of `-setwindowlevel::`, which calls
 it. At the pop-up menu level a `GSTTPanel` is `_TOOLTIP`, an `NSMenuPanel`
 `_POPUP_MENU` and the drag window (`XGRawWindow`) `_DND`; anything else there
-stays `_DIALOG`. A modal panel is `_DIALOG`. Other levels keep their types.
+stays `_DIALOG`. The new types are followed by `_DIALOG`, what these
+windows were before: EWMH lists types in order of preference, and Openbox,
+which knows none of the menu or tool tip types, then treats them as it did.
+A modal panel is `_DIALOG`. Other levels keep their types.
 `-orderwindow:::` calls it again just before mapping a window at the pop-up
 menu level, when its class is known, which fixes the tool tip.
 

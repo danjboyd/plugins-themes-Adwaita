@@ -68,7 +68,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-mutter check-mutter-shadow palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -101,6 +101,17 @@ MUTTER_CHECK_BACK ?= $(HOME)/git/gnustep/libs-back-csd/Source/libgnustep-back-03
 check-mutter-shadow:
 	MUTTER_CHECK_GUI="$(MUTTER_CHECK_GUI)" MUTTER_CHECK_BACK="$(MUTTER_CHECK_BACK)" \
 	  bash Tests/Scripts/run-mutter-check.sh --shadow
+
+# The same checks under KWin, Xfwm4 (each with its compositor) and Openbox
+# with picom, with stock and with the shadow-drawing libraries
+# (plugins-themes-Adwaita#14). Openbox doesn't list _GTK_FRAME_EXTENTS, so
+# its windows get no margin.
+check-wms:
+	status=0; for wm in kwin xfwm4 openbox; do \
+	  bash Tests/Scripts/run-mutter-check.sh --no-build --wm $$wm || status=1; \
+	  MUTTER_CHECK_GUI="$(MUTTER_CHECK_GUI)" MUTTER_CHECK_BACK="$(MUTTER_CHECK_BACK)" \
+	    bash Tests/Scripts/run-mutter-check.sh --no-build --shadow --wm $$wm || status=1; \
+	done; exit $$status
 
 installdemo:
 	$(MAKE) -C Examples/ThemeDemo install

@@ -53,7 +53,14 @@
 # from the band outside the window (not from inside), and a press further
 # out in the shadow goes to what is behind.
 #
+# --wm kwin, --wm xfwm4 or --wm openbox runs the same checks under that
+# window manager instead of GNOME Shell (KWin and Xfwm4 with their own
+# compositors, Openbox with picom), over a grey desktop window. Openbox
+# doesn't list _GTK_FRAME_EXTENTS: its windows are expected to get no
+# margin. (plugins-themes-Adwaita#14)
+#
 #   bash Tests/Scripts/run-mutter-check.sh [--no-build] [--shadow]
+#                                          [--wm mutter|kwin|xfwm4|openbox]
 
 set -u
 
@@ -67,12 +74,25 @@ BUILD=YES
 SHADOW=NO
 NAME=mutter
 
-for arg in "$@"; do
-  case "$arg" in
+WM=mutter
+
+while [ $# -gt 0 ]; do
+  case "$1" in
     --no-build) BUILD=NO ;;
-    --shadow) SHADOW=YES; NAME=mutter-shadow ;;
+    --shadow) SHADOW=YES ;;
+    --wm) WM="$2"; shift ;;
   esac
+  shift
 done
+case "$WM" in
+  mutter) WM_TOOLS="gnome-shell" ;;
+  kwin) WM_TOOLS="kwin_x11" ;;
+  xfwm4) WM_TOOLS="xfwm4" ;;
+  openbox) WM_TOOLS="openbox picom" ;;
+  *) echo "unknown window manager $WM (mutter, kwin, xfwm4 or openbox)" >&2; exit 1 ;;
+esac
+NAME="$WM"
+[ "$SHADOW" = YES ] && NAME="$WM-shadow"
 
 # The session's processes, found by its runtime directory: dbus-run-session
 # leaves the daemons it started running after GNOME Shell exits.
@@ -102,7 +122,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for tool in Xvfb gnome-shell dbus-run-session xdotool xprop xwininfo import convert; do
+for tool in Xvfb $WM_TOOLS dbus-run-session xdotool xprop xwininfo import convert cc; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "SKIP  $NAME: $tool not installed"
     exit 0
@@ -144,20 +164,72 @@ picture-options='none'
 color-shading-type='solid'
 primary-color='#777777'
 KEYFILE
-env -i HOME="$HOME" PATH="$PATH" DISPLAY="$DISPLAY" XDG_CONFIG_HOME="$WORK/config" \
-  XDG_DATA_HOME="$WORK/data" XDG_CACHE_HOME="$WORK/cache" XDG_STATE_HOME="$WORK/state" \
-  XDG_RUNTIME_DIR="$WORK/run" GSETTINGS_BACKEND=keyfile LIBGL_ALWAYS_SOFTWARE=1 \
-  GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix \
-  dbus-run-session -- gnome-shell --x11 >"$WORK/shell.log" 2>&1 &
+# The other window managers draw no background: a desktop window of
+# the same grey.
+cat >"$WORK/desktop.c" <<'DESKTOP'
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#include <unistd.h>
+
+int
+main(void)
+{
+  Display *d = XOpenDisplay(NULL);
+  XSetWindowAttributes a;
+  Window w;
+  Atom type;
+  int s;
+
+  if (d == NULL)
+    return 1;
+  s = DefaultScreen(d);
+  a.background_pixel = 0x777777;
+  w = XCreateWindow(d, RootWindow(d, s), 0, 0, DisplayWidth(d, s), DisplayHeight(d, s), 0,
+                    CopyFromParent, InputOutput, CopyFromParent, CWBackPixel, &a);
+  type = XInternAtom(d, "_NET_WM_WINDOW_TYPE_DESKTOP", False);
+  XChangeProperty(d, w, XInternAtom(d, "_NET_WM_WINDOW_TYPE", False), XA_ATOM, 32,
+                  PropModeReplace, (unsigned char *)&type, 1);
+  XMapWindow(d, w);
+  XFlush(d);
+  for (;;)
+    pause();
+}
+DESKTOP
+case "$WM" in
+  mutter) WM_COMMAND="gnome-shell --x11" ;;
+  kwin) WM_COMMAND="kwin_x11 --replace" ;;
+  xfwm4) WM_COMMAND="xfwm4 --replace --compositor=on" ;;
+  openbox) WM_COMMAND="openbox --replace" ;;
+esac
+session() { # command...
+  env -i HOME="$HOME" PATH="$PATH" DISPLAY="$DISPLAY" XDG_CONFIG_HOME="$WORK/config" \
+    XDG_DATA_HOME="$WORK/data" XDG_CACHE_HOME="$WORK/cache" XDG_STATE_HOME="$WORK/state" \
+    XDG_RUNTIME_DIR="$WORK/run" GSETTINGS_BACKEND=keyfile LIBGL_ALWAYS_SOFTWARE=1 \
+    GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix "$@"
+}
+if [ "$WM" != mutter ]; then
+  cc -o "$WORK/desktop" "$WORK/desktop.c" $(pkg-config --cflags --libs x11) || exit 1
+  "$WORK/desktop" &
+  PIDS+=($!)
+fi
+# shellcheck disable=SC2086
+session dbus-run-session -- $WM_COMMAND >"$WORK/wm.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 60); do
   xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id" && break
   sleep 0.5
 done
 sleep 4
-# GNOME Shell starts in the overview, and a first run shows a welcome
-# dialog: close both.
-xdotool key Escape; sleep 1; xdotool key Escape; sleep 1
+if [ "$WM" = mutter ]; then
+  # GNOME Shell starts in the overview, and a first run shows a welcome
+  # dialog: close both.
+  xdotool key Escape; sleep 1; xdotool key Escape; sleep 1
+elif [ "$WM" = openbox ]; then
+  # Openbox has no compositor of its own.
+  session picom --backend xrender >"$WORK/picom.log" 2>&1 &
+  PIDS+=($!)
+  sleep 2
+fi
 
 cat >"$WORK/gs/glib-2.0/settings/keyfile" <<'KEYFILE'
 [org/gnome/desktop/interface]
@@ -214,6 +286,14 @@ if [ "$SHADOW" = YES ]; then
   fi
 fi
 
+# A shadow margin is expected with the shadow-drawing libraries when the
+# window manager lists _GTK_FRAME_EXTENTS (Mutter, KWin, Xfwm4; not
+# Openbox). Each runs a compositing manager here.
+MARGIN=NO
+if [ "$SHADOW" = YES ] && xprop -root _NET_SUPPORTED | grep -q _GTK_FRAME_EXTENTS; then
+  MARGIN=YES
+fi
+
 geometry() {
   xdotool getwindowgeometry "$WINDOW" | awk '/Position/ {p=$2} /Geometry/ {g=$2} END {print p, g}'
 }
@@ -267,7 +347,7 @@ else
   report FAIL "$NAME-allowed-actions" "$ACTIONS"
 fi
 
-if [ "$SHADOW" = YES ]; then
+if [ "$MARGIN" = YES ]; then
   DEPTH="$(xwininfo -id "$WINDOW" | awk '/Depth:/ {print $2}')"
   EXTENTS="$(extents)"
   if [ "$DEPTH" = 32 ] && [ "$EXTENTS" = "30 30 24 36" ]; then
@@ -291,10 +371,19 @@ if [ "$SHADOW" = YES ]; then
   else
     report FAIL "$NAME-shadow-corners" "$DETAIL"
   fi
+elif [ "$SHADOW" = YES ]; then
+  # A window manager that doesn't list _GTK_FRAME_EXTENTS: no margin, the
+  # window manager's own frame rectangle.
+  EXTENTS="$(extents)"
+  if [ "$EXTENTS" = "0 0 0 0" ]; then
+    report PASS "$NAME-window" "no shadow margin ($WM doesn't list _GTK_FRAME_EXTENTS)"
+  else
+    report FAIL "$NAME-window" "frame extents $EXTENTS (want none: $WM doesn't list _GTK_FRAME_EXTENTS)"
+  fi
 fi
 
-# A menu bar's menu is typed as GtkMenuBar's (_DROPDOWN_MENU, from the
-# theme or from libs-back), so Mutter doesn't focus it: the window stays
+# A menu bar's menu is typed as GtkMenuBar's (_DROPDOWN_MENU, by the
+# theme), so the window manager doesn't focus it: the window stays
 # the active one while it's open. Opened by a press held down: with
 # libs-gui 0.32 a click from xdotool, released at once, closes it again.
 # The app's first press (here, on an empty spot) activates it.
@@ -304,23 +393,28 @@ sleep 0.5
 xdotool mousemove $((VX + 30)) $((VY + 64)) mousedown 1
 sleep 1
 MENU=""
-for w in $(xwininfo -root -children | awk '/^ +0x/ {print $1}'); do
-  if [ "$((w))" != "$WINDOW" ] && xwininfo -id "$w" | grep -q 'IsViewable' \
-    && xprop -id "$w" WM_CLASS 2>/dev/null | grep -q ThemeDemo; then
+for w in $(xdotool search --onlyvisible --class ThemeDemo 2>/dev/null); do
+  if [ "$w" != "$WINDOW" ]; then
     MENU="$w"
   fi
 done
 TYPE="$( [ -n "$MENU" ] && xprop -id "$MENU" _NET_WM_WINDOW_TYPE | sed -n 's/.*= //p')"
-ACTIVE="$(xprop -root _NET_ACTIVE_WINDOW | sed -n 's/.*# //p')"
+ACTIVE="$(xprop -root _NET_ACTIVE_WINDOW | sed -n 's/.*# //p' | cut -d, -f1)"
 xdotool mouseup 1
 sleep 0.5
 xdotool key Escape
 sleep 0.8
+# A window manager that doesn't list the type (Openbox) keeps libs-back's.
+if xprop -root _NET_SUPPORTED | grep -q _NET_WM_WINDOW_TYPE_DROPDOWN_MENU; then
+  WANTED=_NET_WM_WINDOW_TYPE_DROPDOWN_MENU
+else
+  WANTED=_NET_WM_WINDOW_TYPE_MENU
+fi
 DETAIL="menu window ${MENU:-none}: ${TYPE:-no type}; active window ${ACTIVE:-none}"
-if [ "$TYPE" = _NET_WM_WINDOW_TYPE_DROPDOWN_MENU ] && [ "$((ACTIVE))" = "$WINDOW" ]; then
+if [ "${TYPE%%,*}" = "$WANTED" ] && [ "$((ACTIVE))" = "$WINDOW" ]; then
   report PASS "$NAME-menu-type" "$DETAIL"
 else
-  report FAIL "$NAME-menu-type" "$DETAIL (want _NET_WM_WINDOW_TYPE_DROPDOWN_MENU, ThemeDemo $(printf 0x%x "$WINDOW") active)"
+  report FAIL "$NAME-menu-type" "$DETAIL (want $WANTED, ThemeDemo $(printf 0x%x "$WINDOW") active)"
 fi
 
 if [ "$SHADOW" = YES ]; then
@@ -332,9 +426,8 @@ if [ "$SHADOW" = YES ]; then
   xdotool mousemove $((VX + 30)) $((VY + 64)) click 1
   sleep 1
   MENU=""
-  for w in $(xwininfo -root -children | awk '/^ +0x/ {print $1}'); do
-    if [ "$((w))" != "$WINDOW" ] && xwininfo -id "$w" | grep -q 'IsViewable' \
-      && xwininfo -id "$w" | grep -q 'Depth: 32' && xprop -id "$w" WM_CLASS 2>/dev/null | grep -q ThemeDemo; then
+  for w in $(xdotool search --onlyvisible --class ThemeDemo 2>/dev/null); do
+    if [ "$w" != "$WINDOW" ] && xwininfo -id "$w" | grep -q 'Depth: 32'; then
       MENU="$w"
     fi
   done
@@ -366,12 +459,12 @@ STATE="$(xprop -id "$WINDOW" _NET_WM_STATE)"
 MAXIMISED="$(geometry)"
 RESIZES_MAXIMISED="$(grep -c '^ThemeDemo-resize' "$WORK/demo.log")"
 if echo "$STATE" | grep -q MAXIMIZED_VERT && echo "$STATE" | grep -q MAXIMIZED_HORZ; then
-  report PASS "$NAME-maximise" "$BEFORE -> $MAXIMISED, maximised by Mutter"
+  report PASS "$NAME-maximise" "$BEFORE -> $MAXIMISED, maximised by $WM"
 else
   report FAIL "$NAME-maximise" "$BEFORE -> $MAXIMISED; $STATE"
 fi
 
-if [ "$SHADOW" = YES ]; then
+if [ "$MARGIN" = YES ]; then
   # No margin and square corners, as libadwaita's.
   EXTENTS="$(extents)"
   read -r VX VY VW VH <<<"$(visible)"
@@ -390,13 +483,13 @@ STATE="$(xprop -id "$WINDOW" _NET_WM_STATE)"
 AFTER="$(geometry)"
 EXTENTS="$(extents)"
 if ! echo "$STATE" | grep -q MAXIMIZED && [ "$AFTER" = "$BEFORE" ] \
-  && { [ "$SHADOW" = NO ] || [ "$EXTENTS" = "30 30 24 36" ]; }; then
+  && { [ "$MARGIN" = NO ] || [ "$EXTENTS" = "30 30 24 36" ]; }; then
   report PASS "$NAME-restore" "back to $AFTER, frame extents $EXTENTS"
 else
   report FAIL "$NAME-restore" "$AFTER (was $BEFORE), frame extents $EXTENTS; $STATE"
 fi
 
-if [ "$SHADOW" = YES ]; then
+if [ "$MARGIN" = YES ]; then
   # The margin goes and comes back as Mutter fits the window, which it
   # configures for the old margin first: on a maximise the app should see
   # one resize, to the frame the window ends with, not three. On a restore
@@ -438,13 +531,13 @@ read -r VX VY VW VH <<<"$(visible)"
 if [ "$VX" -lt 0 ]; then
   report PASS "$NAME-move" "$AFTER -> $MOVED, past the left edge"
 else
-  report FAIL "$NAME-move" "$AFTER -> $MOVED (not moved past the left edge: the move wasn't handed to Mutter)"
+  report FAIL "$NAME-move" "$AFTER -> $MOVED (not moved past the left edge: the move wasn't handed to $WM)"
 fi
 
 # A drag on the right edge, 100px: Mutter widens the window. With a shadow
 # the edge is the band outside the window, 6px out.
 read -r VX VY VW VH <<<"$(visible)"
-if [ "$SHADOW" = YES ]; then
+if [ "$MARGIN" = YES ]; then
   EDGE_X=$((VX + VW - 1 + 6))
 else
   EDGE_X=$((VX + VW - 2))
@@ -460,7 +553,7 @@ else
   report FAIL "$NAME-resize" "width $OLD_WIDTH -> $VW"
 fi
 
-if [ "$SHADOW" = YES ]; then
+if [ "$MARGIN" = YES ]; then
   # Inside the edge, the content's: a drag there doesn't resize.
   read -r VX VY VW VH <<<"$(visible)"
   OLD_WIDTH=$VW

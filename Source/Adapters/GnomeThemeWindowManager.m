@@ -373,11 +373,12 @@ GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type)
   property = XInternAtom (display, "_NET_WM_WINDOW_TYPE", False);
   wanted = XInternAtom (display, type, False);
   /* Read first: a libs-back that types windows as GTK does has set it
-     already, and the theme then leaves it alone. */
+     already (perhaps with fallbacks after it), and the theme then leaves
+     it alone. */
   if (XGetWindowProperty (display, xwindow, property, 0, 1, False, XA_ATOM,
                           &actualType, &format, &count, &remaining, &data) == Success && data != NULL)
     {
-      same = (count == 1 && ((Atom *)data)[0] == wanted);
+      same = (count >= 1 && ((Atom *)data)[0] == wanted);
       XFree (data);
     }
   if (same == NO)

@@ -18,20 +18,19 @@ code pointers; read it before starting.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
   The shadow and rounded corners need the patched libs-back (below).
 - All suites pass: `make check-quirks` (6 configurations),
-  `make check-mutter`, `make check-mutter-shadow` (13 checks), and the
+  `make check-mutter`, `make check-mutter-shadow` (14 checks), and the
   QuirkProbe run against libs-gui master.
 
 ## The issues
 
-**Needs Dan first** (label `needs-decision`). Don't start these without
-his answer:
+**Decided on 2026-10-05** (each issue has a comment saying so):
 
-| # | Issue | The question |
+| # | Issue | Decision |
 |---|---|---|
-| 12 | Header bar as the default | Default with stock libs-back (square, no shadow), or wait for the patch upstream |
-| 13 | Send the patches upstream | FSF assignment; GNU's AI-contribution policy |
-| 14 | Other window managers | Needs sudo to install KWin, Xfwm4, Openbox, picom |
-| 16 | Pop-ups: open on the press or the release | Kept on the press for now (menu bar behaviour) |
+| 12 | Header bar as the default | Stays opt-in; revisit once #14 has been through the other window managers |
+| 13 | Send the patches upstream | **Deferred** (still `needs-decision`). First ask gnustep-dev about AI-assisted contributions and whether the FSF assignment is still required |
+| 14 | Other window managers | Approved and under way: KWin, Xfwm4, Openbox and picom are installed (picom's autostart is off for Dan's user); `make check-wms` |
+| 16 | Pop-ups: open on the press or the release | Keep the press; closed |
 
 **Theme work, ready to start** (label `enhancement`/`bug`), in the
 suggested order:
