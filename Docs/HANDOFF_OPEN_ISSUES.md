@@ -1,0 +1,166 @@
+# Handoff: the open issues (2026-10-05)
+
+Every open item in the theme now has a GitHub issue (#12–#29 on
+danjboyd/plugins-themes-Adwaita). This document is for picking them up in a
+fresh session: the issues, the order to take them in, how to build and
+test, and the traps found so far. Each issue holds its own background and
+code pointers; read it before starting.
+
+## Where things stand
+
+- `main` is two commits ahead of `origin/main` (`99dc18c`, `df659ea`:
+  docs, tests and the exported libs-back patch for issues fixed on
+  2026-10-02). They aren't pushed: ask Dan.
+- The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
+  `86fefbe`. Nothing in the theme binary has changed since.
+- The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
+  The shadow and rounded corners need the patched libs-back (below).
+- All suites pass: `make check-quirks` (6 configurations),
+  `make check-mutter`, `make check-mutter-shadow` (13 checks), and the
+  QuirkProbe run against libs-gui master.
+
+## The issues
+
+**Needs Dan first** (label `needs-decision`). Don't start these without
+his answer:
+
+| # | Issue | The question |
+|---|---|---|
+| 12 | Header bar as the default | Default with stock libs-back (square, no shadow), or wait for the patch upstream |
+| 13 | Send the patches upstream | FSF assignment; GNU's AI-contribution policy |
+| 14 | Other window managers | Needs sudo to install KWin, Xfwm4, Openbox, picom |
+| 15 | Window types for menus, tool tips, panels | Theme or libs-back patch; which type for each window kind |
+| 16 | Pop-ups: open on the press or the release | Kept on the press for now (menu bar behaviour) |
+
+**Theme work, ready to start** (label `enhancement`/`bug`), in the
+suggested order:
+
+| # | Issue | Size | Notes |
+|---|---|---|---|
+| 18 | High contrast as current GNOME does it | M | Settings + palette; clear target (libadwaita's HC stylesheet) |
+| 21 | Tool tips translucent with a compositor | S | Alpha is already there; paint 80% black |
+| 20 | Context menus just below the pointer | S | Measure GTK 4's offset first |
+| 19 | Menus: 15px corners and a shadow | M | Corners are easy; the shadow needs the libs-back patch extended |
+| 17 | Overlay scrollbars | L | The biggest visible gap; NSTrackingArea isn't wired, `-tile` changes |
+| 22 | Alerts without a title bar | M | Easier with the header bar |
+| 25 | Menu bars in narrow windows | M | Overflow menu |
+| 24 | Compact metrics per window | M | Design question: how to tell nib windows apart |
+| 27 | Gorm's CustomView palette item | S | Find Gorm's class first |
+| 23 | Text 5% wider than GTK's | ? | Investigation; may be libs-back or fonts |
+
+**Upstream** (label `upstream`): #26 (Gorm's inspectors, deferred until
+Dan talks to Gorm's maintainer), #28 (workarounds to remove, a checklist),
+#29 (drafts 2 and 4 to file, plus two new findings: libs-gui master's
+`NSTextAlignment` renumbering and libs-back's flaky `pdfps.m`). File
+upstream reports only when Dan says so, spaced out.
+
+Close an issue from the commit that fixes it ("Fixes #n") once Dan has
+asked for the push.
+
+## Working with Dan
+
+- He says when to commit, push and install ("commit it, push, and
+  install"). Commit when a piece of work is done and tested; ask before
+  pushing.
+- Install: `make install GNUSTEP_INSTALLATION_DOMAIN=USER`, then check that
+  the installed `Adwaita.theme/Adwaita` is identical to the build (`cmp`).
+  Apps must be restarted to pick it up.
+- Commit messages: a short subject ("Area: what changed"), a body saying
+  why, and the Co-Authored-By line.
+- Upstream text carries the disclosure line "Investigated, reproduced and
+  written up with AI assistance (Claude)." Never write in Dan's voice that
+  he checked something.
+
+## Code conventions
+
+- Overrides of GNUstep methods are named
+  `_override<Class>Method_<selector>` in `GnomeTheme` categories, and call
+  the original through `GnomeThemeOriginalMethod(_cmd, self, Class)` (not
+  `-overriddenMethod:for:`, which only matches the exact class).
+- Alignments: use `GnomeThemeCenterTextAlignment()` and
+  `GnomeThemeRightTextAlignment()`, never `NSCenterTextAlignment` or
+  `NSRightTextAlignment` directly. libs-gui master swapped their values,
+  so a theme built against one release meant the other alignment on the
+  other release. QuirkProbe checks should measure drawn ink, not
+  `-alignment`, for the same reason.
+- 0.32 versus master at run time: menu tracking is told apart by
+  `-[NSImage isTemplate]`, alignments by `[NSParagraphStyle version] >= 4`.
+- Window manager state goes through `Source/Adapters/GnomeThemeWindowManager.m`
+  (Xlib via `GSDisplayServer`'s `-serverDevice`/`-windowDevice:`), e.g.
+  `GnomeThemeWindowManagerHasAlpha()`, `...ShadowExtents()`,
+  `...IsMaximized()`.
+- Every fix gets a QuirkProbe check (`Examples/QuirkProbe/QuirkProbe.m`) or
+  a `run-mutter-check.sh` check, and an entry in the Fixed table of
+  `Docs/IMPROVEMENTS.md`. Remove the item from the open lists there.
+
+## Building and testing
+
+```
+. /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
+make                      # the theme
+make check-quirks         # QuirkProbe, 6 configurations, private Xvfb
+make check-mutter         # GNOME Shell (X11) on a private Xvfb, stock libs
+make check-mutter-shadow  # the same against the patched libs-gui/libs-back
+```
+
+- **Don't filter build output with `grep error`.** GNUstep's headers print
+  hundreds of lines containing "error", and a real failure scrolls past.
+  Grep for `^[^ ].*\.m:[0-9]+:[0-9]+: error` and `\*\*\*`, and check the
+  product's timestamp.
+- **QuirkProbe against libs-gui master:**
+  `LD_LIBRARY_PATH=$HOME/git/gnustep/libs-gui-csd/Source/obj bash Tests/Scripts/run-quirk-probe.sh --no-build`.
+  Checks that move the pointer only run on the probe's own Xvfb
+  (`ProbeOwnsDisplay`).
+- **Never drive the real desktop with xdotool.** Once it opened GNOME's
+  overview mid-session. Use a private Xvfb, or post events inside the app.
+- **No gvfs in test sessions.** The network is an iPhone, and a test
+  session's gvfs mounts it. The scripts set `GIO_USE_VFS=local
+  GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix`. Never delete across
+  file systems (`rm -rf --one-file-system`).
+- **Isolated defaults.** Dan has `GSX11HandlesWindowDecorations NO` set
+  globally. Tests that need to start from nothing use a copy of
+  `/etc/GNUstep/GNUstep.conf` with `GNUSTEP_USER_DEFAULTS_DIR` pointing at an
+  empty directory (mode 0600), passed as `GNUSTEP_CONFIG_FILE`.
+  `run-mutter-check.sh` does this itself.
+- **Long sessions** (GNOME Shell for interactive checks) must run as
+  background jobs. A `&` inside one shell call dies when that call ends.
+- **Try ideas in a scratch app.** A 60-line AppKit program with a window
+  and the control under test, driven by xdotool on a private Xvfb and
+  logging to stderr, isolates a bug faster than ThemeDemo. ThemeDemo logs
+  window resizes with `-ThemeDemoLogFrames YES`.
+
+## The patched libraries
+
+- **libs-back:** `~/git/gnustep/libs-back-csd`, branch csd-header-bar, base
+  5db2ae7, all uncommitted. Build with `make` in the worktree.
+- **libs-gui:** `~/git/gnustep/libs-gui-csd`, branch csd-theme-decorations,
+  base ff49ac830 (libs-gui master), uncommitted. Build with
+  `make ADDITIONAL_OBJCFLAGS=-Wno-error=format-security`.
+- **Running an app against them:** `~/bin/gs-patched <app>` links the backend
+  as `libgnustep-backcsd` and sets `LD_LIBRARY_PATH`.
+- **After any patch change:** add a ChangeLog entry in the worktree,
+  re-export with `git diff > Docs/upstream-patches/libs-back-csd.diff` (or
+  `libs-gui-theme-decorations.diff`), and update
+  `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
+- **libs-back's own tests load the installed backend** unless the config
+  points elsewhere. Make a GNUstep.conf copy whose
+  `GNUSTEP_USER_DIR_LIBRARY` is a directory holding
+  `Bundles/libgnustep-back-032.bundle` (a symlink to the bundle under
+  test) and whose `GNUSTEP_USER_DEFAULTS_DIR` is empty. Then run, on a
+  private Xvfb:
+  `GNUSTEP_CONFIG_FILE=<that> gnustep-tests .` in `libs-back-csd/Tests`.
+  Expected: 303 passed, with `cairo/pdfps.m` sometimes aborting (it does on
+  the clean backend too; #29).
+- **Comparing with a clean backend:** check out the base commit (5db2ae7)
+  in a separate worktree, build it, and point a second config at it.
+  `x11/shadowmargin.m` should then fail 14 of its 19 checks.
+
+## Pointers
+
+- `Docs/IMPROVEMENTS.md`: the Fixed table (what was done and how), the
+  open lists (each now links its issue) and the upstream reports.
+- `Docs/HANDOFF_HEADER_BAR.md`: the header bar's design, the decisions and
+  phase 2b's details (shadow, settling, scale factor).
+- `Docs/PROPOSAL_LIBS_BACK_CSD.md`: what the libs-back patch does, its
+  tests and its limits.
+- `Docs/upstream-issues/`: draft upstream reports with minimal programs.

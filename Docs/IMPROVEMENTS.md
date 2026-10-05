@@ -83,37 +83,37 @@ spacing) are in the Fixed table. Still different from GNOME:
 
 - **Packing of option groups.** GTK stacks checkboxes and radios tighter
   than most GNUstep layouts; that spacing belongs to the app.
-- **Text width.** At the same font and size, GNUstep's text runs about 5%
+- **Text width.** ([#23](https://github.com/danjboyd/plugins-themes-Adwaita/issues/23)) At the same font and size, GNUstep's text runs about 5%
   wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
-- **Alerts keep a title bar.** `AdwAlertDialog` has none; GNUstep's panel
+- **Alerts keep a title bar.** ([#22](https://github.com/danjboyd/plugins-themes-Adwaita/issues/22)) `AdwAlertDialog` has none; GNUstep's panel
   has the window manager's.
-- **Tool tips are opaque.** libadwaita's are translucent (80% black). The
+- **Tool tips are opaque.** ([#21](https://github.com/danjboyd/plugins-themes-Adwaita/issues/21)) libadwaita's are translucent (80% black). The
   theme paints the colour that makes over the window background; with the
   libs-back patch and a compositor they are rounded, still opaque.
-- **Menus have no shadow,** and 10pt corners where libadwaita's popover
+- **Menus have no shadow,** ([#19](https://github.com/danjboyd/plugins-themes-Adwaita/issues/19)) and 10pt corners where libadwaita's popover
   menus have 15px corners and a soft shadow.
-- **Context menus open at the pointer;** GTK's open just below it.
+- **Context menus open at the pointer;** ([#20](https://github.com/danjboyd/plugins-themes-Adwaita/issues/20)) GTK's open just below it.
 
 ## Gorm and other nib-based apps
 
 Found putting Gorm through its paces (its palettes, inspectors and document
 window, compared with the GNUstep theme). Still open:
 
-- **Compact metrics are per app.** A code-built app that also loads Gorm
+- **Compact metrics are per app.** ([#24](https://github.com/danjboyd/plugins-themes-Adwaita/issues/24)) A code-built app that also loads Gorm
   or nib windows gets GNOME's metrics for all of them; it can set
   `GnomeThemeMetrics` to `compact`.
-- **Menu bars in very narrow windows** can still run past the edge; ☰ stays
+- **Menu bars in very narrow windows** ([#25](https://github.com/danjboyd/plugins-themes-Adwaita/issues/25)) can still run past the edge; ☰ stays
   first so the application menu is always reachable.
-- **Designing for GNOME's metrics in Gorm** means running Gorm with
+- **Designing for GNOME's metrics in Gorm** ([#26](https://github.com/danjboyd/plugins-themes-Adwaita/issues/26)) means running Gorm with
   `-GnomeThemeMetrics gnome`, where its own inspectors are cramped. The
   Adwaita palette (`Palettes/Adwaita`, see the README) provides controls at
   GNOME's sizes; roomier inspectors would need changes in Gorm itself.
-- **Gorm's CustomView palette item** draws as a pale disabled button instead
+- **Gorm's CustomView palette item** ([#27](https://github.com/danjboyd/plugins-themes-Adwaita/issues/27)) draws as a pale disabled button instead
   of a dark tile.
 
 ## Theme follow-ups
 
-- **Scrollbars that hide until needed.** libadwaita shows its overlay
+- **Scrollbars that hide until needed.** ([#17](https://github.com/danjboyd/plugins-themes-Adwaita/issues/17)) libadwaita shows its overlay
   indicators only after the pointer moves or the view scrolls, widens them
   under the pointer, and lets content run underneath. GNUstep's
   `NSTrackingArea` is declared but not wired into `NSView`, so hover needs
@@ -126,7 +126,7 @@ window, compared with the GNUstep theme). Still open:
   quirks (clipped titles, invisible toolbar items, one-line labels and alerts)
   came from it. Run `make install GNUSTEP_INSTALLATION_DOMAIN=USER` after each
   merge.
-- **Remove workarounds when upstream fixes land.** The probe's
+- **Remove workarounds when upstream fixes land.** ([#28](https://github.com/danjboyd/plugins-themes-Adwaita/issues/28)) The probe's
   `toolbar-view-item-image` check reports PASS instead of KNOWN once libs-gui
   stops clearing view images. Also drop `GnomeThemeOriginalMethod()`'s fallback
   when `-overriddenMethod:for:` walks superclasses, `-windowNeedsMainMenu:`
@@ -142,7 +142,7 @@ window, compared with the GNUstep theme). Still open:
   `-[NSApplication nextEventMatchingMask:...]` hook for 0.32 in
   GnomeThemePrimaryMenu.m (keep the Escape timer and the press outside:
   GNUstep's menu tracking ignores keys and passes that press on).
-- **High contrast as current GNOME does it.** The theme's high contrast
+- **High contrast as current GNOME does it.** ([#18](https://github.com/danjboyd/plugins-themes-Adwaita/issues/18)) The theme's high contrast
   palette is white on black, chosen by a `gtk-theme` name containing
   "HighContrast" (GNOME 3's). GNOME now sets
   `org.gnome.desktop.a11y.interface high-contrast`, and libadwaita keeps
@@ -153,7 +153,7 @@ window, compared with the GNUstep theme). Still open:
 
 Confirmed on 2026-09-24 with a minimal program under the default theme, both on
 the installed gui 0.32.0 / base 1.31.1 and on master (gui ff49ac8, base
-a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`.
+a8dd1b8). Draft issues and their programs are in `Docs/upstream-issues/`. Drafts 2 and 4, still to file, are tracked in [#29](https://github.com/danjboyd/plugins-themes-Adwaita/issues/29).
 
 1. **libs-gui: a toolbar view item loses its view's image.** Not filed:
    fixed by [libs-gui#952](https://github.com/gnustep/libs-gui/pull/952),
