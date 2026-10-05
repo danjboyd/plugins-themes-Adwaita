@@ -5,7 +5,7 @@
     "Daniel Boyd"
   );
   GSThemeDetails = "Adwaita GNUstep theme for GNOME";
-  GSThemeVersion = "0.1.0-alpha2";
+  GSThemeVersion = "0.1.0-alpha3";
   GSThemeDomain = {
     NSInterfaceStyleDefault = NSWindows95InterfaceStyle;
     NSMenuInterfaceStyle = NSWindows95InterfaceStyle;
