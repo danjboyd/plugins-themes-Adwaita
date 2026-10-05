@@ -1525,6 +1525,64 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    content keeps its size), the title in the flexible space, presses on the
    bar's empty parts the bar's, icons without labels and an item without an
    icon a text button. */
+/* The title ink in a header bar window, between the bar's left border
+   and its buttons. */
+static QuirkProbeInk
+QuirkProbeHeaderTitleInk(NSWindow *window)
+{
+  NSView *frameView = [[window contentView] superview];
+  NSBitmapImageRep *rep;
+
+  [window display];
+  rep = QuirkProbeRender (frameView);
+  QuirkProbeInkBackground = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (20, 4, 4, 4)).darkest;
+  return QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (1, 1, NSWidth ([frameView bounds]) - 130, 44));
+}
+
+/* A document window's header bar shows the file's name, not GNUstep's
+   "name  --  ~/folder", with the folder on hover, as GNOME's
+   AdwWindowTitle (plugins-themes-Adwaita#31). */
+- (void) checkHeaderBarDocumentTitle
+{
+  NSWindow *window;
+  NSView *frameView;
+  QuirkProbeInk document, plain;
+  NSString *folder = nil;
+  NSString *detail;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"header-bar-document-title" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 300, 500, 150) title: @"Probe Document"];
+  [window setTitleWithRepresentedFilename: @"/tmp/Probe Folder/white.png"];
+  [window makeKeyAndOrderFront: nil];
+  frameView = [[window contentView] superview];
+  document = QuirkProbeHeaderTitleInk (window);
+  if ([frameView respondsToSelector: @selector(view:stringForToolTip:point:userData:)])
+    {
+      /* A copy: retitling the window below lets the bar's go. */
+      folder = AUTORELEASE ([[(id)frameView view: frameView stringForToolTip: 0 point: NSZeroPoint userData: NULL]
+                              copy]);
+    }
+  [window setTitle: @"white.png"];
+  plain = QuirkProbeHeaderTitleInk (window);
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"title \"%@\" drawn %ldpx wide (\"white.png\" alone %ldpx); "
+    @"folder on hover \"%@\"", @"white.png  --  /tmp/Probe Folder", (long)document.width, (long)plain.width,
+    folder ?: @"(none)"];
+  if (document.count > 0 && labs ((long)document.width - (long)plain.width) <= 1
+    && [folder isEqualToString: @"/tmp/Probe Folder"])
+    {
+      [self pass: @"header-bar-document-title" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-document-title" detail: detail];
+    }
+}
+
 /* With the toolbar in the header bar, a click on an item's view that
    handles only the release reaches it: the press it passes on isn't the
    bar's to drag, and the bar leaves the release alone
@@ -3790,6 +3848,7 @@ QuirkProbeVisibleMenus (void)
       [self checkHeaderBar];
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
+  [self checkHeaderBarDocumentTitle];
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
       [self finish];
@@ -3828,6 +3887,7 @@ QuirkProbeVisibleMenus (void)
   [self checkHeaderBar];
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
+  [self checkHeaderBarDocumentTitle];
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];

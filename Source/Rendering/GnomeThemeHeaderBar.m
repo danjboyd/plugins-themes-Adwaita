@@ -98,6 +98,7 @@ enum
 @interface NSWindow (GnomeThemeHeaderBarPrivate)
 - (void) _captureMouse: (id)sender;
 - (void) _releaseMouse: (id)sender;
+- (BOOL) _hasTitleWithRepresentedFilename;
 @end
 
 @interface NSToolbar (GnomeThemeHeaderBarPrivate)
@@ -508,6 +509,10 @@ GnomeThemeResizeCursor(NSUInteger edges)
   /* The ends of the buttons at the bar's start and end, for the title. */
   CGFloat _startLimit;
   CGFloat _endLimit;
+  /* A document window's folder, shown on hover over its title, and where
+     the title was drawn. */
+  NSString *_titleFolder;
+  NSRect _titleFolderRect;
 }
 @end
 
@@ -584,6 +589,11 @@ GnomeThemeResizeCursor(NSUInteger edges)
 
 - (void) dealloc
 {
+  if (_titleFolder != nil)
+    {
+      [self removeAllToolTips];
+    }
+  RELEASE (_titleFolder);
   RELEASE (_menuButton);
   [super dealloc];
 }
@@ -989,9 +999,57 @@ GnomeThemeResizeCursor(NSUInteger edges)
   return @"";
 }
 
+/* GNUstep titles a document window "name  --  ~/folder"
+   (-setTitleWithRepresentedFilename:). GNOME shows the file's name, with
+   the folder as AdwWindowTitle's subtitle; here the folder shows on hover
+   over the title. Other titles are left as they are. */
+static NSString *
+GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
+{
+  NSString *path = [window representedFilename];
+
+  *folder = nil;
+  if ([path length] > 0 && [window respondsToSelector: @selector(_hasTitleWithRepresentedFilename)]
+    && [window _hasTitleWithRepresentedFilename])
+    {
+      *folder = [[path stringByDeletingLastPathComponent] stringByAbbreviatingWithTildeInPath];
+      return [[NSFileManager defaultManager] displayNameAtPath: path];
+    }
+  return [window title];
+}
+
+- (NSString *) view: (NSView *)view
+   stringForToolTip: (NSToolTipTag)tag
+              point: (NSPoint)point
+           userData: (void *)data
+{
+  return _titleFolder;
+}
+
+/* The folder's tool tip over the drawn title, moved when the title is. */
+- (void) setTitleFolder: (NSString *)folder inRect: (NSRect)rect
+{
+  if ((folder == _titleFolder || [folder isEqualToString: _titleFolder])
+    && NSEqualRects (rect, _titleFolderRect))
+    {
+      return;
+    }
+  if (_titleFolder != nil)
+    {
+      [self removeAllToolTips];
+    }
+  ASSIGN (_titleFolder, folder);
+  _titleFolderRect = rect;
+  if (folder != nil)
+    {
+      [self addToolTipRect: rect owner: self userData: NULL];
+    }
+}
+
 - (void) drawTitleInRect: (NSRect)bar
 {
-  NSString *title = [window title];
+  NSString *folder = nil;
+  NSString *title = GnomeThemeHeaderBarTitle (window, &folder);
   NSFont *font = [GnomeThemeCurrentSettings () boldInterfaceFont] ?: [NSFont boldSystemFontOfSize: 0.0];
   NSDictionary *attributes;
   CGFloat minX = _startLimit + GnomeThemeHeaderBarTitleSpacing;
@@ -1003,6 +1061,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   [self titleLimitsWithToolbar: &minX : &maxX];
   if (isTitled == NO || [title length] == 0 || maxX <= minX)
     {
+      [self setTitleFolder: nil inRect: NSZeroRect];
       return;
     }
   attributes = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1020,6 +1079,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   baseline = NSMaxY (bar) - floor ((NSHeight (bar) - ([font ascender] - [font descender])) / 2.0 + [font ascender]);
   [title drawAtPoint: NSMakePoint (x, baseline + [font descender] - (size.height - ([font ascender] - [font descender])))
       withAttributes: attributes];
+  [self setTitleFolder: folder inRect: NSMakeRect (x, NSMinY (bar), size.width, NSHeight (bar))];
 }
 
 - (void) drawRect: (NSRect)rect
