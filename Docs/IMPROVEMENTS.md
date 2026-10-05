@@ -77,6 +77,7 @@ it was found. Compare against the libadwaita reference with
 | Apps shipped light and dark icon sets and chose between them (plugins-themes-Adwaita#32) | template images (`-isTemplate`, or a name ending in `Template` or `-symbolic`) are tinted with the text colour around them in buttons, toolbar items and menus: the header bar's (dimmed in the backdrop state), the suggested button's title colour, the disabled colour. QuirkProbe `template-images`, in the light, dark and high contrast palettes |
 | Alerts weren't modal dialogs of the window they interrupt: Mutter didn't attach them (no centring on the window, no dimming it) (plugins-themes-Adwaita#22) | before an alert is shown the theme makes it transient for the app's main window with `_NET_WM_STATE_MODAL` and the window's `_NET_WM_USER_TIME`, as GTK does, and asks for the focus again once it's mapped (libs-back's first request comes too early and it ignores the window manager's offer). With the header bar the alert already had no bar (a border only). `make check-mutter` `alert-attached` |
 | Tool tips were the opaque colour 80% black makes over the window background, wrong over anything else (plugins-themes-Adwaita#21) | where the tip's window has an alpha channel under a compositor (the installed backend gives it one with the header bar) it is libadwaita's 80% black, translucent; opaque otherwise, and in high contrast. `make check-mutter` `tooltip` measures one over the desktop |
+| Menus had 10pt corners and no shadow; libadwaita's popover menus have 15px corners and a soft shadow (plugins-themes-Adwaita#19) | 15px corners; with the header bar the theme marks menu windows as popovers, and the libs-back patch (`GSBackPopoverShadows`) draws libadwaita's popover shadow in a transparent margin round them, as GTK 4 does (Mutter draws none for a 32-bit window). Under Mutter, KWin and Xfwm4; none where the window manager lacks `_GTK_FRAME_EXTENTS`. `make check-mutter-shadow` `menu-shadow`; libs-back `Tests/x11/shadowmargin.m` |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
@@ -95,8 +96,8 @@ spacing) are in the Fixed table. Still different from GNOME:
 - **Alerts keep a title bar without the header bar.** `AdwAlertDialog` has
   none; with the window manager's decorations GNUstep's alert has the
   window manager's (Mutter 48 keeps a frame on attached dialogs too).
-- **Menus have no shadow,** ([#19](https://github.com/danjboyd/plugins-themes-Adwaita/issues/19)) and 10pt corners where libadwaita's popover
-  menus have 15px corners and a soft shadow.
+- **Menus have no shadow without the libs-back patch** (their corners are
+  rounded wherever the window has an alpha channel).
 - **Context menus open at the pointer;** ([#20](https://github.com/danjboyd/plugins-themes-Adwaita/issues/20)) GTK's open just below it.
 
 ## Gorm and other nib-based apps

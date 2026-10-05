@@ -31,6 +31,10 @@
 /* Associated-object key: the grid lines (an NSTableViewGridLineStyle in an
    NSNumber) a table's app asked for, recorded by the -setGridStyleMask: and
    -setDrawsGrid: overrides below. */
+
+/* libadwaita's popover menus (and the libs-back patch's popover corners,
+   GSBackPopoverCornerRadius in Info-gnustep.plist). */
+static const CGFloat GnomeThemeMenuCornerRadius = 15.0;
 static char GnomeThemeTableGridMaskKey;
 
 static inline GnomeTheme *
@@ -563,9 +567,10 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                                             @"menuBorderColor",
                                             [NSColor controlShadowColor]);
 
-      /* Rounded only on a window with an alpha channel: elsewhere the
-         corners outside the curve stay unpainted, black under a
-         compositor (menus are borderless, 24-bit windows). */
+      /* libadwaita's popover menus' 15px corners, only on a window with
+         an alpha channel: elsewhere the corners outside the curve stay
+         unpainted, black under a compositor (menus are borderless, 24-bit
+         windows). */
       if ([menuView window] != nil && GnomeThemeWindowManagerHasAlpha ([menuView window]) == NO)
         {
           [fillColor set];
@@ -576,7 +581,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
       else
         {
           GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (bounds, 0.5, 0.5),
-                                                     10.0,
+                                                     GnomeThemeMenuCornerRadius,
                                                      fillColor,
                                                      borderColor,
                                                      1.0);
@@ -1038,6 +1043,26 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 @end
 
 @implementation GnomeTheme (MenusAndDataOverrides)
+
+/* A menu's window is marked as a popover (NSUtilityWindowMask, which a
+   borderless window has no other use for), so a libs-back with the
+   popover shadows (GSBackPopoverShadows) gives it libadwaita's popover
+   shadow round its rounded corners. Only with the header bar: libs-back
+   makes no margins when the window manager draws the decorations. */
+- (id) _overrideNSMenuPanelMethod_initWithContentRect: (NSRect)contentRect
+                                            styleMask: (NSUInteger)style
+                                              backing: (NSBackingStoreType)backing
+                                                defer: (BOOL)flag
+{
+  typedef id (*InitIMP)(id, SEL, NSRect, NSUInteger, NSBackingStoreType, BOOL);
+  InitIMP originalIMP = (InitIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"NSMenuPanel"));
+
+  if (style == NSBorderlessWindowMask && GnomeThemeUsesHeaderBar ())
+    {
+      style |= NSUtilityWindowMask;
+    }
+  return originalIMP != NULL ? originalIMP (self, _cmd, contentRect, style, backing, flag) : self;
+}
 
 /* GNOME puts the main menu button at the end of the header bar. GSTheme keeps
    the application item first in the menu (see -organizeMenu:isHorizontal:),

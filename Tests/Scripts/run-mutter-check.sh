@@ -425,10 +425,11 @@ else
 fi
 
 if [ "$SHADOW" = YES ]; then
-  # A menu: a borderless window with an alpha channel
-  # (GSBackBorderlessWindowAlpha), its corners rounded off to show what's
-  # behind it, as libadwaita's: its bottom left pixel is what's there once
-  # the menu has closed (a square menu has its border there).
+  # A menu: a borderless window with an alpha channel and, from the
+  # patched libs-back (GSBackPopoverShadows), libadwaita's popover shadow
+  # in a transparent margin round it (_GTK_FRAME_EXTENTS 14 14 12 16): the
+  # window's content just below the menu is darker than once it has closed.
+  # (plugins-themes-Adwaita#19)
   read -r VX VY VW VH <<<"$(visible)"
   xdotool mousemove $((VX + 30)) $((VY + 64)) click 1
   sleep 1
@@ -439,21 +440,26 @@ if [ "$SHADOW" = YES ]; then
     fi
   done
   if [ -n "$MENU" ]; then
-    eval "$(xwininfo -id "$MENU" | awk '/Absolute upper-left X/ {print "MX=" $NF} /Absolute upper-left Y/ {print "MY=" $NF} /Height:/ {print "MH=" $NF}')"
-    CORNER="$(pixel "$MX" $((MY + MH - 1)))"
-    INSIDE="$(pixel $((MX + 8)) $((MY + MH - 8)))"
+    MENU_EXTENTS="$(xprop -id "$MENU" _GTK_FRAME_EXTENTS 2>/dev/null | sed -n 's/.*= //p' | tr -d ,)"
+    read -r ML MR MT MB <<<"${MENU_EXTENTS:-0 0 0 0}"
+    eval "$(xwininfo -id "$MENU" | awk '/Absolute upper-left X/ {print "MX=" $NF} /Absolute upper-left Y/ {print "MY=" $NF} /Width:/ {print "MW=" $NF} /Height:/ {print "MH=" $NF}')"
+    BOTTOM=$((MY + MH - MB))
+    MID=$((MX + ML + (MW - ML - MR) / 2))
+    INSIDE="$(pixel "$MID" $((BOTTOM - 8)))"
+    NEAR="$(pixel "$MID" $((BOTTOM + 2)))"
   fi
   xdotool key Escape
   sleep 0.8
-  if [ -n "$MENU" ]; then
-    BEHIND="$(pixel "$MX" $((MY + MH - 1)))"
-  fi
-  DETAIL="menu window ${MENU:-none} (32-bit); r+g+b at its bottom left corner ${CORNER:-?}, there without the menu ${BEHIND:-?}, inside ${INSIDE:-?}"
-  if [ -n "$MENU" ] && [ "$CORNER" -ge $((BEHIND - 12)) ] && [ "$CORNER" -le $((BEHIND + 12)) ] \
-    && [ "$INSIDE" -ge 700 ]; then
-    report PASS "$NAME-menu-corners" "$DETAIL"
+  [ -n "$MENU" ] && BEHIND="$(pixel "$MID" $((BOTTOM + 2)))"
+  DETAIL="menu window ${MENU:-none} (32-bit), frame extents ${MENU_EXTENTS:-none}; r+g+b inside ${INSIDE:-?}, 2px below ${NEAR:-?}, there without the menu ${BEHIND:-?}"
+  # A window manager without _GTK_FRAME_EXTENTS (Openbox): no margin, no
+  # shadow; still rounded.
+  if [ -n "$MENU" ] && [ "$INSIDE" -ge 700 ] \
+    && { { [ "$MARGIN" = YES ] && [ "$MENU_EXTENTS" = "14 14 12 16" ] && [ "$NEAR" -le $((BEHIND - 15)) ]; } \
+         || { [ "$MARGIN" = NO ] && [ -z "$MENU_EXTENTS" ]; }; }; then
+    report PASS "$NAME-menu-shadow" "$DETAIL"
   else
-    report FAIL "$NAME-menu-corners" "$DETAIL"
+    report FAIL "$NAME-menu-shadow" "$DETAIL"
   fi
 fi
 

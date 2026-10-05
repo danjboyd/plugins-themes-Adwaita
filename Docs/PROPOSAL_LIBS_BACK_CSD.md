@@ -15,7 +15,8 @@ private Xvfb against them and checks the shadow, corners, maximise and
 restore, tiling, moves, the resize band and click-through. Each item below
 says what its patch does where it differs from what was first proposed.
 
-**Updated 2026-10-05: item 5 (window types) added** to
+**Updated 2026-10-05: popover shadows for menus (item 2) and item 5
+(window types) added** to
 `Docs/upstream-patches/libs-back-csd.diff`, with its own ChangeLog entry and
 test (`Tests/x11/windowtype.m`, 4 checks; 3 fail without the patch).
 
@@ -197,9 +198,23 @@ item 4.
   before it changes the state, while the window still has no margin
   (`make check-mutter-shadow` in the theme counts them, and checks the
   shadow is drawn again).
-- *Known limitations:* only Mutter has been tried as the window manager (KWin,
-  Xfwm and others with a compositor are untested); the art and xlib
-  graphics backends don't define XRENDER and never make 32-bit windows.
+- *Popovers (2026-10-05):* libadwaita's menus are popovers with a smaller
+  shadow (box-shadow `0 1px 5px 1px` at 9% and `0 2px 14px 3px` at 5%
+  black) and 15px corners. Mutter draws no shadow for a 32-bit window (it
+  can't tell its shape), so, as GTK 4 does, the menu draws its own in a
+  margin. A borderless window marked with `NSUtilityWindowMask` (a theme
+  marks its menus' windows; a borderless window has no other use for the
+  bit) gets a popover's margin (14, 14, 12, 16) when `GSBackPopoverShadows`
+  is YES, on a window's terms, and `GSBackPopoverCornerRadius` rounds it;
+  presses reach only its visible part. The marker is the weak point: the
+  backend creates the X window before libs-gui registers the NSWindow, so
+  it can't ask the window's class (as with libs-gui#965). A cleaner
+  upstream form would be a style bit or a `GSDisplayServer` call from
+  libs-gui for popovers.
+- *Known limitations:* tried under Mutter, KWin and Xfwm4 (the margin, shadow
+  and rounded corners) and Openbox (no `_GTK_FRAME_EXTENTS`: no margin);
+  the art and xlib graphics backends don't define XRENDER and never make
+  32-bit windows.
 
 ### 3. Window states (`_NET_WM_STATE`) (maximise done in the theme)
 
