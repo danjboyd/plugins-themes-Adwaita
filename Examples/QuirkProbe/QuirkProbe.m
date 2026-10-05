@@ -591,6 +591,68 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+/* A toolbar item's view that acts on the release only, as ScreenshotTool's
+   Copy and zoom items did (plugins-themes-Adwaita#33). */
+@interface QuirkProbeReleaseView : NSView
+{
+@public
+  int releases;
+}
+@end
+
+@implementation QuirkProbeReleaseView
+
+- (void) mouseUp: (NSEvent *)event
+{
+  releases++;
+}
+
+- (void) drawRect: (NSRect)rect
+{
+  [[NSColor grayColor] set];
+  NSRectFill ([self bounds]);
+}
+
+@end
+
+@interface QuirkProbeReleaseToolbarDelegate : NSObject
+{
+@public
+  QuirkProbeReleaseView *view;
+}
+@end
+
+@implementation QuirkProbeReleaseToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: identifier];
+  if ([identifier isEqualToString: @"Release"])
+    {
+      view = AUTORELEASE ([[QuirkProbeReleaseView alloc] initWithFrame: NSMakeRect (0, 0, 32, 28)]);
+      [item setView: view];
+      [item setMinSize: NSMakeSize (32, 28)];
+      [item setMaxSize: NSMakeSize (32, 28)];
+    }
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Release", NSToolbarFlexibleSpaceItemIdentifier, nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 /* An icon-only toolbar of plain views with fixed sizes (minSize = maxSize =
    the view's frame) around a flexible space, as ScreenshotTool makes it. */
 @interface QuirkProbeViewItemToolbarDelegate : NSObject
@@ -1463,6 +1525,91 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    content keeps its size), the title in the flexible space, presses on the
    bar's empty parts the bar's, icons without labels and an item without an
    icon a text button. */
+/* With the toolbar in the header bar, a click on an item's view that
+   handles only the release reaches it: the press it passes on isn't the
+   bar's to drag, and the bar leaves the release alone
+   (plugins-themes-Adwaita#33). */
+- (void) checkHeaderBarToolbarItemClick
+{
+  QuirkProbeReleaseToolbarDelegate *delegate;
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSRect frame;
+  NSPoint point;
+  NSEvent *down, *up, *pending;
+  NSView *hit;
+  NSString *detail;
+  BOOL inBar;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"header-bar-toolbar-item-click" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  /* The app opting in (as -checkHeaderBarToolbar does). */
+  if ([[[NSUserDefaults standardUserDefaults] searchList] containsObject: @"QuirkProbeHeaderBarToolbar"] == NO)
+    {
+      NSMutableArray *searchList = AUTORELEASE ([[[NSUserDefaults standardUserDefaults] searchList] mutableCopy]);
+
+      [[NSUserDefaults standardUserDefaults]
+        setVolatileDomain: [NSDictionary dictionaryWithObject: @"YES" forKey: @"GnomeThemeHeaderBarToolbar"]
+                  forName: @"QuirkProbeHeaderBarToolbar"];
+      [searchList insertObject: @"QuirkProbeHeaderBarToolbar" atIndex: 0];
+      [[NSUserDefaults standardUserDefaults] setSearchList: searchList];
+    }
+  delegate = AUTORELEASE ([QuirkProbeReleaseToolbarDelegate new]);
+  window = [self windowWithFrame: NSMakeRect (40, 200, 500, 200) title: @"Probe Toolbar Click"];
+  toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeReleaseToolbar"]);
+  [toolbar setDelegate: delegate];
+  [window setToolbar: toolbar];
+  /* Key, as the window being used: a first click on another window only
+     activates it. */
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  inBar = [[[toolbar _toolbarView] superview] isEqual: [[window contentView] superview]];
+  frame = [delegate->view convertRect: [delegate->view bounds] toView: nil];
+  point = NSMakePoint (NSMidX (frame), NSMidY (frame));
+  hit = [[[window contentView] superview] hitTest: point];
+  if (hit != delegate->view)
+    {
+      [self fail: @"header-bar-toolbar-item-click"
+          detail: [NSString stringWithFormat: @"the item's view at %@ in the window; a press there goes to %@",
+                            NSStringFromRect (frame), NSStringFromClass ([hit class])]];
+      [window orderOut: nil];
+      [window setToolbar: nil];
+      return;
+    }
+  down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                           timestamp: 0 windowNumber: [window windowNumber] context: nil
+                         eventNumber: 0 clickCount: 1 pressure: 1.0];
+  up = [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                         timestamp: 0 windowNumber: [window windowNumber] context: nil
+                       eventNumber: 0 clickCount: 1 pressure: 0.0];
+  /* Queued first: a bar that reads up to the release finds it, rather
+     than waiting for it. */
+  [NSApp postEvent: up atStart: NO];
+  [window sendEvent: down];
+  pending = [NSApp nextEventMatchingMask: NSLeftMouseUpMask untilDate: [NSDate distantPast]
+                                  inMode: NSDefaultRunLoopMode dequeue: YES];
+  if (pending != nil)
+    {
+      [window sendEvent: pending];
+    }
+  detail = [NSString stringWithFormat: @"toolbar %@ the bar; the item's view saw %d release(s) "
+    @"(the release was %@)", inBar ? @"in" : @"not in", delegate->view->releases,
+    pending != nil ? @"left for it" : @"taken by the bar"];
+  if (inBar && delegate->view->releases == 1)
+    {
+      [self pass: @"header-bar-toolbar-item-click" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-toolbar-item-click" detail: detail];
+    }
+  [window orderOut: nil];
+  [window setToolbar: nil];
+}
+
 - (void) checkHeaderBarToolbar
 {
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -3642,6 +3789,7 @@ QuirkProbeVisibleMenus (void)
     {
       [self checkHeaderBar];
   [self checkHeaderBarToolbar];
+  [self checkHeaderBarToolbarItemClick];
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
       [self finish];
@@ -3679,6 +3827,7 @@ QuirkProbeVisibleMenus (void)
   [self checkPrimaryMenu];
   [self checkHeaderBar];
   [self checkHeaderBarToolbar];
+  [self checkHeaderBarToolbarItemClick];
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];

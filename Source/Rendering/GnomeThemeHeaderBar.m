@@ -1494,6 +1494,7 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 {
   NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
   NSUInteger edges = [self resizeEdgesForPoint: p];
+  NSView *pressed = [self hitTest: [event locationInWindow]];
 
   if (edges != 0)
     {
@@ -1501,6 +1502,13 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
         {
           [self resizeWindowFromEdges: edges event: event];
         }
+      return;
+    }
+  /* A press on a toolbar item's view that passed it on (one that acts on
+     the release): it isn't the bar's to drag, and the release goes to the
+     item, as a GTK header bar's children get their clicks. */
+  if (pressed != self && [pressed isDescendantOf: [[window toolbar] _toolbarView]])
+    {
       return;
     }
   /* At the pixel's centre, as for the edges: the bar's top row too. */
