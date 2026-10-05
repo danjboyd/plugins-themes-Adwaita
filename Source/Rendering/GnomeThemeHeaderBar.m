@@ -1601,6 +1601,12 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
    to come). */
 - (BOOL) pointerDraggedFrom: (NSEvent *)event
 {
+  return [self pointerDraggedFrom: event release: NULL];
+}
+
+/* As above, and hands back the release when there was one. */
+- (BOOL) pointerDraggedFrom: (NSEvent *)event release: (NSEvent **)release
+{
   NSPoint start = [event locationInWindow];
   NSEvent *current;
 
@@ -1612,6 +1618,10 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
                                       dequeue: YES];
       if ([current type] == NSLeftMouseUp)
         {
+          if (release != NULL)
+            {
+              *release = current;
+            }
           return NO;
         }
       if (fabs ([current locationInWindow].x - start.x) > GnomeThemeDragThreshold
@@ -1636,11 +1646,27 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
         }
       return;
     }
-  /* A press on a toolbar item's view that passed it on (one that acts on
-     the release): it isn't the bar's to drag, and the release goes to the
-     item, as a GTK header bar's children get their clicks. */
+  /* A press that a toolbar item's view passed on: a container, an empty
+     part of the item, a view that acts only on the release. As a GTK
+     header bar (a GtkWindowHandle round its children), a drag from it
+     moves the window; a click gives its release back to the item, which
+     libs-gui sends it to (plugins-themes-Adwaita#33, #36). Controls take
+     their presses themselves and never get here. */
   if (pressed != self && [pressed isDescendantOf: [[window toolbar] _toolbarView]])
     {
+      NSEvent *release = nil;
+
+      if ([self pointerDraggedFrom: event release: &release])
+        {
+          if (GnomeThemeWindowManagerMoveResize (window, GnomeThemeMoveResizeMove) == NO)
+            {
+              [self moveWindowStartingWithEvent: event];
+            }
+        }
+      else if (release != nil)
+        {
+          [NSApp postEvent: release atStart: YES];
+        }
       return;
     }
   /* At the pixel's centre, as for the edges: the bar's top row too. */
@@ -1792,9 +1818,13 @@ GnomeThemeHeaderBarToolbarSettingChanged(void)
     {
       return hit;
     }
-  /* The toolbar view and its clip view are background; so are spaces. */
+  /* The toolbar view and its clip view are background; so are spaces, and
+     labels (a text field that can be neither edited nor selected), which
+     would otherwise take the press and never drag. */
   if (hit == toolbarView || [hit isKindOfClass: [NSClipView class]]
-    || ([hit respondsToSelector: @selector(toolbarItem)] && GnomeThemeToolbarItemIsSpace ([hit toolbarItem])))
+    || ([hit respondsToSelector: @selector(toolbarItem)] && GnomeThemeToolbarItemIsSpace ([hit toolbarItem]))
+    || ([hit isKindOfClass: [NSTextField class]] && [(NSTextField *)hit isEditable] == NO
+        && [(NSTextField *)hit isSelectable] == NO))
     {
       return nil;
     }

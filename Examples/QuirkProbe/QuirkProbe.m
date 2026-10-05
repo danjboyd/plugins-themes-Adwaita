@@ -657,6 +657,60 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+/* A toolbar with an item that is only a container (a plain view, as
+   MarkdownViewer's status area) and one that is a label
+   (plugins-themes-Adwaita#36). */
+@interface QuirkProbeDragToolbarDelegate : NSObject
+{
+@public
+  NSView *box;
+  NSTextField *label;
+}
+@end
+
+@implementation QuirkProbeDragToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: identifier];
+  if ([identifier isEqualToString: @"Box"])
+    {
+      box = AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 80, 28)]);
+      [item setView: box];
+      [item setMinSize: NSMakeSize (80, 28)];
+      [item setMaxSize: NSMakeSize (80, 28)];
+    }
+  else if ([identifier isEqualToString: @"Label"])
+    {
+      label = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (0, 0, 80, 20)]);
+      [label setStringValue: @"Status"];
+      [label setEditable: NO];
+      [label setSelectable: NO];
+      [label setBezeled: NO];
+      [label setDrawsBackground: NO];
+      [item setView: label];
+      [item setMinSize: NSMakeSize (80, 20)];
+      [item setMaxSize: NSMakeSize (80, 20)];
+    }
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Box", @"Label", NSToolbarFlexibleSpaceItemIdentifier, nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 /* An icon-only toolbar of plain views with fixed sizes (minSize = maxSize =
    the view's frame) around a flexible space, as ScreenshotTool makes it. */
 @interface QuirkProbeViewItemToolbarDelegate : NSObject
@@ -1657,6 +1711,75 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   else
     {
       [self fail: @"header-bar-document-title" detail: detail];
+    }
+}
+
+/* With the toolbar in the header bar, a press on an item's empty part (a
+   container) or a label drags the window, as a GTK header bar's does: only
+   controls keep their presses (plugins-themes-Adwaita#36). */
+- (void) checkHeaderBarToolbarItemDrag
+{
+  QuirkProbeDragToolbarDelegate *delegate;
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSView *frameView, *labelHit;
+  NSRect boxFrame, labelFrame, before, after;
+  NSPoint start;
+  NSString *detail;
+  int i;
+
+  if (QuirkProbeDrawsDecorations () == NO
+    || [[[NSUserDefaults standardUserDefaults] searchList] containsObject: @"QuirkProbeHeaderBarToolbar"] == NO)
+    {
+      [self skip: @"header-bar-toolbar-item-drag" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  delegate = AUTORELEASE ([QuirkProbeDragToolbarDelegate new]);
+  window = [self windowWithFrame: NSMakeRect (200, 200, 500, 200) title: @"Probe Toolbar Drag"];
+  toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeDragToolbar"]);
+  [toolbar setDelegate: delegate];
+  [window setToolbar: toolbar];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  labelFrame = [delegate->label convertRect: [delegate->label bounds] toView: nil];
+  labelHit = [frameView hitTest: NSMakePoint (NSMidX (labelFrame), NSMidY (labelFrame))];
+
+  /* A press on the box, dragged 40px right, released. (The bar's own
+     move, with no window manager to hand it to, follows the real pointer,
+     so the window can move further: a move is what's checked.) */
+  boxFrame = [delegate->box convertRect: [delegate->box bounds] toView: nil];
+  start = NSMakePoint (NSMidX (boxFrame), NSMidY (boxFrame));
+  before = [window frame];
+  for (i = 1; i <= 4; i++)
+    {
+      [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseDragged
+                                           location: NSMakePoint (start.x + 10 * i, start.y)
+                                      modifierFlags: 0 timestamp: 0 windowNumber: [window windowNumber]
+                                            context: nil eventNumber: 0 clickCount: 1 pressure: 1.0]
+               atStart: NO];
+    }
+  [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseUp location: NSMakePoint (start.x + 40, start.y)
+                                  modifierFlags: 0 timestamp: 0 windowNumber: [window windowNumber]
+                                        context: nil eventNumber: 0 clickCount: 1 pressure: 0.0]
+           atStart: NO];
+  [window sendEvent: [NSEvent mouseEventWithType: NSLeftMouseDown location: start modifierFlags: 0
+                                        timestamp: 0 windowNumber: [window windowNumber] context: nil
+                                      eventNumber: 0 clickCount: 1 pressure: 1.0]];
+  after = [window frame];
+  [window orderOut: nil];
+  [window setToolbar: nil];
+  [toolbar setDelegate: nil];
+
+  detail = [NSString stringWithFormat: @"a press on the label goes to %@; a drag from the box moved the window %@ -> %@",
+    NSStringFromClass ([labelHit class]), NSStringFromPoint (before.origin), NSStringFromPoint (after.origin)];
+  if (labelHit == frameView && NSMinX (after) - NSMinX (before) >= 20)
+    {
+      [self pass: @"header-bar-toolbar-item-drag" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-toolbar-item-drag" detail: detail];
     }
 }
 
@@ -4099,6 +4222,7 @@ QuirkProbeButtonImageColor(NSButton *button)
       [self checkHeaderBar];
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
+  [self checkHeaderBarToolbarItemDrag];
   [self checkHeaderBarDocumentTitle];
   [self checkHeaderBarToolbarLive];
       [self checkSegmentedSelection];
@@ -4141,6 +4265,7 @@ QuirkProbeButtonImageColor(NSButton *button)
   [self checkHeaderBar];
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
+  [self checkHeaderBarToolbarItemDrag];
   [self checkHeaderBarDocumentTitle];
   [self checkHeaderBarToolbarLive];
   [self checkFonts];
