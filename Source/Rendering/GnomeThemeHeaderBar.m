@@ -35,6 +35,7 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #import <GNUstepGUI/GSDisplayServer.h>
+#import <GNUstepGUI/GSToolbarView.h>
 #import <GNUstepGUI/GSTheme.h>
 #import <GNUstepGUI/GSWindowDecorationView.h>
 
@@ -126,22 +127,59 @@ enum
 @end
 
 /* The app shows its toolbar in the header bar row, as a GNOME app packs
-   its buttons there, instead of as a row of its own: the user's default,
-   then the app's Info.plist. Opt-in, as the app's toolbar has to suit it
-   (a few icons, a flexible space between those at the start and those at
-   the end). */
-static BOOL
+   its buttons there, instead of as a row of its own. Asked in order: the
+   user for this app (its defaults, or -GnomeThemeHeaderBarToolbar on the
+   command line); the app, when its Info.plist says its toolbar doesn't suit
+   the bar (NO); the user for all apps (NSGlobalDomain); the app's own
+   default (its Info.plist, or registered defaults). Off otherwise, as the
+   toolbar has to suit it (a few icons, a flexible space between those at
+   the start and those at the end). */
+BOOL
 GnomeThemeHeaderBarToolbarEnabled(void)
 {
+  NSString *key = @"GnomeThemeHeaderBarToolbar";
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-  id declared;
+  NSEnumerator *enumerator = [[defaults searchList] objectEnumerator];
+  NSString *domain;
+  id global = nil;
+  id registered = nil;
+  id declared = [[[NSBundle mainBundle] infoDictionary] objectForKey: key];
 
-  if ([defaults objectForKey: @"GnomeThemeHeaderBarToolbar"] != nil)
+  while ((domain = [enumerator nextObject]) != nil)
     {
-      return [defaults boolForKey: @"GnomeThemeHeaderBarToolbar"];
+      NSDictionary *values = [defaults persistentDomainForName: domain] ?: [defaults volatileDomainForName: domain];
+      id value = [values objectForKey: key];
+
+      if ([value respondsToSelector: @selector(boolValue)] == NO)
+        {
+          continue;
+        }
+      if ([domain isEqualToString: NSGlobalDomain])
+        {
+          global = global ?: value;
+        }
+      else if ([domain isEqualToString: NSRegistrationDomain])
+        {
+          registered = registered ?: value;
+        }
+      else
+        {
+          return [value boolValue];
+        }
     }
-  declared = [[[NSBundle mainBundle] infoDictionary] objectForKey: @"GnomeThemeHeaderBarToolbar"];
-  return [declared respondsToSelector: @selector(boolValue)] && [declared boolValue];
+  if ([declared respondsToSelector: @selector(boolValue)] == NO)
+    {
+      declared = nil;
+    }
+  if (declared != nil && [declared boolValue] == NO)
+    {
+      return NO;
+    }
+  if (global != nil)
+    {
+      return [global boolValue];
+    }
+  return [(declared ?: registered) boolValue];
 }
 
 BOOL
@@ -509,11 +547,15 @@ GnomeThemeResizeCursor(NSUInteger edges)
   /* The ends of the buttons at the bar's start and end, for the title. */
   CGFloat _startLimit;
   CGFloat _endLimit;
+  /* The window's toolbar is in the bar (rather than in a row of its own):
+     where it was put, whatever the setting says now. */
+  BOOL _toolbarInBar;
   /* A document window's folder, shown on hover over its title, and where
      the title was drawn. */
   NSString *_titleFolder;
   NSRect _titleFolderRect;
 }
+- (void) placeToolbarForSetting;
 @end
 
 @implementation GnomeThemeHeaderBarDecorationView
@@ -693,13 +735,33 @@ GnomeThemeResizeCursor(NSUInteger edges)
   [self layoutToolbarInBar];
 }
 
-/* Whether the window's toolbar is in the bar: a titled window, the app
-   opting in, the toolbar shown. */
+/* Whether the window's toolbar is in the bar: where -addToolbarView: put
+   it, not what the setting says now (it can change while the toolbar is
+   shown). */
 - (BOOL) holdsToolbarInBar
 {
-  NSToolbar *toolbar = [window toolbar];
+  return _toolbarInBar && [window toolbar] != nil;
+}
 
-  return hasTitleBar && GnomeThemeHeaderBarToolbarEnabled () && toolbar != nil && [toolbar isVisible];
+/* The setting changed: move a shown toolbar into or out of the bar,
+   keeping the window's frame (the content gives up or takes the toolbar's
+   row). */
+- (void) placeToolbarForSetting
+{
+  NSToolbar *toolbar = [window toolbar];
+  NSView *toolbarView = [toolbar _toolbarView];
+  NSRect frame = [window frame];
+
+  if (hasTitleBar == NO || toolbar == nil || [toolbar isVisible] == NO || [toolbarView superview] != self
+    || _toolbarInBar == GnomeThemeHeaderBarToolbarEnabled ())
+    {
+      return;
+    }
+  RETAIN (toolbarView);
+  [self removeToolbarView: toolbarView];
+  [self addToolbarView: toolbarView];
+  RELEASE (toolbarView);
+  [window setFrame: frame display: YES];
 }
 
 /* The toolbar between the buttons at the bar's start and end, 6pt from
@@ -762,9 +824,18 @@ GnomeThemeResizeCursor(NSUInteger edges)
 {
   if (hasTitleBar == NO || GnomeThemeHeaderBarToolbarEnabled () == NO)
     {
+      NSToolbar *toolbar = [window toolbar];
+
+      _toolbarInBar = NO;
+      /* Back from the bar: its row's bottom line, as libs-gui sets it. */
+      if ([toolbarView borderMask] == 0 && [toolbar showsBaselineSeparator])
+        {
+          [toolbarView setBorderMask: GSToolbarViewBottomBorder];
+        }
       [super addToolbarView: toolbarView];
       return;
     }
+  _toolbarInBar = YES;
   hasToolbar = YES;
   /* In the bar before its items are laid out: they lay out for it. */
   [self addSubview: toolbarView];
@@ -776,11 +847,12 @@ GnomeThemeResizeCursor(NSUInteger edges)
 
 - (void) removeToolbarView: (NSView *)toolbarView
 {
-  if ([toolbarView superview] != self || NSMinY ([toolbarView frame]) < NSMinY (titleBarRect))
+  if (_toolbarInBar == NO || [toolbarView superview] != self)
     {
       [super removeToolbarView: toolbarView];
       return;
     }
+  _toolbarInBar = NO;
   hasToolbar = NO;
   [toolbarView removeFromSuperviewWithoutNeedingDisplay];
   [self setNeedsDisplayInRect: titleBarRect];
@@ -1594,6 +1666,33 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
 }
 
 @end
+
+/* The header bar toolbar setting may have changed (NSUserDefaults
+   noticed): move shown toolbars into or out of the bar. */
+void
+GnomeThemeHeaderBarToolbarSettingChanged(void)
+{
+  static int enabled = -1;
+  BOOL now = GnomeThemeHeaderBarToolbarEnabled ();
+  NSEnumerator *enumerator;
+  NSWindow *window;
+
+  if (enabled == (int)now)
+    {
+      return;
+    }
+  enabled = now;
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSView *frameView = [[window contentView] superview];
+
+      if ([frameView isKindOfClass: [GnomeThemeHeaderBarDecorationView class]])
+        {
+          [(GnomeThemeHeaderBarDecorationView *)frameView placeToolbarForSetting];
+        }
+    }
+}
 
 @implementation GnomeTheme (HeaderBar)
 

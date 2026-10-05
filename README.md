@@ -159,6 +159,12 @@ designed):
   item without an icon is a text button. Items that don't fit go into the
   toolbar's » menu; in right-to-left languages the bar is mirrored. Off by
   default: the toolbar has to suit it (a few icons, a flexible space).
+  A user can turn it on for every app at once with
+  `defaults write NSGlobalDomain GnomeThemeHeaderBarToolbar YES`; a setting
+  for one app still wins, and an app whose Info.plist says `NO` (its
+  toolbar doesn't suit the bar) keeps its own row. A change applies to open
+  windows, which keep their size: the content gives up or takes the
+  toolbar's row. Apps don't need to set their toolbars again.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
 
 ### Windows without the menu bar

@@ -33,6 +33,7 @@ static NSString *GnomeThemeRuntimeDefaultsDomain = @"GnomeThemeRuntimeDomain";
 - (void) applyRuntimeDefaults;
 - (void) removeRuntimeDefaults;
 - (void) windowNeedsMainMenu: (NSNotification *)notification;
+- (void) defaultsDidChange: (NSNotification *)notification;
 - (NSDictionary *) runtimeDefaultsDictionary;
 - (void) addFont: (NSFont *)font
           forKey: (NSString *)key
@@ -293,6 +294,17 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
              selector: @selector(windowNeedsMainMenu:)
                  name: NSWindowDidBecomeMainNotification
                object: nil];
+  [center addObserver: self
+             selector: @selector(defaultsDidChange:)
+                 name: NSUserDefaultsDidChangeNotification
+               object: nil];
+}
+
+/* Settings that apply to open windows, changed by the app or the user
+   (NSUserDefaults notices a `defaults write` when it synchronises). */
+- (void) defaultsDidChange: (NSNotification *)notification
+{
+  GnomeThemeHeaderBarToolbarSettingChanged ();
 }
 
 - (void) deactivate
@@ -301,6 +313,7 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 
   [center removeObserver: self name: NSWindowDidBecomeKeyNotification object: nil];
   [center removeObserver: self name: NSWindowDidBecomeMainNotification object: nil];
+  [center removeObserver: self name: NSUserDefaultsDidChangeNotification object: nil];
   [self removeRuntimeDefaults];
   [super deactivate];
 }

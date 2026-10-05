@@ -60,6 +60,11 @@ BOOL GnomeThemeUsesHeaderBar(void);
 /* Whether a toolbar is shown in its window's header bar row
    (GnomeThemeHeaderBarToolbar), not as a row of its own. */
 BOOL GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar);
+/* Whether the GnomeThemeHeaderBarToolbar setting puts this app's toolbars
+   in the header bar, and the call that applies a change to it to the open
+   windows. */
+BOOL GnomeThemeHeaderBarToolbarEnabled(void);
+void GnomeThemeHeaderBarToolbarSettingChanged(void);
 
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is

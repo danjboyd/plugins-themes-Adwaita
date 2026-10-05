@@ -537,9 +537,13 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
-/* The theme's, from Source/Rendering/GnomeThemeWindowTypes.m. */
+/* The theme's, from Source/Rendering/GnomeThemeWindowTypes.m and
+   GnomeThemeHeaderBar.m. */
 @interface NSObject (QuirkProbeGnomeTheme)
 + (NSString *) windowTypeForWindow: (NSWindow *)window;
+- (BOOL) holdsToolbarInBar;
+- (NSString *) view: (NSView *)view stringForToolTip: (NSToolTipTag)tag point: (NSPoint)point
+           userData: (void *)data;
 @end
 
 @interface NSToolbar (QuirkProbePrivate)
@@ -1525,6 +1529,78 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    content keeps its size), the title in the flexible space, presses on the
    bar's empty parts the bar's, icons without labels and an item without an
    icon a text button. */
+/* The theme's answer: the toolbar view's superview holds it in the bar. */
+static BOOL
+GnomeThemeProbeToolbarInBar(NSToolbar *toolbar)
+{
+  NSView *superview = [[toolbar _toolbarView] superview];
+
+  return [superview respondsToSelector: @selector(holdsToolbarInBar)]
+    && [superview holdsToolbarInBar];
+}
+
+/* The header bar toolbar setting applies to open windows: turned off, the
+   toolbar moves to a row of its own, and back into the bar when turned on,
+   the window keeping its frame (plugins-themes-Adwaita#30). */
+- (void) checkHeaderBarToolbarLive
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  QuirkProbeHeaderToolbarDelegate *delegate;
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSView *frameView;
+  NSRect frame, rowFrame, barFrame;
+  BOOL inBar, inRow, backInBar;
+  NSString *detail;
+
+  if (QuirkProbeDrawsDecorations () == NO
+    || [[defaults searchList] containsObject: @"QuirkProbeHeaderBarToolbar"] == NO)
+    {
+      [self skip: @"header-bar-toolbar-live" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  delegate = AUTORELEASE ([QuirkProbeHeaderToolbarDelegate new]);
+  window = [self windowWithFrame: NSMakeRect (40, 200, 600, 200) title: @"Probe Toolbar Live"];
+  toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeLiveToolbar"]);
+  [toolbar setDelegate: delegate];
+  [window setToolbar: toolbar];
+  [window orderFront: nil];
+  frameView = [[window contentView] superview];
+  frame = [window frame];
+  inBar = GnomeThemeProbeToolbarInBar (toolbar);
+
+  [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarToolbar"];
+  [defaults setVolatileDomain: [NSDictionary dictionaryWithObject: @"NO" forKey: @"GnomeThemeHeaderBarToolbar"]
+                      forName: @"QuirkProbeHeaderBarToolbar"];
+  [[NSNotificationCenter defaultCenter] postNotificationName: NSUserDefaultsDidChangeNotification object: defaults];
+  rowFrame = [window frame];
+  inRow = GnomeThemeProbeToolbarInBar (toolbar) == NO && [[toolbar _toolbarView] superview] == frameView;
+
+  [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarToolbar"];
+  [defaults setVolatileDomain: [NSDictionary dictionaryWithObject: @"YES" forKey: @"GnomeThemeHeaderBarToolbar"]
+                      forName: @"QuirkProbeHeaderBarToolbar"];
+  [[NSNotificationCenter defaultCenter] postNotificationName: NSUserDefaultsDidChangeNotification object: defaults];
+  barFrame = [window frame];
+  backInBar = GnomeThemeProbeToolbarInBar (toolbar);
+  [window orderOut: nil];
+  [window setToolbar: nil];
+  /* Toolbars don't retain their delegates. */
+  [toolbar setDelegate: nil];
+
+  detail = [NSString stringWithFormat: @"%@; turned off: %@, frame %@; turned on: %@, frame %@ (was %@)",
+    inBar ? @"in the bar" : @"not in the bar", inRow ? @"a row of its own" : @"not moved",
+    NSStringFromRect (rowFrame), backInBar ? @"in the bar" : @"not moved", NSStringFromRect (barFrame),
+    NSStringFromRect (frame)];
+  if (inBar && inRow && backInBar && NSEqualRects (rowFrame, frame) && NSEqualRects (barFrame, frame))
+    {
+      [self pass: @"header-bar-toolbar-live" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-toolbar-live" detail: detail];
+    }
+}
+
 /* The title ink in a header bar window, between the bar's left border
    and its buttons. */
 static QuirkProbeInk
@@ -1635,6 +1711,7 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
                             NSStringFromRect (frame), NSStringFromClass ([hit class])]];
       [window orderOut: nil];
       [window setToolbar: nil];
+      [toolbar setDelegate: nil];
       return;
     }
   down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
@@ -1666,6 +1743,8 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
   [window orderOut: nil];
   [window setToolbar: nil];
+  /* Toolbars don't retain their delegates. */
+  [toolbar setDelegate: nil];
 }
 
 - (void) checkHeaderBarToolbar
@@ -3849,6 +3928,7 @@ QuirkProbeVisibleMenus (void)
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
   [self checkHeaderBarDocumentTitle];
+  [self checkHeaderBarToolbarLive];
       [self checkSegmentedSelection];
       [self checkMenuSeparatorAndShortcut];
       [self finish];
@@ -3888,6 +3968,7 @@ QuirkProbeVisibleMenus (void)
   [self checkHeaderBarToolbar];
   [self checkHeaderBarToolbarItemClick];
   [self checkHeaderBarDocumentTitle];
+  [self checkHeaderBarToolbarLive];
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];
