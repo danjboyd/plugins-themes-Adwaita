@@ -163,6 +163,9 @@ picture-uri-dark=''
 picture-options='none'
 color-shading-type='solid'
 primary-color='#777777'
+
+[org/gnome/mutter]
+attach-modal-dialogs=true
 KEYFILE
 # The other window managers draw no background: a desktop window of
 # the same grey.
@@ -240,6 +243,8 @@ font-name='Cantarell 11'
 button-layout='appmenu:minimize,maximize,close'
 action-double-click-titlebar='toggle-maximize'
 KEYFILE
+# ThemeDemo reads commands from here (the alert check).
+mkfifo "$WORK/commands"
 if [ "$SHADOW" = YES ]; then
   # Empty user defaults (the theme alone asks for the decorations), and a
   # user Library holding the backend, all in the scratch directory.
@@ -251,10 +256,12 @@ if [ "$SHADOW" = YES ]; then
   chmod 600 "$WORK/GNUstep.conf"
   GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf" LD_LIBRARY_PATH="$MUTTER_CHECK_GUI:${LD_LIBRARY_PATH:-}" \
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
-    "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES >"$WORK/demo.log" 2>&1 &
+    "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES \
+    -ThemeDemoCommandFIFO "$WORK/commands" >"$WORK/demo.log" 2>&1 &
 else
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
-    "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO >"$WORK/demo.log" 2>&1 &
+    "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO -ThemeDemoCommandFIFO "$WORK/commands" \
+    >"$WORK/demo.log" 2>&1 &
 fi
 DEMO_PID=$!
 PIDS+=($DEMO_PID)
@@ -574,6 +581,43 @@ if [ "$MARGIN" = YES ]; then
   else
     report FAIL "$NAME-click-through" "12px out: window $IN_BAND, 13px out: window $BEYOND (ThemeDemo is $WINDOW)"
   fi
+fi
+
+# An alert is a modal dialog of the window it interrupts (WM_TRANSIENT_FOR,
+# _NET_WM_STATE_MODAL), as GTK's are, so the window manager can attach it:
+# Mutter centres it on the window (GNOME attaches modal dialogs:
+# attach-modal-dialogs, set above as GNOME Shell's override sets it); the
+# other window managers leave it where GNUstep put it. Escape still closes
+# it: the theme asks for the focus again once it's shown.
+# (plugins-themes-Adwaita#22)
+echo alert >"$WORK/commands"
+sleep 2
+ALERT=""
+for w in $(xdotool search --onlyvisible --class ThemeDemo 2>/dev/null); do
+  if [ "$w" != "$WINDOW" ] && xprop -id "$w" _NET_WM_WINDOW_TYPE 2>/dev/null | grep -q _NET_WM_WINDOW_TYPE_DIALOG; then
+    ALERT="$w"
+  fi
+done
+if [ -n "$ALERT" ]; then
+  TRANSIENT="$(xprop -id "$ALERT" WM_TRANSIENT_FOR 2>/dev/null | sed -n 's/.*# //p')"
+  MODAL="$(xprop -id "$ALERT" _NET_WM_STATE 2>/dev/null | grep -c _NET_WM_STATE_MODAL)"
+  read -r VX VY VW VH <<<"$(visible)"
+  read -r AL AR AT AB <<<"$(e="$(xprop -id "$ALERT" _GTK_FRAME_EXTENTS 2>/dev/null | sed -n 's/.*= //p' | tr -d ,)"; echo "${e:-0 0 0 0}")"
+  # (In a subshell: --shell output sets WINDOW too.)
+  read -r AX AW <<<"$(eval "$(xdotool getwindowgeometry --shell "$ALERT")"; echo "$X $WIDTH")"
+  OFF_CENTRE=$(( (AX + AL + (AW - AL - AR) / 2) - (VX + VW / 2) ))
+fi
+xdotool key Escape
+sleep 1
+CLOSED="$(grep -c '^ThemeDemo-alert-closed' "$WORK/demo.log")"
+DETAIL="alert ${ALERT:-none}: transient for ${TRANSIENT:-nothing}, modal ${MODAL:-0}, ${OFF_CENTRE:-?}px off the window's centre; Escape closed it: $CLOSED"
+# Only Mutter moves an attached dialog; the others keep GNUstep's place.
+CENTRED=YES
+[ "$WM" = mutter ] && [ "${OFF_CENTRE#-}" -gt 3 ] && CENTRED=NO
+if [ -n "$ALERT" ] && [ "$((TRANSIENT))" = "$WINDOW" ] && [ "$MODAL" = 1 ] && [ "$CENTRED" = YES ] && [ "$CLOSED" = 1 ]; then
+  report PASS "$NAME-alert-attached" "$DETAIL"
+else
+  report FAIL "$NAME-alert-attached" "$DETAIL"
 fi
 
 echo "SUMMARY $NAME failed=$FAILED"

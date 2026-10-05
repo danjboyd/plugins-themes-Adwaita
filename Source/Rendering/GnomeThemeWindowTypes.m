@@ -36,6 +36,7 @@
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSDragView.h>
+#import <objc/runtime.h>
 
 @interface NSObject (GnomeThemeWindowTypesPrivate)
 - (NSMenu *) _menu;
@@ -101,20 +102,68 @@ GnomeThemeWindowType(NSWindow *window)
   return NULL;
 }
 
-static void
+/* The window an alert interrupts: the main window, else the key window,
+   else (the app isn't active) its frontmost titled window that isn't a
+   panel. */
+static NSWindow *
+GnomeThemeAlertParent(NSWindow *alert)
+{
+  NSWindow *candidates[2] = { [NSApp mainWindow], [NSApp keyWindow] };
+  NSEnumerator *enumerator;
+  NSWindow *window;
+  int i;
+
+  for (i = 0; i < 2; i++)
+    {
+      if (candidates[i] != nil && candidates[i] != alert && [candidates[i] isVisible])
+        {
+          return candidates[i];
+        }
+    }
+  enumerator = [[NSApp orderedWindows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      if (window != alert && [window isVisible] && ([window styleMask] & NSTitledWindowMask)
+        && [window isKindOfClass: [NSPanel class]] == NO)
+        {
+          return window;
+        }
+    }
+  return nil;
+}
+
+/* Set on a window made a modal dialog of another, until it's shown. */
+static char GnomeThemeAttachedKey;
+
+/* Returns YES when it made the window a modal dialog of another. */
+static BOOL
 GnomeThemeSetWindowType(NSWindow *window)
 {
   const char *type;
 
   if ([window windowNumber] <= 0)
     {
-      return;
+      return NO;
     }
   type = GnomeThemeWindowType (window);
   if (type != NULL)
     {
       GnomeThemeWindowManagerSetWindowType (window, type);
     }
+  /* An alert on its way to the screen is a modal dialog of the window it
+     interrupts, as GTK's are: Mutter attaches it (plugins-themes-Adwaita#22). */
+  if ([window isVisible] == NO && [window isKindOfClass: NSClassFromString (@"GSAlertPanel")])
+    {
+      NSWindow *parent = GnomeThemeAlertParent (window);
+
+      if (parent != nil && GnomeThemeWindowManagerSetModalParent (window, parent))
+        {
+          objc_setAssociatedObject (window, &GnomeThemeAttachedKey, [NSNumber numberWithBool: YES],
+                                    OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+          return YES;
+        }
+    }
+  return NO;
 }
 
 @implementation GnomeTheme (WindowTypes)
@@ -163,6 +212,8 @@ GnomeThemeSetWindowType(NSWindow *window)
   typedef void (*OrderWindowIMP)(id, SEL, NSWindowOrderingMode, NSInteger);
   OrderWindowIMP originalIMP = (OrderWindowIMP)GnomeThemeOriginalMethod (_cmd, self, [NSWindow class]);
 
+  BOOL attached;
+
   if (place != NSWindowOut)
     {
       GnomeThemeSetWindowType ((NSWindow *)self);
@@ -170,6 +221,21 @@ GnomeThemeSetWindowType(NSWindow *window)
   if (originalIMP != NULL)
     {
       originalIMP (self, _cmd, place, otherWindow);
+    }
+  /* Attached here or, for a deferred window, as its X window was made. */
+  attached = place != NSWindowOut && [objc_getAssociatedObject (self, &GnomeThemeAttachedKey) boolValue];
+  objc_setAssociatedObject (self, &GnomeThemeAttachedKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  /* libs-back asks for the focus before the window manager has mapped the
+     window, which fails, and ignores the window manager's first offer of
+     it (WM_TAKE_FOCUS) after mapping: an attached dialog would be left
+     without the keyboard. Ask again once it's on the screen. */
+  if (attached)
+    {
+      [(NSWindow *)self performSelector: @selector(makeKeyWindow)
+                             withObject: nil
+                             afterDelay: 0.2
+                                inModes: [NSArray arrayWithObjects: NSDefaultRunLoopMode,
+                                                  NSModalPanelRunLoopMode, nil]];
     }
 }
 

@@ -87,3 +87,12 @@ BOOL GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known);
    before a tool tip's class is known (libs-gui#965). NO when it can't (not
    X11, or the window manager doesn't list the type in _NET_SUPPORTED). */
 BOOL GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type);
+
+/* Makes `dialog`, not yet shown, a modal dialog of `parent`
+   (WM_TRANSIENT_FOR and _NET_WM_STATE_MODAL, and the parent's
+   _NET_WM_USER_TIME so it gets the focus), as GTK's modal dialogs are:
+   Mutter then attaches it to the parent (no title bar, centred under the
+   parent's top edge, moving with it) and dims the parent. NO when it
+   can't (not X11, or the window manager doesn't list
+   _NET_WM_STATE_MODAL). */
+BOOL GnomeThemeWindowManagerSetModalParent(NSWindow *dialog, NSWindow *parent);

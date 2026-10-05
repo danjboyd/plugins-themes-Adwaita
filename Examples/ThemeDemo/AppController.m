@@ -675,6 +675,20 @@ ThemeDemoPrintLine(NSString *line)
       [self captureDropdownNamed: [parts objectAtIndex: 1]
                           toPath: [parts objectAtIndex: 2]];
     }
+  else if ([command isEqualToString: @"alert"])
+    {
+      /* An alert over the main window, for a test to look at; it logs how
+         it was closed. */
+      NSAlert *alert = AUTORELEASE ([[NSAlert alloc] init]);
+      NSInteger result;
+
+      [alert setMessageText: @"Remove this library?"];
+      [alert setInformativeText: @"Its photos stay on the disk."];
+      [alert addButtonWithTitle: @"Remove"];
+      [alert addButtonWithTitle: @"Cancel"];
+      result = [alert runModal];
+      fprintf (stderr, "ThemeDemo-alert-closed %ld\n", (long)result);
+    }
   else if ([command isEqualToString: @"capture-alert"] && [parts count] >= 2)
     {
       [self captureAlertToPath: [parts objectAtIndex: 1]];

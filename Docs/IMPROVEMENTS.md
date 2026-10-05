@@ -75,6 +75,7 @@ it was found. Compare against the libadwaita reference with
 | A document window's header bar showed GNUstep's "white.png  --  ~/Pictures", pushing the name aside (plugins-themes-Adwaita#31) | when the title is the one `-setTitleWithRepresentedFilename:` made, the bar shows the file's display name and the folder as a tool tip over it (AdwWindowTitle's subtitle); other titles are untouched. QuirkProbe `header-bar-document-title` |
 | The toolbar-in-the-header-bar choice was per app, read only when a toolbar was attached: apps re-attached their toolbars to apply it, and the bar re-read the setting rather than remembering where it had put the toolbar (plugins-themes-Adwaita#30) | `GnomeThemeHeaderBarToolbar` in `NSGlobalDomain` turns it on for every app (a per-app setting still wins; an Info.plist `NO` keeps the app's row); a change moves open windows' toolbars, keeping their frames; the bar tracks where its toolbar is. QuirkProbe `header-bar-toolbar-live` |
 | Apps shipped light and dark icon sets and chose between them (plugins-themes-Adwaita#32) | template images (`-isTemplate`, or a name ending in `Template` or `-symbolic`) are tinted with the text colour around them in buttons, toolbar items and menus: the header bar's (dimmed in the backdrop state), the suggested button's title colour, the disabled colour. QuirkProbe `template-images`, in the light, dark and high contrast palettes |
+| Alerts weren't modal dialogs of the window they interrupt: Mutter didn't attach them (no centring on the window, no dimming it) (plugins-themes-Adwaita#22) | before an alert is shown the theme makes it transient for the app's main window with `_NET_WM_STATE_MODAL` and the window's `_NET_WM_USER_TIME`, as GTK does, and asks for the focus again once it's mapped (libs-back's first request comes too early and it ignores the window manager's offer). With the header bar the alert already had no bar (a border only). `make check-mutter` `alert-attached` |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
@@ -90,8 +91,9 @@ spacing) are in the Fixed table. Still different from GNOME:
   than most GNUstep layouts; that spacing belongs to the app.
 - **Text width.** ([#23](https://github.com/danjboyd/plugins-themes-Adwaita/issues/23)) At the same font and size, GNUstep's text runs about 5%
   wider than GTK's, so a paragraph can wrap a line earlier (seen in alerts).
-- **Alerts keep a title bar.** ([#22](https://github.com/danjboyd/plugins-themes-Adwaita/issues/22)) `AdwAlertDialog` has none; GNUstep's panel
-  has the window manager's.
+- **Alerts keep a title bar without the header bar.** `AdwAlertDialog` has
+  none; with the window manager's decorations GNUstep's alert has the
+  window manager's (Mutter 48 keeps a frame on attached dialogs too).
 - **Tool tips are opaque.** ([#21](https://github.com/danjboyd/plugins-themes-Adwaita/issues/21)) libadwaita's are translucent (80% black). The
   theme paints the colour that makes over the window background; with the
   libs-back patch and a compositor they are rounded, still opaque.

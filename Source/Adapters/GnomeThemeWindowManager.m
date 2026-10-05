@@ -391,3 +391,72 @@ GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type)
     }
   return YES;
 }
+
+BOOL
+GnomeThemeWindowManagerSetModalParent(NSWindow *dialog, NSWindow *parent)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (dialog) : None;
+  Window xparent = display != NULL ? GnomeThemeX11Window (parent) : None;
+  Atom state, modal, actualType;
+  int format;
+  unsigned long count, remaining, i;
+  unsigned char *data = NULL;
+  Atom atoms[32];
+  unsigned long n = 0;
+  BOOL found = NO;
+
+  if (xwindow == None || xparent == None || GnomeThemeX11Supports (display, "_NET_WM_STATE_MODAL") == NO)
+    {
+      return NO;
+    }
+  XSetTransientForHint (display, xwindow, xparent);
+  /* A window that isn't mapped sets its own _NET_WM_STATE; the window
+     manager reads it when it maps the window. */
+  state = XInternAtom (display, "_NET_WM_STATE", False);
+  modal = XInternAtom (display, "_NET_WM_STATE_MODAL", False);
+  if (XGetWindowProperty (display, xwindow, state, 0, 31, False, XA_ATOM, &actualType, &format, &count,
+                          &remaining, &data) == Success && data != NULL)
+    {
+      for (i = 0; i < count && n < 31; i++)
+        {
+          atoms[n++] = ((Atom *)data)[i];
+          found = found || ((Atom *)data)[i] == modal;
+        }
+      XFree (data);
+    }
+  if (found == NO)
+    {
+      long values[32];
+
+      atoms[n++] = modal;
+      for (i = 0; i < n; i++)
+        {
+          values[i] = (long)atoms[i];
+        }
+      XChangeProperty (display, xwindow, state, XA_ATOM, 32, PropModeReplace, (unsigned char *)values, n);
+    }
+  /* Shown for the user's last action in the parent, as GTK stamps a
+     dialog with the time of the event that opened it: without a time
+     Mutter keeps the focus on the parent (focus-stealing prevention), and
+     the alert's keys (Return, Escape) go nowhere. */
+  {
+    Atom userTime = XInternAtom (display, "_NET_WM_USER_TIME", False);
+
+    data = NULL;
+    if (XGetWindowProperty (display, xparent, userTime, 0, 1, False, XA_CARDINAL, &actualType, &format, &count,
+                            &remaining, &data) == Success && data != NULL)
+      {
+        if (count == 1)
+          {
+            long time = (long)((unsigned long *)data)[0];
+
+            XChangeProperty (display, xwindow, userTime, XA_CARDINAL, 32, PropModeReplace,
+                             (unsigned char *)&time, 1);
+          }
+        XFree (data);
+      }
+  }
+  XFlush (display);
+  return YES;
+}
