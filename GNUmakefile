@@ -59,6 +59,7 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemePrimaryMenu.m \
 	Source/Rendering/GnomeThemeHeaderBar.m \
 	Source/Adapters/GnomeThemeWindowManager.m \
+	Source/Adapters/GnomeThemeFileChooser.m \
 	Source/Rendering/GnomeThemeMenusAndData.m \
 	Source/Rendering/GnomeThemeWindowTypes.m \
 	Source/Rendering/GnomeThemeSymbolicImages.m \
@@ -70,7 +71,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-file-chooser check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -89,6 +90,11 @@ check-quirks:
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# Open and save panels as GNOME's file chooser, against a stand-in portal
+# on a private session bus, and GNUstep's panels without one.
+check-file-chooser:
+	bash Tests/Scripts/run-file-chooser-check.sh
 
 # The header bar with Mutter as the window manager (GNOME Shell on a private
 # Xvfb display; see the script).

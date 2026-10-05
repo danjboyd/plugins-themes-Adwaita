@@ -174,6 +174,19 @@ a second later. `GnomeThemeOverlayScrollbars NO` (for an app, or in
 `NSGlobalDomain`) keeps classic scrollbars, beside the content and shown
 while it overflows.
 
+Open and save panels are GNOME's file chooser, asked for through the XDG
+desktop portal (`org.freedesktop.portal.FileChooser`) and attached to the
+app's window, as a GTK or Flatpak app's are. An app needs no change, and
+needs no library such as libs-OpenSave. A panel stays GNUstep's own when it
+has an accessory view (other than NSDocument's "File Type" pop-up, whose
+types become the chooser's filters), when its delegate filters or
+validates names, or when there is no portal.
+`GnomeThemeNativeFileDialogs NO` (for an app, or in `NSGlobalDomain`) keeps
+GNUstep's panels. The chooser picks files or folders, not both: an open
+panel that allows both (GNUstep's default) picks files. Like GNUstep's
+panels, sheets block until the chooser closes; meanwhile the app redraws
+but takes no input.
+
 High contrast follows GNOME's accessibility setting
 (`org.gnome.desktop.a11y.interface high-contrast`), as libadwaita does: the
 light or dark palette with stronger borders and separators. GNOME 3's

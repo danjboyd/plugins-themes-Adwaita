@@ -96,3 +96,8 @@ BOOL GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type);
    can't (not X11, or the window manager doesn't list
    _NET_WM_STATE_MODAL). */
 BOOL GnomeThemeWindowManagerSetModalParent(NSWindow *dialog, NSWindow *parent);
+
+/* The window's handle for an XDG desktop portal's parent_window
+   ("x11:<id>"), with which the portal's dialog is made a modal dialog of
+   it; nil when there is none (not X11, or not on screen yet). */
+NSString *GnomeThemeWindowManagerPortalHandle(NSWindow *window);

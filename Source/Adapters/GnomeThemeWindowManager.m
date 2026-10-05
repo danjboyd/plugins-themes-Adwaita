@@ -460,3 +460,20 @@ GnomeThemeWindowManagerSetModalParent(NSWindow *dialog, NSWindow *parent)
   XFlush (display);
   return YES;
 }
+
+NSString *
+GnomeThemeWindowManagerPortalHandle(NSWindow *window)
+{
+  Window xwindow;
+
+  if (window == nil || GnomeThemeX11Display () == NULL)
+    {
+      return nil;
+    }
+  xwindow = GnomeThemeX11Window (window);
+  if (xwindow == None)
+    {
+      return nil;
+    }
+  return [NSString stringWithFormat: @"x11:%lx", (unsigned long)xwindow];
+}

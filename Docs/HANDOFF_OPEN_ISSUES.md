@@ -24,6 +24,13 @@ code pointers; read it before starting.
   for all apps, applied live) and #32 (template images tinted). #34 (a
   toolbar hide/show crash) reproduces with GNUstep's own theme too: not
   the theme's; see the issue. #14 has its first results (`make check-wms`).
+- #40 (open and save panels as GNOME's file chooser, through the portal;
+  replaces libs-OpenSave in the apps) committed and installed 2026-10-05,
+  not pushed:
+  `Source/Adapters/GnomeThemeFileChooser.m`, checked by
+  `make check-file-chooser` (a stand-in portal on a private bus). Still to
+  confirm on the desktop that Mutter attaches the chooser to its X11
+  parent under Wayland, and to try an NSDocument app's Save As.
 - The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
   `86fefbe`. Nothing in the theme binary has changed since.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
@@ -110,6 +117,7 @@ asked for the push.
 . /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
 make                      # the theme
 make check-quirks         # QuirkProbe, 7 configurations, private Xvfb
+make check-file-chooser   # open/save panels against a stand-in portal
 make check-mutter         # GNOME Shell (X11) on a private Xvfb, stock libs
 make check-mutter-shadow  # the same against the patched libs-gui/libs-back
 ```

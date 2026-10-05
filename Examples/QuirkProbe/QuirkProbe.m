@@ -4384,6 +4384,11 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
 
 - (void) checkFirstWindows: (NSTimer *)timer
 {
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"file-chooser"])
+    {
+      [self checkFileChooser];
+      return;
+    }
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
      high contrast runs (the other checks assume the light palette). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])

@@ -60,3 +60,8 @@
   NSUInteger _skipped;
 }
 @end
+
+/* -ProbeOnly file-chooser (QuirkProbeFileChooser.m). */
+@interface QuirkProbe (FileChooser)
+- (void) checkFileChooser;
+@end
