@@ -4247,6 +4247,34 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
                                                                fromView: scrollView]];
   [window orderOut: nil];
 
+  /* Freed while its scroller is shown: its fade timer must stop with it
+     (it messaged the freed views; plugins-themes-Adwaita#38). Run with
+     NSZombieEnabled to see such messages. */
+  {
+    NSAutoreleasePool *pool = [NSAutoreleasePool new];
+    NSWindow *gone = [[NSWindow alloc] initWithContentRect: NSMakeRect (60, 200, 300, 200)
+                                                 styleMask: NSTitledWindowMask
+                                                   backing: NSBackingStoreBuffered
+                                                     defer: NO];
+    NSScrollView *goneView = [[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 280, 180)];
+    NSView *goneDocument = [[NSView alloc] initWithFrame: NSMakeRect (0, 0, 280, 1000)];
+
+    [goneView setHasVerticalScroller: YES];
+    [goneView setDocumentView: goneDocument];
+    [[gone contentView] addSubview: goneView];
+    [gone orderFront: nil];
+    [gone display];
+    [goneDocument scrollPoint: NSMakePoint (0, 300)];
+    [gone orderOut: nil];
+    [goneView removeFromSuperview];
+    RELEASE (goneDocument);
+    RELEASE (goneView);
+    [gone setReleasedWhenClosed: NO];
+    RELEASE (gone);
+    [pool release];
+    [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 1.6]];
+  }
+
   detail = [NSString stringWithFormat: @"clip %@ %@ the scroller %@; a press on it at rest: %@, shown: %@, faded: %@; "
     @"slider ink %lu at rest, %lu shown",
     NSStringFromRect (clip), under ? @"runs under" : @"stops short of", NSStringFromRect (strip),

@@ -89,6 +89,28 @@ GnomeThemeUsesOverlayScrollers(void)
 }
 - (void) reveal;
 - (void) redisplay;
+- (void) tick: (NSTimer *)timer;
+- (void) stopTimer;
+@end
+
+/* The fade timer's target. A timer retains its target, so the state
+   can't be: it would outlive its scroll view (which holds it) and tick
+   on freed views (plugins-themes-Adwaita#38). The state stops the timer
+   and lets go of this when it goes. */
+@interface GnomeThemeOverlayTicker : NSObject
+{
+@public
+  GnomeThemeOverlayState *state;        /* Not retained. */
+}
+@end
+
+@implementation GnomeThemeOverlayTicker
+
+- (void) tick: (NSTimer *)timer
+{
+  [state tick: timer];
+}
+
 @end
 
 static GnomeThemeOverlayState *
@@ -109,10 +131,21 @@ GnomeThemeOverlayStateFor(NSScrollView *scrollView, BOOL create)
 
 - (void) dealloc
 {
-  [timer invalidate];
-  RELEASE (timer);
+  [self stopTimer];
   RELEASE (hideAt);
   [super dealloc];
+}
+
+- (void) stopTimer
+{
+  if (timer != nil)
+    {
+      GnomeThemeOverlayTicker *ticker = [timer userInfo];
+
+      ticker->state = nil;
+      [timer invalidate];
+      DESTROY (timer);
+    }
 }
 
 /* The scrollers' strips, redrawn from the scroll view: they aren't
@@ -135,10 +168,13 @@ GnomeThemeOverlayStateFor(NSScrollView *scrollView, BOOL create)
 {
   if (timer == nil)
     {
+      GnomeThemeOverlayTicker *ticker = AUTORELEASE ([GnomeThemeOverlayTicker new]);
+
+      ticker->state = self;
       timer = RETAIN ([NSTimer timerWithTimeInterval: GnomeThemeOverlayStep
-                                              target: self
+                                              target: ticker
                                             selector: @selector(tick:)
-                                            userInfo: nil
+                                            userInfo: ticker
                                              repeats: YES]);
       [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSDefaultRunLoopMode];
       [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSEventTrackingRunLoopMode];
@@ -176,8 +212,7 @@ GnomeThemeOverlayStateFor(NSScrollView *scrollView, BOOL create)
   [self redisplay];
   if (alpha <= 0.0)
     {
-      [timer invalidate];
-      DESTROY (timer);
+      [self stopTimer];
     }
 }
 
@@ -344,6 +379,27 @@ GnomeThemeUpdateOverlayTracking(NSScrollView *scrollView, GnomeThemeOverlayState
     }
   state->adjusting = NO;
   GnomeThemeUpdateOverlayTracking (scrollView, state);
+}
+
+/* Freed: its overlay state stops its fade timer and forgets it, even
+   where the state itself outlives it (plugins-themes-Adwaita#38). */
+- (void) _overrideNSScrollViewMethod_dealloc
+{
+  typedef void (*DeallocIMP)(id, SEL);
+  DeallocIMP originalIMP = (DeallocIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
+  GnomeThemeOverlayState *state = objc_getAssociatedObject (self, &GnomeThemeOverlayStateKey);
+
+  if (state != nil)
+    {
+      [state stopTimer];
+      state->scrollView = nil;
+      state->hovered = nil;
+      objc_setAssociatedObject (self, &GnomeThemeOverlayStateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
 }
 
 - (void) _overrideNSScrollViewMethod_viewDidMoveToWindow
