@@ -202,7 +202,9 @@ item 4.
   shadow (box-shadow `0 1px 5px 1px` at 9% and `0 2px 14px 3px` at 5%
   black) and 15px corners. Mutter draws no shadow for a 32-bit window (it
   can't tell its shape), so, as GTK 4 does, the menu draws its own in a
-  margin. A borderless window marked with `NSUtilityWindowMask` (a theme
+  margin, computed (as a browser does) from the distance to the rounded
+  outline, so it follows the corners. A borderless window marked with
+  `NSUtilityWindowMask` (a theme
   marks its menus' windows; a borderless window has no other use for the
   bit) gets a popover's margin (14, 14, 12, 16) when `GSBackPopoverShadows`
   is YES, on a window's terms, and `GSBackPopoverCornerRadius` rounds it;

@@ -1,8 +1,8 @@
 diff --git a/ChangeLog b/ChangeLog
-index 2b1b779..d055971 100644
+index 2b1b779..8cee13c 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,129 @@
+@@ -1,3 +1,130 @@
 +2026-10-05 Daniel Boyd <danieljboyd@icloud.com>
 +
 +	Popover shadows: menus get libadwaita's popover shadow round their
@@ -17,9 +17,10 @@ index 2b1b779..d055971 100644
 +	compositing manager shows transparency.  GSBackPopoverCornerRadius
 +	rounds its corners.
 +	(-window::::, -_updateShadowSizeOf:): Use the window's margin.
-+	* Source/cairo/XGCairoModernSurface.m (box_shadow_cover,
++	* Source/cairo/XGCairoModernSurface.m (box_shadow_layer,
 +	popover_shadow_alpha): New.  libadwaita's popover box-shadow, two
-+	blurred layers.
++	blurred layers, each from the distance to the popover's rounded
++	outline (grown by its spread), so it follows the rounded corners.
 +	(shadow_template, create_shadow): Take the kind of shadow; keep a
 +	template for each.
 +	* Headers/x11/XGServerWindow.h: Add shadow_popover to
@@ -240,10 +241,10 @@ index adca517..a8257dd 100644
  - (void) _initializeCursorForXWindow: (Window) win;
  - (void) _destroyServerWindows;
 diff --git a/Source/cairo/XGCairoModernSurface.m b/Source/cairo/XGCairoModernSurface.m
-index a722168..8e35235 100644
+index a722168..0805390 100644
 --- a/Source/cairo/XGCairoModernSurface.m
 +++ b/Source/cairo/XGCairoModernSurface.m
-@@ -27,9 +27,270 @@
+@@ -27,9 +27,278 @@
  #include "x11/XGServerWindow.h"
  #include "cairo/XGCairoModernSurface.h"
  #include <cairo-xlib.h>
@@ -309,23 +310,31 @@ index a722168..8e35235 100644
 +}
 +
 +/*
-+ * One layer of a CSS box-shadow along one axis: how much of a box from a to
-+ * b, grown by `spread` and blurred by `blur` (a Gaussian with half that as
-+ * its deviation), covers the point at p.
++ * One layer of a CSS box-shadow round a rounded box: the box grown by
++ * `spread` (its corner radius too) and moved down by `offset`, blurred by
++ * `blur` (a Gaussian with half that as its deviation), as seen at (px, py).
++ * Computed from the distance to the grown box's rounded outline, so it
++ * follows the corners as a browser's does.
 + */
 +static double
-+box_shadow_cover(double p, double a, double b, double spread, double blur)
++box_shadow_layer(double px, double py, double x0, double x1, double y0,
++		 double y1, double radius, double offset, double spread,
++		 double blur)
 +{
-+  double sigma = blur / 2.0 * M_SQRT2;
++  double r = radius + spread;
++  double left = x0 - spread, right = x1 + spread;
++  double top = y0 - spread + offset, bottom = y1 + spread + offset;
++  double qx = MAX(MAX(left + r - px, px - (right - r)), 0.0);
++  double qy = MAX(MAX(top + r - py, py - (bottom - r)), 0.0);
++  double d = sqrt(qx * qx + qy * qy) - r;
 +
-+  return 0.5 * (erf((p - a + spread) / sigma) - erf((p - b - spread) / sigma));
++  return 0.5 * erfc(d / (blur / 2.0 * M_SQRT2));
 +}
 +
 +/*
 + * A popover's shadow (libadwaita's popover contents): box-shadow
 + * 0 1px 5px 1px black at 0.09, and 0 2px 14px 3px black at 0.05, at
-+ * scale 1. Separable for a box; the rounded corners only change it inside
-+ * the curve, which the popover covers. 0 inside the rounded visible part.
++ * scale 1, round its rounded corners. 0 inside the rounded visible part.
 + */
 +static double
 +popover_shadow_alpha(double px, double py, double x0, double x1, double y0,
@@ -338,10 +347,10 @@ index a722168..8e35235 100644
 +    {
 +      return 0.0;
 +    }
-+  return 0.09 * box_shadow_cover(px, x0, x1, 1 * scale, 5 * scale)
-+    * box_shadow_cover(py, y0 + 1 * scale, y1 + 1 * scale, 1 * scale, 5 * scale)
-+    + 0.05 * box_shadow_cover(px, x0, x1, 3 * scale, 14 * scale)
-+    * box_shadow_cover(py, y0 + 2 * scale, y1 + 2 * scale, 3 * scale, 14 * scale);
++  return 0.09 * box_shadow_layer(px, py, x0, x1, y0, y1, radius,
++				 1 * scale, 1 * scale, 5 * scale)
++    + 0.05 * box_shadow_layer(px, py, x0, x1, y0, y1, radius,
++			      2 * scale, 3 * scale, 14 * scale);
 +}
 +
 +static inline uint32_t
@@ -514,7 +523,7 @@ index a722168..8e35235 100644
  @implementation XGCairoModernSurface
  
  - (id) initWithDevice: (void *)device
-@@ -83,6 +344,17 @@
+@@ -83,6 +352,17 @@
  					      CAIRO_CONTENT_COLOR_ALPHA,
  					      GSWINDEVICE->xframe.size.width,
  					      GSWINDEVICE->xframe.size.height);
@@ -532,7 +541,7 @@ index a722168..8e35235 100644
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
  	(int) cairo_surface_get_type(_windowSurface),
-@@ -101,6 +373,10 @@
+@@ -101,6 +381,10 @@
      {
        cairo_surface_destroy(_windowSurface);
      }
@@ -543,7 +552,7 @@ index a722168..8e35235 100644
    [super dealloc];
  }
  
-@@ -127,9 +403,65 @@
+@@ -127,9 +411,65 @@
    // FIXME: should round
    cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
    cairo_clip(windowCtx);
