@@ -13,7 +13,12 @@ code pointers; read it before starting.
 - #15 is done (2026-10-05) in the theme and the libs-back patch, not yet
   pushed or installed: the theme types windows as GTK does, and the patch
   (item 5 of `Docs/PROPOSAL_LIBS_BACK_CSD.md`) does most of it itself.
-- Also done on 2026-10-05, not yet pushed or installed: #33 (toolbar item
+- Later on 2026-10-05, committed but not yet pushed or installed: #22
+  (alerts attached to their window), #21 (translucent tool tips), #19
+  (15px menus with libadwaita's popover shadow, a new part of the
+  libs-back patch), #18 (high contrast as current GNOME) and #17 (overlay
+  scrollbars).
+- Also done on 2026-10-05 (pushed and installed): #33 (toolbar item
   views that act on the release, in the header bar), #31 (a document
   window's title is its file's name), #30 (the toolbar-in-the-bar setting
   for all apps, applied live) and #32 (template images tinted). #34 (a
