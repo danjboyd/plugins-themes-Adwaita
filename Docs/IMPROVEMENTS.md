@@ -70,6 +70,7 @@ it was found. Compare against the libadwaita reference with
 | A click on a pop-up button opened its menu and closed it again at once, keeping the current item (from the second click on: the first time, making the menu's window let the release come before the tracking) | pop-up menus open on the press and get the menu bar's treatment: the opening click's release is ignored (`-doesProcessEventsForPopUpMenu` in master, dropped by the theme in 0.32), Escape or a press outside closes them; QuirkProbe `popup-click-stays-open` |
 | With libs-gui master (gui ff49ac8) alerts were right-aligned, table header titles sat centred (about 110pt in) and menu shortcuts were centred (30pt from the edge): master (3237efda8) numbers `NSTextAlignment` as AppKit does, swapping centre and right, so the constants of a theme built against 0.32 meant the other alignment | `GnomeThemeCenterTextAlignment()` and `GnomeThemeRightTextAlignment()` take the values from `NSParagraphStyle`'s class version (4 since the change); QuirkProbe passes against 0.32 and master, its alert check measuring the heading's ink |
 | Menus drew rounded corners on an opaque window, black under a compositor | square, with the border, unless the window has an alpha channel and a compositing manager runs; then menus (10pt) and tool tips (libadwaita's 9pt, with its light outline) are rounded. The alpha channel needs the libs-back patch (`GSBackBorderlessWindowAlpha`) |
+| Window managers saw context and pop-up menus as dialogs (Mutter focused them, drawing their window unfocused), tool tips as dialogs (libs-gui#965), alerts as normal windows and menu bar menus as torn-off menus (plugins-themes-Adwaita#15) | the theme types windows as GTK does (`GnomeThemeWindowTypes.m`): `_TOOLTIP`, `_DROPDOWN_MENU` for an in-window menu bar's menus, `_POPUP_MENU` for other menus, `_DND`, and `_DIALOG` for alerts and open and save panels. It reads the type first and writes only a different one, so with the libs-back patch (item 5, which types all but the menu bar's menus itself) it mostly does nothing. QuirkProbe `window-types`; `make check-mutter` `menu-type` |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
@@ -197,7 +198,9 @@ installed 0.32.0, using the default theme.
 7. **libs-gui: `_initBackendWindow` sets the level before the window is
    registered.** Filed as
    [gnustep/libs-gui#965](https://github.com/gnustep/libs-gui/issues/965). The backend can't identify the tool tip panel, so it types
-   it `_NET_WM_WINDOW_TYPE_DIALOG` instead of `_TOOLTIP`.
+   it `_NET_WM_WINDOW_TYPE_DIALOG` instead of `_TOOLTIP`. The theme sets
+   `_TOOLTIP` itself, and the libs-back patch types the window again just
+   before mapping it (`Docs/PROPOSAL_LIBS_BACK_CSD.md`, item 5).
 
 Found on 2026-09-25 while building the header bar; already fixed on master.
 

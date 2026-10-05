@@ -354,3 +354,39 @@ GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known)
     }
   return hasVertical && hasHorizontal;
 }
+
+BOOL
+GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
+  Atom property, wanted, actualType;
+  int format;
+  unsigned long count, remaining;
+  unsigned char *data = NULL;
+  BOOL same = NO;
+
+  if (xwindow == None || GnomeThemeX11Supports (display, type) == NO)
+    {
+      return NO;
+    }
+  property = XInternAtom (display, "_NET_WM_WINDOW_TYPE", False);
+  wanted = XInternAtom (display, type, False);
+  /* Read first: a libs-back that types windows as GTK does has set it
+     already, and the theme then leaves it alone. */
+  if (XGetWindowProperty (display, xwindow, property, 0, 1, False, XA_ATOM,
+                          &actualType, &format, &count, &remaining, &data) == Success && data != NULL)
+    {
+      same = (count == 1 && ((Atom *)data)[0] == wanted);
+      XFree (data);
+    }
+  if (same == NO)
+    {
+      long value = (long)wanted;
+
+      XChangeProperty (display, xwindow, property, XA_ATOM, 32, PropModeReplace,
+                       (unsigned char *)&value, 1);
+      XFlush (display);
+    }
+  return YES;
+}

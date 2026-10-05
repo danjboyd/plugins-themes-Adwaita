@@ -80,3 +80,10 @@ BOOL GnomeThemeWindowManagerHasAlpha(NSWindow *window);
 /* Whether the window manager has the window maximised; NO in `known` when
    it can't tell. */
 BOOL GnomeThemeWindowManagerIsMaximized(NSWindow *window, BOOL *known);
+
+/* Gives the window the EWMH window type `type` (such as
+   "_NET_WM_WINDOW_TYPE_TOOLTIP") unless it has it already, as GTK types its
+   menus and tool tips. libs-back types windows from their level alone,
+   before a tool tip's class is known (libs-gui#965). NO when it can't (not
+   X11, or the window manager doesn't list the type in _NET_SUPPORTED). */
+BOOL GnomeThemeWindowManagerSetWindowType(NSWindow *window, const char *type);

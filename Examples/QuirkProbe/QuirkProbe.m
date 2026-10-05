@@ -537,6 +537,11 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+/* The theme's, from Source/Rendering/GnomeThemeWindowTypes.m. */
+@interface NSObject (QuirkProbeGnomeTheme)
++ (NSString *) windowTypeForWindow: (NSWindow *)window;
+@end
+
 @interface NSToolbar (QuirkProbePrivate)
 - (NSView *) _toolbarView;
 @end
@@ -3544,6 +3549,91 @@ QuirkProbeVisibleMenus (void)
   [self checkHiddenWindow: [dragView window] ident: @"drag-image-hide-keeps-size"];
 }
 
+/* The window types the theme gives windows, as GTK's
+   (_NET_WM_WINDOW_TYPE, plugins-themes-Adwaita#15). The probe's display
+   has no window manager to set them for, so this asks the theme what it
+   would set; run-mutter-check.sh reads one off a window. */
+- (void) checkWindowTypes
+{
+  Class theme = NSClassFromString (@"GnomeTheme");
+  Class panelClass = NSClassFromString (@"GSTTPanel");
+  NSPopUpButton *popUp;
+  NSWindow *toolTip, *alert;
+  NSMenu *barMenu = nil;
+  NSEnumerator *enumerator;
+  NSMenuItem *item;
+  NSString *wantedBarMenu, *detail;
+  NSString *types[6];
+  NSString *wanted[6];
+  BOOL ok = YES;
+  int i;
+
+  if ([theme respondsToSelector: @selector(windowTypeForWindow:)] == NO || panelClass == Nil)
+    {
+      [self skip: @"window-types" detail: @"no +[GnomeTheme windowTypeForWindow:] or GSTTPanel"];
+      return;
+    }
+  toolTip = [[panelClass alloc] initWithContentRect: NSMakeRect (0, 0, 100, 25)
+                                          styleMask: NSBorderlessWindowMask
+                                            backing: NSBackingStoreRetained
+                                              defer: YES];
+  popUp = [[NSPopUpButton alloc] initWithFrame: NSMakeRect (0, 0, 120, 30) pullsDown: NO];
+  [popUp addItemWithTitle: @"One"];
+  alert = NSGetAlertPanel (@"Title", @"Message", @"OK", nil, nil);
+  enumerator = [[[NSApp mainMenu] itemArray] objectEnumerator];
+  while (barMenu == nil && (item = [enumerator nextObject]) != nil)
+    {
+      barMenu = [item submenu];
+    }
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle)
+    {
+      wantedBarMenu = @"(libs-back's)";
+    }
+  else if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    {
+      wantedBarMenu = @"_NET_WM_WINDOW_TYPE_POPUP_MENU";
+    }
+  else
+    {
+      wantedBarMenu = @"_NET_WM_WINDOW_TYPE_DROPDOWN_MENU";
+    }
+
+  types[0] = [theme windowTypeForWindow: toolTip];
+  wanted[0] = @"_NET_WM_WINDOW_TYPE_TOOLTIP";
+  types[1] = [theme windowTypeForWindow: [[[popUp menu] menuRepresentation] window]];
+  wanted[1] = @"_NET_WM_WINDOW_TYPE_POPUP_MENU";
+  types[2] = [theme windowTypeForWindow: [[barMenu menuRepresentation] window]];
+  wanted[2] = wantedBarMenu;
+  types[3] = [theme windowTypeForWindow: alert];
+  wanted[3] = @"_NET_WM_WINDOW_TYPE_DIALOG";
+  types[4] = [theme windowTypeForWindow: [[GSDragView sharedDragView] window]];
+  wanted[4] = @"_NET_WM_WINDOW_TYPE_DND";
+  types[5] = [theme windowTypeForWindow: _controlsWindow];
+  wanted[5] = @"(libs-back's)";
+  for (i = 0; i < 6; i++)
+    {
+      if (types[i] == nil)
+        {
+          types[i] = @"(libs-back's)";
+        }
+      ok = ok && [types[i] isEqualToString: wanted[i]];
+    }
+  detail = [NSString stringWithFormat: @"tool tip %@, pop-up button's menu %@, menu bar's menu %@ (want %@), "
+    @"alert %@, drag image %@, window %@",
+    types[0], types[1], types[2], wanted[2], types[3], types[4], types[5]];
+  if (ok)
+    {
+      [self pass: @"window-types" detail: detail];
+    }
+  else
+    {
+      [self fail: @"window-types" detail: detail];
+    }
+  NSReleaseAlertPanel (alert);
+  RELEASE (popUp);
+  RELEASE (toolTip);
+}
+
 - (void) checkFirstWindows: (NSTimer *)timer
 {
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
@@ -3592,6 +3682,7 @@ QuirkProbeVisibleMenus (void)
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];
+  [self checkWindowTypes];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

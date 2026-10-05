@@ -15,6 +15,10 @@ private Xvfb against them and checks the shadow, corners, maximise and
 restore, tiling, moves, the resize band and click-through. Each item below
 says what its patch does where it differs from what was first proposed.
 
+**Updated 2026-10-05: item 5 (window types) added** to
+`Docs/upstream-patches/libs-back-csd.diff`, with its own ChangeLog entry and
+test (`Tests/x11/windowtype.m`, 4 checks; 3 fail without the patch).
+
 ### Background
 
 With `GSX11HandlesWindowDecorations NO`, GNUstep draws the title bar itself
@@ -238,6 +242,36 @@ theme, unless the user set `GSBackHandlesWindowDecorations` or
 `GSX11HandlesWindowDecorations`. `-[NSApplication _init]` calls it just
 before creating the display server. The theme path lookup moves out of
 `+loadThemeNamed:` into `GSThemePathForFileName()` for it.
+
+### 5. Window types (`_NET_WM_WINDOW_TYPE`)
+
+`-setwindowlevel::` types a window from its level alone. A context menu or
+a pop-up button's menu (`NSPopUpMenuWindowLevel`) becomes `_DIALOG` (the
+`_POPUP_MENU` line is there, commented out), so Mutter focuses it and the
+window it belongs to is drawn unfocused while it's open. A modal panel is
+`_NORMAL`. A tool tip is meant to be `_TOOLTIP`, but libs-gui sets its level
+before the window is registered, so `GSWindowWithNumber()` finds nothing and
+it becomes `_DIALOG` too (libs-gui#965).
+
+GTK types its menus `_DROPDOWN_MENU` (from a menu bar), `_POPUP_MENU`
+(context menus, submenus) or `_COMBO`, its tool tips `_TOOLTIP`, its drag
+icons `_DND` and its dialogs `_DIALOG`. Mutter neither focuses nor animates
+the menu and tool tip types, stacks them above other windows and keeps their
+parent drawn as focused (`src/core/window.c`, 48.7); it accepts them on
+managed windows, which is what GNUstep's menus are. Compositors such as
+picom key their shadow, opacity and fade rules on the type.
+
+**Patch:** `-_setWindowType:`, split out of `-setwindowlevel::`, which calls
+it. At the pop-up menu level a `GSTTPanel` is `_TOOLTIP`, an `NSMenuPanel`
+`_POPUP_MENU` and the drag window (`XGRawWindow`) `_DND`; anything else there
+stays `_DIALOG`. A modal panel is `_DIALOG`. Other levels keep their types.
+`-orderwindow:::` calls it again just before mapping a window at the pop-up
+menu level, when its class is known, which fixes the tool tip.
+
+Not in the patch: a menu bar's menus stay `_MENU` (the type for torn-off
+menus), because in GNUstep's own menu style (`NSNextStepInterfaceStyle`)
+submenus are windows that stay open. A theme with an in-window menu bar can
+set `_DROPDOWN_MENU` after the level, as the Adwaita theme does.
 
 ### Wayland
 

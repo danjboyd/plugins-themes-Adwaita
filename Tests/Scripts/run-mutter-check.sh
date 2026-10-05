@@ -36,7 +36,8 @@
 # Mutter maximise it and a second one restore it to the same frame; a drag
 # on the bar, handed to Mutter, takes the window past the screen's left
 # edge (GNUstep's own move loop can't); a drag on the right edge, handed
-# to Mutter, widens it.
+# to Mutter, widens it. A menu bar's menu is a _DROPDOWN_MENU, and the
+# window stays the active one while it's open.
 #
 # --shadow runs against a libs-gui and libs-back that draw GNOME's window
 # shadow (phase 2b in Docs/HANDOFF_HEADER_BAR.md): MUTTER_CHECK_GUI is the
@@ -290,6 +291,36 @@ if [ "$SHADOW" = YES ]; then
   else
     report FAIL "$NAME-shadow-corners" "$DETAIL"
   fi
+fi
+
+# A menu bar's menu is typed as GtkMenuBar's (_DROPDOWN_MENU, from the
+# theme or from libs-back), so Mutter doesn't focus it: the window stays
+# the active one while it's open. Opened by a press held down: with
+# libs-gui 0.32 a click from xdotool, released at once, closes it again.
+# The app's first press (here, on an empty spot) activates it.
+read -r VX VY VW VH <<<"$(visible)"
+xdotool mousemove $((VX + VW - 40)) $((VY + VH - 40)) click 1
+sleep 0.5
+xdotool mousemove $((VX + 30)) $((VY + 64)) mousedown 1
+sleep 1
+MENU=""
+for w in $(xwininfo -root -children | awk '/^ +0x/ {print $1}'); do
+  if [ "$((w))" != "$WINDOW" ] && xwininfo -id "$w" | grep -q 'IsViewable' \
+    && xprop -id "$w" WM_CLASS 2>/dev/null | grep -q ThemeDemo; then
+    MENU="$w"
+  fi
+done
+TYPE="$( [ -n "$MENU" ] && xprop -id "$MENU" _NET_WM_WINDOW_TYPE | sed -n 's/.*= //p')"
+ACTIVE="$(xprop -root _NET_ACTIVE_WINDOW | sed -n 's/.*# //p')"
+xdotool mouseup 1
+sleep 0.5
+xdotool key Escape
+sleep 0.8
+DETAIL="menu window ${MENU:-none}: ${TYPE:-no type}; active window ${ACTIVE:-none}"
+if [ "$TYPE" = _NET_WM_WINDOW_TYPE_DROPDOWN_MENU ] && [ "$((ACTIVE))" = "$WINDOW" ]; then
+  report PASS "$NAME-menu-type" "$DETAIL"
+else
+  report FAIL "$NAME-menu-type" "$DETAIL (want _NET_WM_WINDOW_TYPE_DROPDOWN_MENU, ThemeDemo $(printf 0x%x "$WINDOW") active)"
 fi
 
 if [ "$SHADOW" = YES ]; then

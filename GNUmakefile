@@ -59,7 +59,8 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemePrimaryMenu.m \
 	Source/Rendering/GnomeThemeHeaderBar.m \
 	Source/Adapters/GnomeThemeWindowManager.m \
-	Source/Rendering/GnomeThemeMenusAndData.m
+	Source/Rendering/GnomeThemeMenusAndData.m \
+	Source/Rendering/GnomeThemeWindowTypes.m
 
 -include GNUmakefile.preamble
 

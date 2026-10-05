@@ -1,8 +1,25 @@
 diff --git a/ChangeLog b/ChangeLog
-index 2b1b779..1257eb4 100644
+index 2b1b779..a584119 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,88 @@
+@@ -1,3 +1,105 @@
++2026-10-05 Daniel Boyd <danieljboyd@icloud.com>
++
++	Window types as GTK sets them, so window managers neither focus nor
++	animate menus and tool tips, and compositors can key shadows and
++	fades on the type.
++	* Source/x11/XGServerWindow.m (-_setWindowType:): New, from
++	-setwindowlevel::.  A tool tip (GSTTPanel) is _TOOLTIP, a menu at
++	the pop-up menu level (a context menu or a pop-up button's) is
++	_POPUP_MENU rather than _DIALOG, a drag image is _DND, and a modal
++	panel is _DIALOG rather than _NORMAL.  Other windows keep their
++	types.
++	(-setwindowlevel::): Use it.
++	(-orderwindow:::): Set the type again just before mapping a window
++	at the pop-up menu level: a tool tip's level is set before its window
++	is registered, so its class wasn't known and it was typed _DIALOG.
++	* Tests/x11/windowtype.m: New test.
++
 +2026-10-02 Daniel Boyd <danieljboyd@icloud.com>
 +
 +	Window shadows, rounded corners and window manager functions for
@@ -844,7 +861,7 @@ index c98ecb3..93ac1e8 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 19c5e9e..fd45429 100644
+index 19c5e9e..cde858f 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -40,6 +40,7 @@
@@ -895,7 +912,15 @@ index 19c5e9e..fd45429 100644
        if (styleMask & NSIconWindowMask)
  	{
  	  // FIXME
-@@ -506,7 +522,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -451,6 +467,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+                      : (unsigned int) style : (Window) win;
+ - (void) _setSupportedWMProtocols: (gswindow_device_t *) window;
+ - (unsigned long *) _getExtents: (Window)win;
++- (void) _setWindowType: (gswindow_device_t *)window;
+ @end
+ 
+ @implementation XGServer (WindowOps)
+@@ -506,7 +523,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	x;
    float	t, b, l, r;
  
@@ -904,7 +929,7 @@ index 19c5e9e..fd45429 100644
  
    x.size.width = o.size.width - l - r;
    x.size.height = o.size.height - t - b;
-@@ -550,11 +566,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -550,11 +567,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (NSRect) _XWinRectToOSWinRect: (NSRect)x for: (void*)window
  {
    gswindow_device_t	*win = (gswindow_device_t*)window;
@@ -917,7 +942,7 @@ index 19c5e9e..fd45429 100644
    o.size.width = x.size.width;
    o.size.height = x.size.height;
    o.origin.x = x.origin.x + l;
-@@ -577,7 +592,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -577,7 +593,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	o;
    float	t, b, l, r;
  
@@ -926,7 +951,7 @@ index 19c5e9e..fd45429 100644
    o = x;
    o.origin.y = xScreenSize.height - x.origin.y;
    o.origin.y = o.origin.y - x.size.height - b;
-@@ -590,6 +605,373 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -590,6 +606,373 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -1300,7 +1325,7 @@ index 19c5e9e..fd45429 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2048,6 +2430,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2048,6 +2431,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
@@ -1324,7 +1349,7 @@ index 19c5e9e..fd45429 100644
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2074,17 +2473,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2074,17 +2474,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
  
    window->xwn_attrs.override_redirect = False;
  
@@ -1377,7 +1402,7 @@ index 19c5e9e..fd45429 100644
  
    /*
     * Mark the window as the application with name & class so the WM can group it
-@@ -2098,6 +2521,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2098,6 +2522,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1386,7 +1411,7 @@ index 19c5e9e..fd45429 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2842,8 +3267,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2842,8 +3268,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
      }
  #endif
  
@@ -1396,7 +1421,20 @@ index 19c5e9e..fd45429 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3489,6 +3913,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3096,6 +3521,12 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+ 
+       setNormalHints(dpy, window);
+       XSetWMHints(dpy, window->ident, &window->gen_hints);
++      /* The class is known now: a tool tip's level is set before its
++         window is registered. */
++      if (window->win_attrs.window_level == NSPopUpMenuWindowLevel)
++        {
++          [self _setWindowType: window];
++        }
+ 
+       /*
+        * If we are asked to set hints for the appicon and the window manager is
+@@ -3489,6 +3920,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1410,7 +1448,177 @@ index 19c5e9e..fd45429 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -3933,8 +4364,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3560,6 +3998,87 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+   return rect;
+ }
+ 
++/*
++ * Sets _NET_WM_WINDOW_TYPE from the window's level and, where the level is
++ * shared, its class, as GTK types its windows: menus and tool tips are
++ * neither focused nor animated by window managers such as Mutter, and
++ * compositors key their shadows and fades on the type.  Called when the
++ * level changes and, for the pop-up menu level, again just before the
++ * window is mapped: a tool tip's level is set before its window is
++ * registered, so its class isn't known the first time.  A theme may set
++ * a finer type (a menu bar's menus as _DROPDOWN_MENU) after the level.
++ */
++- (void) _setWindowType: (gswindow_device_t *)window
++{
++  int level = window->win_attrs.window_level;
++  long data[1];
++
++  if ((generic.wm & XGWM_EWMH) == 0
++    || (window->win_attrs.flags & GSWindowLevelAttr) == 0)
++    {
++      return;
++    }
++
++  data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
++  if (level == NSModalPanelWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
++    }
++  else if (level == NSMainMenuWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
++    }
++  else if (level == NSSubmenuWindowLevel
++           || level == NSTornOffMenuWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_MENU_ATOM;
++    }
++  else if (level == NSFloatingWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_UTILITY_ATOM;
++    }
++  else if (level == NSDockWindowLevel
++           || level == NSStatusWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
++    }
++  else if (level == NSPopUpMenuWindowLevel)
++    {
++      NSWindow *nswin = GSWindowWithNumber(window->number);
++      NSString *className = [nswin className];
++
++      if ([className isEqual: @"GSTTPanel"])
++        {
++          data[0] = generic._NET_WM_WINDOW_TYPE_TOOLTIP_ATOM;
++        }
++      else if ([className isEqual: @"NSMenuPanel"])
++        {
++          data[0] = generic._NET_WM_WINDOW_TYPE_POPUP_MENU_ATOM;
++        }
++      else if ([className isEqual: @"XGRawWindow"]
++               || [className isEqual: @"GSRawWindow"])
++        {
++          data[0] = generic._NET_WM_WINDOW_TYPE_DND_ATOM;
++        }
++      else
++        {
++          data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
++        }
++    }
++  else if (level == NSDesktopWindowLevel)
++    {
++      data[0] = generic._NET_WM_WINDOW_TYPE_DESKTOP_ATOM;
++    }
++
++/* Warning ... X-bug .. when we specify 32bit data X actually expects data
++ * of type 'long' or 'unsigned long' even on machines where those types
++ * hold 64bit values.
++ */
++  XChangeProperty(dpy, window->ident, generic._NET_WM_WINDOW_TYPE_ATOM,
++                  XA_ATOM, 32, PropModeReplace,
++                  (unsigned char *)&data, 1);
++}
++
+ - (void) setwindowlevel: (int)level : (int)win
+ {
+   gswindow_device_t *window;
+@@ -3603,70 +4122,17 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+ 
+       if ((generic.wm & XGWM_EWMH) != 0)
+         {
+-          int len;
+-          long data[2];
+-          BOOL skipTaskbar = NO;
+-
+-          data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
+-          data[1] = None;
+-          len = 1;
+-
+-          if (level == NSModalPanelWindowLevel)
+-            {
+-              data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
+-              skipTaskbar = YES;
+-            }
+-          else if (level == NSMainMenuWindowLevel)
+-            {
+-              data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
+-              skipTaskbar = YES;
+-            }
+-          else if (level == NSSubmenuWindowLevel
+-                   || level == NSTornOffMenuWindowLevel)
+-            {
+-              data[0] = generic._NET_WM_WINDOW_TYPE_MENU_ATOM;
+-              skipTaskbar = YES;
+-            }
+-          else if (level == NSFloatingWindowLevel)
+-            {
+-              data[0] = generic._NET_WM_WINDOW_TYPE_UTILITY_ATOM;
+-              skipTaskbar = YES;
+-            }
+-          else if (level == NSDockWindowLevel
+-                   || level == NSStatusWindowLevel)
+-            {
+-              data[0] =generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
+-              skipTaskbar = YES;
+-            }
+-          // Does this belong into a different category?
+-          else if (level == NSPopUpMenuWindowLevel)
+-            {
+-                NSWindow *nswin = GSWindowWithNumber(window->number);
+-
+-                if ([[nswin className] isEqual: @"GSTTPanel"])
+-                  {
+-                    data[0] = generic._NET_WM_WINDOW_TYPE_TOOLTIP_ATOM;
+-                  }
+-                else
+-                  {
+-//              data[0] = generic._NET_WM_WINDOW_TYPE_POPUP_MENU_ATOM;
+-                    data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
+-                  }
+-              skipTaskbar = YES;
+-            }
+-          else if (level == NSDesktopWindowLevel)
+-            {
+-              data[0] = generic._NET_WM_WINDOW_TYPE_DESKTOP_ATOM;
+-              skipTaskbar = YES;
+-            }
+-
+-/* Warning ... X-bug .. when we specify 32bit data X actually expects data
+- * of type 'long' or 'unsigned long' even on machines where those types
+- * hold 64bit values.
+- */
+-          XChangeProperty(dpy, window->ident, generic._NET_WM_WINDOW_TYPE_ATOM,
+-                          XA_ATOM, 32, PropModeReplace,
+-                          (unsigned char *)&data, len);
++          BOOL skipTaskbar = (level == NSModalPanelWindowLevel
++                              || level == NSMainMenuWindowLevel
++                              || level == NSSubmenuWindowLevel
++                              || level == NSTornOffMenuWindowLevel
++                              || level == NSFloatingWindowLevel
++                              || level == NSDockWindowLevel
++                              || level == NSStatusWindowLevel
++                              || level == NSPopUpMenuWindowLevel
++                              || level == NSDesktopWindowLevel);
++
++          [self _setWindowType: window];
+ 
+ /*
+  * Change _NET_WM_STATE based on window level.
+@@ -3933,8 +4399,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  
@@ -1915,6 +2123,301 @@ index 0000000..80f3e67
 +  START_SET("shadow margin")
 +    SKIP("back is not built with the x11 server, XShape and XRender")
 +  END_SET("shadow margin")
++  return 0;
++}
++
++#endif
+diff --git a/Tests/x11/windowtype.m b/Tests/x11/windowtype.m
+new file mode 100644
+index 0000000..293a017
+--- /dev/null
++++ b/Tests/x11/windowtype.m
+@@ -0,0 +1,289 @@
++/* The _NET_WM_WINDOW_TYPE of the gui's windows, as GTK types its own:
++ * a tool tip is _TOOLTIP although its level is set before its window is
++ * registered (libs-gui#965), a context menu is _POPUP_MENU, a
++ * modal panel is _DIALOG, and any other window at the pop-up menu level
++ * stays _DIALOG.
++ *
++ * The test forks a window manager that announces itself as an EWMH one
++ * and maps what asks to be.  It needs a display with no window manager of
++ * its own (a private Xvfb).
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_x11) && BUILD_SERVER == SERVER_x11
++
++#import <AppKit/AppKit.h>
++#import <GNUstepGUI/GSDisplayServer.h>
++#include <X11/Xlib.h>
++#include <X11/Xatom.h>
++#include <signal.h>
++#include <sys/wait.h>
++#include <unistd.h>
++#ifdef __linux__
++#include <sys/prctl.h>
++#endif
++
++static int
++ignoreErrors(Display *d, XErrorEvent *e)
++{
++  return 0;
++}
++
++/* Announces itself, lists the window types, and maps what asks to be. */
++static void
++windowManagerRun(void)
++{
++  Display	*dpy = XOpenDisplay(NULL);
++  Window	root;
++  Window	check;
++  Atom		netCheck;
++  Atom		supported[2];
++
++  if (dpy == NULL)
++    {
++      _exit(1);
++    }
++  XSetErrorHandler(ignoreErrors);
++  root = DefaultRootWindow(dpy);
++  netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
++  check = XCreateSimpleWindow(dpy, root, -100, -100, 1, 1, 0, 0, 0);
++  XChangeProperty(dpy, check, netCheck, XA_WINDOW, 32, PropModeReplace,
++    (unsigned char *)&check, 1);
++  supported[0] = netCheck;
++  supported[1] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
++  XChangeProperty(dpy, root, XInternAtom(dpy, "_NET_SUPPORTED", False),
++    XA_ATOM, 32, PropModeReplace, (unsigned char *)supported, 2);
++  XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
++  XChangeProperty(dpy, root, netCheck, XA_WINDOW, 32, PropModeReplace,
++    (unsigned char *)&check, 1);
++  XFlush(dpy);
++  for (;;)
++    {
++      XEvent	e;
++
++      XNextEvent(dpy, &e);
++      if (e.type == MapRequest)
++	{
++	  XMapWindow(dpy, e.xmaprequest.window);
++	}
++      XFlush(dpy);
++    }
++}
++
++static pid_t
++startWindowManager(void)
++{
++  pid_t	pid = fork();
++
++  if (pid == 0)
++    {
++#ifdef __linux__
++      /* Gone with the test, should it abort. */
++      prctl(PR_SET_PDEATHSIG, SIGKILL);
++#endif
++      windowManagerRun();
++      _exit(0);
++    }
++  return pid;
++}
++
++static void
++stopWindowManager(pid_t pid)
++{
++  if (pid > 0)
++    {
++      kill(pid, SIGKILL);
++      waitpid(pid, NULL, 0);
++    }
++}
++
++static BOOL
++waitForWindowManager(Display *dpy)
++{
++  Atom		netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
++  unsigned	i;
++
++  for (i = 0; i < 100; i++)
++    {
++      Atom		type;
++      int		format;
++      unsigned long	n, after;
++      unsigned char	*data = NULL;
++
++      if (XGetWindowProperty(dpy, DefaultRootWindow(dpy), netCheck, 0, 1,
++	  False, XA_WINDOW, &type, &format, &n, &after, &data) == Success
++	&& data != NULL)
++	{
++	  XFree(data);
++	  if (n > 0)
++	    {
++	      return YES;
++	    }
++	}
++      usleep(50000);
++    }
++  return NO;
++}
++
++/* Lets the backend handle what the X server sent it. */
++static void
++spin(void)
++{
++  [[NSRunLoop currentRunLoop]
++    runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.3]];
++}
++
++/* The window's _NET_WM_WINDOW_TYPE, less its _NET_WM_WINDOW_TYPE_ prefix,
++ * or "none". */
++static NSString *
++windowType(Display *dpy, NSWindow *window)
++{
++  Window	w = (Window)[GSCurrentServer() windowDevice: [window windowNumber]];
++  Atom		type;
++  int		format;
++  unsigned long	n, after;
++  unsigned char	*data = NULL;
++  NSString	*s = @"none";
++
++  XSync(dpy, False);
++  if (XGetWindowProperty(dpy, w, XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False),
++      0, 1, False, XA_ATOM, &type, &format, &n, &after, &data) == Success
++    && data != NULL)
++    {
++      if (n == 1)
++	{
++	  char	*name = XGetAtomName(dpy, ((Atom *)data)[0]);
++
++	  s = [[NSString stringWithUTF8String: name]
++	    substringFromIndex: strlen("_NET_WM_WINDOW_TYPE_")];
++	  XFree(name);
++	}
++      XFree(data);
++    }
++  return s;
++}
++
++int
++main(int argc, const char **argv)
++{
++  START_SET("window types")
++
++  Display		*dpy;
++  pid_t			wm;
++  Class			toolTipClass;
++  NSPanel		*toolTip;
++  NSPanel		*modal;
++  NSWindow		*popUpLevel;
++  NSWindow		*menuWindow;
++
++  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
++    {
++      SKIP("no window server available")
++    }
++  dpy = XOpenDisplay(NULL);
++  if (dpy == NULL)
++    {
++      SKIP("no window server available")
++    }
++  XSetErrorHandler(ignoreErrors);
++  if (XGetSelectionOwner(dpy, XInternAtom(dpy, "WM_S0", False)) != None)
++    {
++      SKIP("the display has a window manager of its own")
++    }
++
++  wm = startWindowManager();
++  if (!waitForWindowManager(dpy))
++    {
++      stopWindowManager(wm);
++      SKIP("the test window manager did not start")
++    }
++
++  NS_DURING
++    {
++      [NSApplication sharedApplication];
++    }
++  NS_HANDLER
++    {
++      stopWindowManager(wm);
++      SKIP("It looks like the GNUstep backend is not installed")
++    }
++  NS_ENDHANDLER
++
++  /* As GSToolTips makes its window: deferred, its level set before it has
++     an X window, so the backend first sees the level with no window
++     registered for it. */
++  toolTipClass = NSClassFromString(@"GSTTPanel");
++  if (toolTipClass == Nil)
++    {
++      toolTipClass = [NSPanel class];
++    }
++  toolTip = [[toolTipClass alloc] initWithContentRect: NSMakeRect(0, 0, 100, 25)
++					    styleMask: NSBorderlessWindowMask
++					      backing: NSBackingStoreRetained
++						defer: YES];
++  [toolTip setLevel: NSPopUpMenuWindowLevel];
++  [toolTip orderFront: nil];
++  spin();
++  PASS_EQUAL(windowType(dpy, toolTip),
++    toolTipClass == [NSPanel class] ? @"DIALOG" : @"TOOLTIP",
++    "a tool tip is a tool tip");
++
++  /* A menu's window at the pop-up menu level, as a context menu's or a
++     pop-up button's is.  (No menu in it: a font looked up here can read a
++     font name the defaults have released, -[GSCInlineString copy]: message
++     sent to deallocated instance, and the test harness aborts on that.) */
++  menuWindow = [[NSClassFromString(@"NSMenuPanel") alloc]
++    initWithContentRect: NSMakeRect(0, 0, 100, 50)
++	      styleMask: NSBorderlessWindowMask
++		backing: NSBackingStoreBuffered
++		  defer: YES];
++  [menuWindow setLevel: NSPopUpMenuWindowLevel];
++  [menuWindow orderFront: nil];
++  spin();
++  PASS(menuWindow != nil
++    && [windowType(dpy, menuWindow) isEqual: @"POPUP_MENU"],
++    "a context menu is a pop-up menu");
++  [menuWindow orderOut: nil];
++
++  modal = [[NSPanel alloc] initWithContentRect: NSMakeRect(100, 100, 300, 120)
++				     styleMask: NSBorderlessWindowMask
++				       backing: NSBackingStoreBuffered
++					 defer: NO];
++  [modal setLevel: NSModalPanelWindowLevel];
++  [modal orderFront: nil];
++  spin();
++  PASS_EQUAL(windowType(dpy, modal), @"DIALOG", "a modal panel is a dialog");
++
++  popUpLevel = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 50, 50)
++					   styleMask: NSBorderlessWindowMask
++					     backing: NSBackingStoreBuffered
++					       defer: NO];
++  [popUpLevel setLevel: NSPopUpMenuWindowLevel];
++  [popUpLevel orderFront: nil];
++  spin();
++  PASS_EQUAL(windowType(dpy, popUpLevel), @"DIALOG",
++    "another window at the pop-up menu level stays a dialog");
++
++  [toolTip close];
++  [modal close];
++  [popUpLevel close];
++  stopWindowManager(wm);
++
++  END_SET("window types")
++  return 0;
++}
++
++#else
++
++int
++main(int argc, const char **argv)
++{
++  START_SET("window types")
++    SKIP("x11 backend only")
++  END_SET("window types")
 +  return 0;
 +}
 +

@@ -8,9 +8,11 @@ code pointers; read it before starting.
 
 ## Where things stand
 
-- `main` is two commits ahead of `origin/main` (`99dc18c`, `df659ea`:
-  docs, tests and the exported libs-back patch for issues fixed on
-  2026-10-02). They aren't pushed: ask Dan.
+- `99dc18c` and `df659ea` (docs, tests and the exported libs-back patch
+  for issues fixed on 2026-10-02) are pushed.
+- #15 is done (2026-10-05) in the theme and the libs-back patch, not yet
+  pushed or installed: the theme types windows as GTK does, and the patch
+  (item 5 of `Docs/PROPOSAL_LIBS_BACK_CSD.md`) does most of it itself.
 - The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
   `86fefbe`. Nothing in the theme binary has changed since.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
@@ -29,7 +31,6 @@ his answer:
 | 12 | Header bar as the default | Default with stock libs-back (square, no shadow), or wait for the patch upstream |
 | 13 | Send the patches upstream | FSF assignment; GNU's AI-contribution policy |
 | 14 | Other window managers | Needs sudo to install KWin, Xfwm4, Openbox, picom |
-| 15 | Window types for menus, tool tips, panels | Theme or libs-back patch; which type for each window kind |
 | 16 | Pop-ups: open on the press or the release | Kept on the press for now (menu bar behaviour) |
 
 **Theme work, ready to start** (label `enhancement`/`bug`), in the
@@ -149,11 +150,12 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
   test) and whose `GNUSTEP_USER_DEFAULTS_DIR` is empty. Then run, on a
   private Xvfb:
   `GNUSTEP_CONFIG_FILE=<that> gnustep-tests .` in `libs-back-csd/Tests`.
-  Expected: 303 passed, with `cairo/pdfps.m` sometimes aborting (it does on
+  Expected: 307 passed, with `cairo/pdfps.m` sometimes aborting (it does on
   the clean backend too; #29).
 - **Comparing with a clean backend:** check out the base commit (5db2ae7)
   in a separate worktree, build it, and point a second config at it.
-  `x11/shadowmargin.m` should then fail 14 of its 19 checks.
+  `x11/shadowmargin.m` should then fail 14 of its 19 checks, and
+  `x11/windowtype.m` 3 of its 4.
 
 ## Pointers
 
