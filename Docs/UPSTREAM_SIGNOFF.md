@@ -17,3 +17,4 @@ Any change to an item after its line was added voids the line.
 | Date | Item | Hash(es) reviewed | Notes | Sent |
 |---|---|---|---|---|
 | 2026-10-06 | libs-back 0001 | dbfbe5397bc18895ef3e49951574e312603b03fa | Approved in chat: "i approve libs-back-0001", after review document `Docs/upstream-patches/review/libs-back-0001.md` for this hash | |
+| 2026-10-06 | libs-back 0001 pull request text | b040cacb16bf32074607283075f34c47309c9057 (`Docs/upstream-patches/pr/libs-back-0001.md`) | Approved in chat: "I approve the libs-back-0001 PR text" | |
