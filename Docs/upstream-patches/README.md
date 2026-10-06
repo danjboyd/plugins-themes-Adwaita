@@ -9,8 +9,10 @@ content (`POLICY_AI.md` in gnustep/apps-gorm; posted to discuss-gnustep by
 Gregory Casamento on 2026-03-12, reposted 2026-07-10, and kept in effect on
 gnustep-dev on 2026-07-14).
 
-**Nothing has been sent upstream.** #13 is still waiting on the FSF
-copyright assignment question, and on Dan's own review (below).
+**Nothing has been sent upstream.** Each patch waits on Dan's own review
+(below). On the FSF copyright assignment, Dan decided on 2026-10-06 to
+send without it, as GNUstep has already accepted his code, and to deal
+with it if a maintainer raises it.
 
 ## The series
 
@@ -103,7 +105,8 @@ him:
 
 1. **Review every patch** and be able to explain each change and why it is
    correct (policy 4.2 and 7). The commit messages are written to help.
-2. **Settle the FSF copyright assignment** question (#13).
+2. ~~Settle the FSF copyright assignment question (#13).~~ Decided
+   2026-10-06: send without it; deal with it if a maintainer asks.
 3. **Send one pull request per commit**, libs-back in the order above
    (patch 1 and 2 can go first and alone).
 4. Expect libobjc2's maintainer not to take AI-assisted changes; none of

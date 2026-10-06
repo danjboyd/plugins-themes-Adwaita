@@ -46,7 +46,7 @@ code pointers; read it before starting.
 | # | Issue | Decision |
 |---|---|---|
 | 12 | Header bar as the default | Stays opt-in; revisit once #14 has been through the other window managers |
-| 13 | Send the patches upstream | **Deferred** (still `needs-decision`). First ask gnustep-dev about AI-assisted contributions and whether the FSF assignment is still required |
+| 13 | Send the patches upstream | **Under way** (2026-10-06): AI question answered (GNUstep's policy, followed by `Docs/UPSTREAM_POLICY.md`); no FSF assignment unless a maintainer asks, as GNUstep has already accepted Dan's code. Each patch goes after Dan's sign-off |
 | 14 | Other window managers | Approved and under way: KWin, Xfwm4, Openbox and picom are installed (picom's autostart is off for Dan's user); `make check-wms` |
 | 16 | Pop-ups: open on the press or the release | Keep the press; closed |
 

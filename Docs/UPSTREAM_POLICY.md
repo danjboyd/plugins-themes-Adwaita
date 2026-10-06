@@ -203,9 +203,12 @@ Tests/Scripts/gcc-syntax-check.sh --files Docs/upstream-issues/override_subclass
 
 ## Where things stand (2026-10-06)
 
-- **Prepared, not reviewed:** the libs-back series (5 commits) and the
-  libs-gui commit in `Docs/upstream-patches/`. GCC check passes. #13 is
-  also waiting on the FSF copyright assignment question.
+- **Approved, not sent:** libs-back 0001 (`dbfbe53`).
+- **Prepared, not reviewed:** libs-back 0002–0005 and the libs-gui commit
+  in `Docs/upstream-patches/`. GCC check passes.
+- **Copyright assignment:** decided 2026-10-06 to send without it, as
+  GNUstep has already accepted Dan's code; deal with it if a maintainer
+  raises it.
 - **Issue drafts 2 and 4** (the next to file, #29): their reproducers fail
   the GCC check, only for `@autoreleasepool`. Fix before review.
 - **Filed before this policy:** libs-base#806, libs-gui#964, #965 and #972.
