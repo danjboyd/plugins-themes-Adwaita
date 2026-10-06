@@ -28,9 +28,17 @@ code pointers; read it before starting.
   replaces libs-OpenSave in the apps) committed and installed 2026-10-05,
   not pushed:
   `Source/Adapters/GnomeThemeFileChooser.m`, checked by
-  `make check-file-chooser` (a stand-in portal on a private bus). Still to
-  confirm on the desktop that Mutter attaches the chooser to its X11
-  parent under Wayland, and to try an NSDocument app's Save As.
+  `make check-file-chooser` (a stand-in portal on a private bus).
+- 2026-10-06, committed, not pushed or installed: NSDocument's Save As
+  through the chooser (now a check: the name the document set rather than
+  the last file chosen, and the extension of the type picked in the
+  chooser); #43 (in the header bar, the window still moves while the
+  chooser is open; checked with the header bar too). #44 (the chooser not
+  attached to its window) is Mutter's: it attaches a Wayland dialog only
+  if it has its parent when mapped, and an X11 parent always comes later.
+  The report is drafted, not filed:
+  `Docs/upstream-issues/10-mutter-late-transient-not-attached.md`, with
+  the two checks to run on the desktop first.
 - The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
   `86fefbe`. Nothing in the theme binary has changed since.
 - The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
