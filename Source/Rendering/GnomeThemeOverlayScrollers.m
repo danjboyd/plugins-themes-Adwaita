@@ -78,6 +78,10 @@ GnomeThemeUsesOverlayScrollers(void)
   NSScrollView *scrollView;     /* Not retained: it holds this. */
   CGFloat alpha;
   NSScroller *hovered;          /* Not retained: a subview of scrollView. */
+  /* Whose knob is being dragged. Not -hitPart: libs-gui resets that when
+     the scroller's frame is set, which -tile does, and apps tile while
+     scrolling (MarkdownViewer's preview, on every scroll). */
+  NSScroller *dragged;          /* Not retained: a subview of scrollView. */
   NSDate *hideAt;
   NSTimer *timer;
   NSPoint origin;
@@ -198,8 +202,7 @@ GnomeThemeOverlayStateFor(NSScrollView *scrollView, BOOL create)
   NSTimeInterval left = [hideAt timeIntervalSinceNow];
 
   /* Kept while the pointer is over a scroller or its knob is dragged. */
-  if (hovered != nil || [[scrollView verticalScroller] hitPart] == NSScrollerKnob
-    || [[scrollView horizontalScroller] hitPart] == NSScrollerKnob)
+  if (hovered != nil || dragged != nil)
     {
       ASSIGN (hideAt, [NSDate dateWithTimeIntervalSinceNow: GnomeThemeOverlayLinger]);
       return;
@@ -226,7 +229,7 @@ GnomeThemeDrawOverlayScroller(NSScroller *scroller, GnomeThemeOverlayState *stat
   NSRect bounds = [scroller bounds];
   BOOL horizontal = NSWidth (bounds) >= NSHeight (bounds);
   BOOL hovering = state != nil && state->hovered == scroller;
-  BOOL dragging = [scroller hitPart] == NSScrollerKnob;
+  BOOL dragging = state != nil && state->dragged == scroller;
   CGFloat alpha = state != nil ? state->alpha : 0.0;
   CGFloat thickness = hovering || dragging ? 8.0 : 3.0;
   CGFloat edge = hovering || dragging ? 3.0 : 4.0;
@@ -294,6 +297,36 @@ GnomeThemeUpdateOverlayTracking(NSScrollView *scrollView, GnomeThemeOverlayState
                                           assumeInside: NO];
         }
     }
+}
+
+/* libs-gui's -setFrame: and -setFrameSize: reset the scroller's part to
+   none, which ends a knob drag's scrolling (NSScrollView scrolls to the
+   knob only while it is the part hit) when an app tiles its scroll view
+   during the drag. */
+@interface NSScroller (GnomeThemeOverlayScrollers)
+- (void) gnomeThemeSetHitPart: (NSScrollerPart)part;
+@end
+
+@implementation NSScroller (GnomeThemeOverlayScrollers)
+- (void) gnomeThemeSetHitPart: (NSScrollerPart)part
+{
+  _hitPart = part;
+}
+@end
+
+/* Whether the theme is tracking this scroller's knob. */
+static BOOL
+GnomeThemeScrollerIsDragged(NSScroller *scroller)
+{
+  NSView *superview = [scroller superview];
+  GnomeThemeOverlayState *state;
+
+  if ([superview isKindOfClass: [NSScrollView class]] == NO)
+    {
+      return NO;
+    }
+  state = GnomeThemeOverlayStateFor ((NSScrollView *)superview, NO);
+  return state != nil && state->dragged == scroller;
 }
 
 @implementation GnomeTheme (OverlayScrollers)
@@ -394,6 +427,7 @@ GnomeThemeUpdateOverlayTracking(NSScrollView *scrollView, GnomeThemeOverlayState
       [state stopTimer];
       state->scrollView = nil;
       state->hovered = nil;
+      state->dragged = nil;
       objc_setAssociatedObject (self, &GnomeThemeOverlayStateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
   if (originalIMP != NULL)
@@ -490,6 +524,70 @@ GnomeThemeUpdateOverlayTracking(NSScrollView *scrollView, GnomeThemeOverlayState
         originalIMP (self, _cmd, event);
       }
   }
+}
+
+/* The knob is dragged: shown, wide, until the button comes up. */
+- (void) _overrideNSScrollerMethod_trackKnob: (NSEvent *)event
+{
+  typedef void (*TrackIMP)(id, SEL, NSEvent *);
+  TrackIMP originalIMP = (TrackIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+  NSView *superview = [(NSView *)self superview];
+  GnomeThemeOverlayState *state = nil;
+
+  if (GnomeThemeUsesOverlayScrollers () && [superview isKindOfClass: [NSScrollView class]])
+    {
+      state = GnomeThemeOverlayStateFor ((NSScrollView *)superview, YES);
+      state->dragged = (NSScroller *)self;
+      [state reveal];
+      [state redisplay];
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, event);
+    }
+  /* The scroll view may have gone with the drag; its state then forgot it. */
+  if (state != nil && state->scrollView != nil)
+    {
+      state->dragged = nil;
+      [state reveal];
+      [state redisplay];
+    }
+}
+
+/* Moved or resized during a knob drag (an app tiling its scroll view):
+   still dragging the knob. */
+- (void) _overrideNSScrollerMethod_setFrame: (NSRect)frame
+{
+  typedef void (*SetFrameIMP)(id, SEL, NSRect);
+  SetFrameIMP originalIMP = (SetFrameIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+  NSScroller *scroller = (NSScroller *)self;
+  NSScrollerPart part = [scroller hitPart];
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, frame);
+    }
+  if (part == NSScrollerKnob && GnomeThemeScrollerIsDragged (scroller))
+    {
+      [scroller gnomeThemeSetHitPart: part];
+    }
+}
+
+- (void) _overrideNSScrollerMethod_setFrameSize: (NSSize)size
+{
+  typedef void (*SetFrameSizeIMP)(id, SEL, NSSize);
+  SetFrameSizeIMP originalIMP = (SetFrameSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+  NSScroller *scroller = (NSScroller *)self;
+  NSScrollerPart part = [scroller hitPart];
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, size);
+    }
+  if (part == NSScrollerKnob && GnomeThemeScrollerIsDragged (scroller))
+    {
+      [scroller gnomeThemeSetHitPart: part];
+    }
 }
 
 /* Over the content: see-through. */

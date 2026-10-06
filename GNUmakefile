@@ -73,7 +73,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-scroller-drag check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -102,6 +102,11 @@ check-file-chooser:
 # in the same process (#46).
 check-menu-timing:
 	QUIRK_PROBE_ARGS="-ProbeOnly menu-timing" bash Tests/Scripts/run-quirk-probe.sh
+
+# Dragging an overlay scroller's knob keeps it shown and scrolling, also
+# when the app tiles its scroll view as it scrolls.
+check-scroller-drag:
+	QUIRK_PROBE_ARGS="-ProbeOnly scroller-drag" bash Tests/Scripts/run-quirk-probe.sh
 
 # The header bar with Mutter as the window manager (GNOME Shell on a private
 # Xvfb display; see the script).

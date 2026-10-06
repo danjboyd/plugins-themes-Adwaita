@@ -69,3 +69,7 @@
 @interface QuirkProbe (MenuTiming)
 - (void) checkMenuTiming;
 @end
+
+@interface QuirkProbe (ScrollerDrag)
+- (void) checkScrollerDrag;
+@end
