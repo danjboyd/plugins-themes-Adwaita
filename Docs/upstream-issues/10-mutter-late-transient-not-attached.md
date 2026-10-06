@@ -1,9 +1,19 @@
 **Repository:** GNOME/mutter (gitlab.gnome.org)
 
-**Filed:** not yet (see "Before filing"). Reproduced with the GTK 4 program
-below on 2026-10-06.
+**Filed:** not yet. Waits for Dan's sign-off on this version
+(`Docs/UPSTREAM_POLICY.md`).
+
+**Found for:** plugins-themes-Adwaita#44. Reproduced with the GTK 4
+program below on 2026-10-06. Not already reported: searched 2026-10-06 in
+GNOME/mutter's issues and merge requests, and in GNOME/nautilus's and
+GNOME/xdg-desktop-portal-gnome's issues.
+
+The issue's body is everything below the line; the reproducer,
+`late_transient_attach.py`, is attached to it.
 
 **Title:** Wayland: a modal dialog that gets its parent after it is mapped is never attached
+
+---
 
 ### Affected version
 
@@ -36,6 +46,29 @@ parent is set 1 second after it is mapped.
 
 Or with an Xwayland app: call `org.freedesktop.portal.FileChooser.OpenFile`
 with `parent_window` `x11:<xid>` and `modal` true.
+
+### What happened
+
+On GNOME Shell 48.7 (Wayland), `late_transient_attach.py`, screenshots taken
+3s after start (6s for the third run):
+
+| Run | Parent dimmed |
+| --- | --- |
+| `--early` (parent set before mapping) | yes: attached |
+| parent set 1s after mapping | no |
+| parent set 1s after mapping, then the dialog's modal flag turned off and on at 4s (a window type change) | yes |
+
+The third run shows that once anything recomputes `attached` after the
+parent is stored, the dialog is attached: only the computation in
+`set_transient_for` gets it wrong.
+
+Dimming can't tell the second run's state by itself: GNOME Shell re-checks
+a parent's dimming only when a dialog maps, changes type or is unmanaged
+(`_mapWindow()` in `js/ui/windowManager.js`), not when `attached`
+changes. A toggle of `attach-modal-dialogs` therefore shows nothing either.
+The dialog's behaviour shows it: dragging the dialog in the second run
+moves it alone, while with `--early` the parent moves with it. An Xwayland
+app's file chooser behaves like the second run.
 
 ### What did you expect to happen
 
@@ -72,29 +105,6 @@ the `attach-modal-dialogs` setting (`prefs_changed_callback()`) and a change
 of window type (`meta_window_type_changed()`), and both of those read the
 stored parent.
 
-### What happened
-
-On GNOME Shell 48.7 (Wayland), `late_transient_attach.py`, screenshots taken
-3s after start (6s for the third run):
-
-| Run | Parent dimmed |
-| --- | --- |
-| `--early` (parent set before mapping) | yes: attached |
-| parent set 1s after mapping | no |
-| parent set 1s after mapping, then the dialog's modal flag turned off and on at 4s (a window type change) | yes |
-
-The third run shows that once anything recomputes `attached` after the
-parent is stored, the dialog is attached: only the computation in
-`set_transient_for` gets it wrong.
-
-Dimming can't tell the second run's state by itself: GNOME Shell re-checks
-a parent's dimming only when a dialog maps, changes type or is unmanaged
-(`_mapWindow()` in `js/ui/windowManager.js`), not when `attached`
-changes. A toggle of `attach-modal-dialogs` therefore shows nothing either.
-The dialog's behaviour shows it: dragging the dialog in the second run
-moves it alone, while with `--early` the parent moves with it. An Xwayland
-app's file chooser behaves like the second run.
-
 ### Possible fix
 
 Recompute `attached` after `window->transient_for` is set: move the
@@ -108,8 +118,4 @@ GNOME Shell would then also need to re-check dimming when `attached`
 changes (for example on a notification of it), or the parent stays
 undimmed.
 
-### Before filing
-
-- Dan's sign-off on this text (`Docs/UPSTREAM_POLICY.md`).
-
-Found for plugins-themes-Adwaita#44.
+Investigated, reproduced and written up with AI assistance (Claude).
