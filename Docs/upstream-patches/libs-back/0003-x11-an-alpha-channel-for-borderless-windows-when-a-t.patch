@@ -1,4 +1,4 @@
-From 411a91a5afc6a8c68a0d384a82ea8628a1375d76 Mon Sep 17 00:00:00 2001
+From 1609a4f898456d70aa0b95fe7bff189ae47bb8be Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:23:43 -0500
 Subject: [PATCH 3/5] x11: an alpha channel for borderless windows, when a

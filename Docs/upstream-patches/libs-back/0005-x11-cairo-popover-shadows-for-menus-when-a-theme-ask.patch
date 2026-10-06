@@ -1,4 +1,4 @@
-From 740f713b9532b146e3009a0ecbc9183ef686b54f Mon Sep 17 00:00:00 2001
+From 34cea8c3107261386e8cf3791f2d5b83eac4124e Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:33:53 -0500
 Subject: [PATCH 5/5] x11, cairo: popover shadows for menus, when a theme asks

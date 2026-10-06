@@ -1,4 +1,4 @@
-From 813163e8874d896cd1e8d6681045a170d8140b59 Mon Sep 17 00:00:00 2001
+From dbfbe5397bc18895ef3e49951574e312603b03fa Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:19:03 -0500
 Subject: [PATCH 1/5] x11: keep the window manager functions of windows the gui
@@ -8,16 +8,18 @@ With GSBackHandlesWindowDecorations (or GSX11HandlesWindowDecorations)
 NO, setWindowHintsForStyle() gave every window the borderless window's
 Motif hints: no decorations, which is right, but also functions 0, which
 tells the window manager that the window may not be moved, resized,
-minimized, maximized or closed.  Mutter follows that: its
-_NET_WM_ALLOWED_ACTIONS for the window lists none of them, so
-_NET_WM_MOVERESIZE, _NET_WM_STATE maximize requests, Super-drag and the
-entries of its window menu do nothing.  GNUstep's own title bar moves the
-window with XMoveWindow, which the hints don't restrict, so this went
+minimized, maximized or closed.  Mutter follows that for all but resize:
+the _NET_WM_ALLOWED_ACTIONS it sets on the window lists resize, but not
+move, minimize, maximize or close, so it won't do those for the window,
+whether asked through _NET_WM_MOVERESIZE, _NET_WM_STATE, Super-drag or
+its window menu.  GNUstep's own title bar moves the window itself
+(-setFrameOrigin:, which -placewindow:: carries out with
+XMoveResizeWindow), and the hints don't restrict that, so this went
 unnoticed.
 
 A styled window the gui decorates now asks for no decorations but keeps
-the functions its style allows, plus move, as GTK's client-side
-decorated windows do.  Borderless windows keep functions 0.
+the functions its style allows, plus move.  Borderless windows keep
+functions 0.
 
 This changes behaviour for everyone who uses GNUstep-drawn decorations
 today: every styled window, sheets and utility panels included, now lets
@@ -33,6 +35,11 @@ spreading to windows that must stay fixed.  It reads only the property
 the backend sets, so it needs a display but no particular window manager.
 Without this change the three styled checks fail ("3 0 0", nothing
 allowed); with it all five checks pass.
+
+Under GNOME Shell 48.7 (X11), with the GNUstep theme and the gui drawing
+the decorations, Mutter's _NET_WM_ALLOWED_ACTIONS for a fully styled
+window lists resize, fullscreen, change desktop, above and below without
+this change, and includes move, maximize and close with it.
 
 AI assistance: this change, its test and this description were written
 with Claude (Anthropic's Claude Code).
