@@ -1,7 +1,8 @@
 **Repository:** GNOME/mutter (gitlab.gnome.org)
 
-**Filed:** not yet. Waits for Dan's sign-off on this version
-(`Docs/UPSTREAM_POLICY.md`).
+**Filed:** [GNOME/mutter#5106](https://gitlab.gnome.org/GNOME/mutter/-/issues/5106), 2026-10-06,
+after Dan's sign-off (`Docs/UPSTREAM_SIGNOFF.md`); the body below plus a
+link to the attached reproducer.
 
 **Found for:** plugins-themes-Adwaita#44. Reproduced with the GTK 4
 program below on 2026-10-06. Not already reported: searched 2026-10-06 in
