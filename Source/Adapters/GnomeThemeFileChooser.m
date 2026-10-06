@@ -564,7 +564,12 @@ GnomeThemeFileChooserWanted(NSSavePanel *panel)
 }
 
 /* The window the chooser is a dialog of: the one the panel was run for,
-   else the key or main window. */
+   else the key or main window. On a Wayland session GNOME opens the
+   chooser over it but doesn't attach it: Nautilus can give a Wayland
+   dialog an X11 parent only once the dialog is mapped, and Mutter attaches
+   a dialog only when it has its parent from the start
+   (plugins-themes-Adwaita#44,
+   Docs/upstream-issues/10-mutter-late-transient-not-attached.md). */
 static NSString *
 GnomeThemeFileChooserParent(NSSavePanel *panel, NSWindow *window)
 {
@@ -728,7 +733,11 @@ GnomeThemeFileChooserWait(GnomeThemePortalRequest *request)
                                              inMode: NSModalPanelRunLoopMode
                                             dequeue: YES];
 
-      if (event != nil && GnomeThemeIsInputEvent (event) == NO)
+      if (event == nil || GnomeThemeHeaderBarMoveWindowFromModalPress (event))
+        {
+          /* The app's window still moves from its header bar (#43). */
+        }
+      else if (GnomeThemeIsInputEvent (event) == NO)
         {
           [NSApp sendEvent: event];
         }
@@ -741,9 +750,43 @@ GnomeThemeFileChooserWait(GnomeThemePortalRequest *request)
 - (void) gnomeThemeTakeChosenPaths: (NSArray *)paths;
 @end
 
+/* A document type's extensions, lower case; none for any file. */
+static NSArray *
+GnomeThemeDocumentTypeExtensions(NSMenuItem *item)
+{
+  NSArray *extensions = [[NSDocumentController sharedDocumentController]
+                          fileExtensionsFromType: [item representedObject]];
+
+  if ([extensions containsObject: @"*"])
+    {
+      return [NSArray array];
+    }
+  return [extensions valueForKey: @"lowercaseString"];
+}
+
+/* The name saved as another document type than the one it was offered
+   as: the old type's extension becomes the new one's, as NSDocument's
+   pop-up changes it in Cocoa ("notes.txt" saved as Markdown is
+   "notes.md", not "notes.txt.md"). */
+static NSString *
+GnomeThemeFileChooserRetypedPath(NSString *path, NSMenuItem *from, NSMenuItem *to)
+{
+  NSString *extension = [[path pathExtension] lowercaseString];
+  NSArray *old = GnomeThemeDocumentTypeExtensions (from);
+  NSArray *new = GnomeThemeDocumentTypeExtensions (to);
+
+  if ([extension length] == 0 || [new count] == 0 || [old containsObject: extension] == NO
+      || [new containsObject: extension])
+    {
+      return path;
+    }
+  return [[path stringByDeletingPathExtension] stringByAppendingPathExtension: [new objectAtIndex: 0]];
+}
+
 static NSInteger
 GnomeThemeFileChooserResult(NSSavePanel *panel, GnomeThemePortalRequest *request)
 {
+  NSArray *paths = request->paths;
   NSPopUpButton *popUp;
 
   if (request->response != 0)
@@ -755,14 +798,20 @@ GnomeThemeFileChooserResult(NSSavePanel *panel, GnomeThemePortalRequest *request
   if (popUp != nil && request->filterName != nil)
     {
       NSInteger index = [popUp indexOfItemWithTitle: request->filterName];
+      NSMenuItem *offered = (NSMenuItem *)[popUp selectedItem];
 
       if (index >= 0 && index != [popUp indexOfSelectedItem])
         {
           [popUp selectItemAtIndex: index];
           [NSApp sendAction: [popUp action] to: [popUp target] from: popUp];
+          if ([paths count] == 1 && [panel isKindOfClass: [NSOpenPanel class]] == NO)
+            {
+              paths = [NSArray arrayWithObject: GnomeThemeFileChooserRetypedPath ([paths objectAtIndex: 0], offered,
+                                                                                  (NSMenuItem *)[popUp selectedItem])];
+            }
         }
     }
-  [panel gnomeThemeTakeChosenPaths: request->paths];
+  [panel gnomeThemeTakeChosenPaths: paths];
   [panel _updateDefaultDirectory];
   return NSFileHandlingPanelOKButton;
 }
@@ -795,6 +844,18 @@ GnomeThemeFileChooserEndSheet(NSSavePanel *panel, NSInteger result, id delegate,
 - (BOOL) gnomeThemeUsesFileChooser                                                                 \
 {                                                                                                  \
   return GnomeThemeFileChooserWanted (self);                                                       \
+}                                                                                                  \
+                                                                                                   \
+/* With the name the app set (-setNameFieldStringValue:, as NSDocument's                           \
+   -prepareSavePanel: may), not the last file chosen, which GNUstep's                              \
+   -runModal passes and the shared panel still holds. */                                           \
+- (NSInteger) runModal                                                                             \
+{                                                                                                  \
+  if (GnomeThemeFileChooserWanted (self) == NO)                                                    \
+    {                                                                                              \
+      return [super runModal];                                                                     \
+    }                                                                                              \
+  return [self runModalForDirectory: [self directory] file: [self nameFieldStringValue]];          \
 }                                                                                                  \
                                                                                                    \
 - (NSInteger) runModalForDirectory: (NSString *)path file: (NSString *)name                        \

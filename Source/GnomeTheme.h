@@ -65,6 +65,10 @@ BOOL GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar);
    windows. */
 BOOL GnomeThemeHeaderBarToolbarEnabled(void);
 void GnomeThemeHeaderBarToolbarSettingChanged(void);
+/* While the app waits for a modal dialog outside it (the portal's file
+   chooser): a press in a header bar that moves its window, which then
+   isn't dropped. YES when the press was taken. */
+BOOL GnomeThemeHeaderBarMoveWindowFromModalPress(NSEvent *event);
 
 /* Template (symbolic) images: whether `image` is one (-isTemplate, or a
    name ending in "Template" or "-symbolic"), and its shape in `color`. */

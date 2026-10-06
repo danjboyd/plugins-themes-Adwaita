@@ -27,9 +27,13 @@
 
 #import "QuirkProbe.h"
 
+#import <GNUstepGUI/GSDisplayServer.h>
+#import <objc/runtime.h>
+
 @interface QuirkProbe (FileChooserResults)
 - (void) pass: (NSString *)ident detail: (NSString *)detail;
 - (void) fail: (NSString *)ident detail: (NSString *)detail;
+- (void) skip: (NSString *)ident detail: (NSString *)detail;
 - (void) finish;
 @end
 
@@ -37,7 +41,7 @@
 - (BOOL) gnomeThemeUsesFileChooser;
 @end
 
-/* Counts the keys that reach it. */
+/* Counts the keys and presses that reach it. */
 @interface QuirkProbeKeyCounter : NSView
 {
 @public
@@ -52,6 +56,11 @@
 }
 
 - (void) keyDown: (NSEvent *)event
+{
+  keys++;
+}
+
+- (void) mouseDown: (NSEvent *)event
 {
   keys++;
 }
@@ -75,6 +84,85 @@
 - (BOOL) panel: (id)sender shouldShowFilename: (NSString *)filename
 {
   return YES;
+}
+@end
+
+/* Two document types, declared here rather than in the probe's Info.plist,
+   which would have the app open an untitled document at launch. */
+@interface QuirkProbeDocumentController : NSDocumentController
+@end
+
+@implementation QuirkProbeDocumentController
+- (NSArray *) fileExtensionsFromType: (NSString *)type
+{
+  if ([type isEqualToString: @"QuirkProbeText"])
+    {
+      return [NSArray arrayWithObject: @"txt"];
+    }
+  if ([type isEqualToString: @"QuirkProbeMarkdown"])
+    {
+      return [NSArray arrayWithObject: @"md"];
+    }
+  return [super fileExtensionsFromType: type];
+}
+
+- (NSString *) displayNameForType: (NSString *)type
+{
+  if ([type isEqualToString: @"QuirkProbeText"])
+    {
+      return @"Plain text";
+    }
+  if ([type isEqualToString: @"QuirkProbeMarkdown"])
+    {
+      return @"Markdown";
+    }
+  return [super displayNameForType: type];
+}
+@end
+
+/* A document saved as either type; the user picks Markdown in the chooser
+   (the stand-in portal takes the filter named in the title). */
+@interface QuirkProbeDocument : NSDocument
+{
+@public
+  NSString *savedType;
+  BOOL saved;
+}
+@end
+
+@implementation QuirkProbeDocument
++ (NSArray *) readableTypes
+{
+  return [NSArray arrayWithObjects: @"QuirkProbeText", @"QuirkProbeMarkdown", nil];
+}
+
++ (NSArray *) writableTypes
+{
+  return [self readableTypes];
+}
+
+- (NSData *) dataOfType: (NSString *)type error: (NSError **)error
+{
+  ASSIGN (savedType, type);
+  return [type dataUsingEncoding: NSUTF8StringEncoding];
+}
+
+- (BOOL) prepareSavePanel: (NSSavePanel *)panel
+{
+  [panel setTitle: @"Save As filter:Markdown"];
+  [panel setNameFieldStringValue: @"notes"];
+  return YES;
+}
+
+- (void) document: (NSDocument *)document didSave: (BOOL)didSave contextInfo: (void *)contextInfo
+{
+  saved = didSave;
+}
+
+- (void) dealloc
+{
+  RELEASE (savedType);
+  [super dealloc];
 }
 @end
 
@@ -140,6 +228,49 @@
                                     isARepeat: NO
                                       keyCode: 53]
            atStart: NO];
+}
+
+- (NSEvent *) mouseEvent: (NSEventType)type at: (NSPoint)location in: (NSWindow *)window
+{
+  return [NSEvent mouseEventWithType: type
+                            location: location
+                       modifierFlags: 0
+                           timestamp: 0
+                        windowNumber: [window windowNumber]
+                             context: nil
+                         eventNumber: 0
+                          clickCount: 1
+                            pressure: (type == NSLeftMouseUp ? 0.0 : 1.0)];
+}
+
+/* While the chooser is open: a click on the content and on the close
+   button, then a drag of 60 points along the header bar
+   (plugins-themes-Adwaita#43). */
+- (void) postPressesTo: (NSTimer *)timer
+{
+  NSWindow *window = [timer userInfo];
+  NSButton *close = [window standardWindowButton: NSWindowCloseButton];
+  NSRect frame = [window frame];
+  NSPoint content = NSMakePoint (5, 5);
+  NSPoint bar = NSMakePoint (NSWidth (frame) / 2, NSHeight (frame) - 8);
+  NSPoint closeCentre;
+
+  closeCentre = [close convertPoint: NSMakePoint (NSMidX ([close bounds]), NSMidY ([close bounds])) toView: nil];
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseDown at: content in: window] atStart: NO];
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseUp at: content in: window] atStart: NO];
+  /* Where the drag ends, for the window manager or libs-gui's own move,
+     which follow the pointer rather than the events. */
+  [GSCurrentServer () setMouseLocation: [window convertBaseToScreen: NSMakePoint (bar.x + 60, bar.y)]
+                              onScreen: [[window screen] screenNumber]];
+  if (close != nil)
+    {
+      [NSApp postEvent: [self mouseEvent: NSLeftMouseDown at: closeCentre in: window] atStart: NO];
+      [NSApp postEvent: [self mouseEvent: NSLeftMouseUp at: closeCentre in: window] atStart: NO];
+    }
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseDown at: bar in: window] atStart: NO];
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseDragged at: NSMakePoint (bar.x + 30, bar.y) in: window] atStart: NO];
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseDragged at: NSMakePoint (bar.x + 60, bar.y) in: window] atStart: NO];
+  [NSApp postEvent: [self mouseEvent: NSLeftMouseUp at: NSMakePoint (bar.x + 60, bar.y) in: window] atStart: NO];
 }
 
 - (void) cancelPanel: (NSTimer *)timer
@@ -255,6 +386,44 @@
                          (unsigned long)counter->keys]];
   [counter removeFromSuperview];
 
+  /* With the header bar, the window still moves from it while the
+     chooser is open; nothing else in it takes a press. */
+  if ([NSStringFromClass ([[[parent contentView] superview] class])
+        isEqualToString: @"GnomeThemeHeaderBarDecorationView"] == NO)
+    {
+      [self skip: @"file-chooser-modal-move" detail: @"the window manager's title bar"];
+    }
+  else if ([defaults boolForKey: @"ProbeOwnsDisplay"] == NO)
+    {
+      [self skip: @"file-chooser-modal-move" detail: @"moves the pointer: only on the probe's own Xvfb"];
+    }
+  else
+    {
+      NSRect before = [parent frame];
+      NSRect after;
+
+      counter->keys = 0;
+      [[parent contentView] addSubview: counter];
+      [[NSRunLoop currentRunLoop] addTimer: [NSTimer timerWithTimeInterval: 0.05
+                                                                    target: self
+                                                                  selector: @selector(postPressesTo:)
+                                                                  userInfo: parent
+                                                                   repeats: NO]
+                                   forMode: NSModalPanelRunLoopMode];
+      open = [NSOpenPanel openPanel];
+      result = [open runModalForDirectory: dir file: nil types: nil relativeToWindow: parent];
+      after = [parent frame];
+      [self check: @"file-chooser-modal-move"
+             that: (result == NSFileHandlingPanelOKButton && [parent isVisible] && counter->keys == 0
+                    && fabs (NSMinX (after) - NSMinX (before) - 60) <= 1 && NSMinY (after) == NSMinY (before))
+           detail: [NSString stringWithFormat: @"result %ld, visible %d, %lu presses reached the content, "
+                             @"frame %@ to %@", (long)result, [parent isVisible],
+                             (unsigned long)counter->keys, NSStringFromRect (before),
+                             NSStringFromRect (after)]];
+      [counter removeFromSuperview];
+      [parent setFrame: before display: YES];
+    }
+
   /* Several files. */
   open = [NSOpenPanel openPanel];
   [open setAllowsMultipleSelection: YES];
@@ -339,6 +508,41 @@
                   && [[[open URL] lastPathComponent] isEqualToString: @"a.txt"])
          detail: [NSString stringWithFormat: @"before %ld, result %ld, URL %@", (long)before, (long)asyncResult,
                            [open URL]]];
+  }
+
+  /* NSDocument's Save As: the name the document set (not the last one
+     chosen), its types as the chooser's filters, and the one chosen as the
+     type saved, with that type's extension. */
+  {
+    QuirkProbeDocument *document;
+    NSString *expected = [dir stringByAppendingPathComponent: @"notes.md"];
+    NSArray *names;
+
+    /* The app made its document controller already: make it this one. */
+    object_setClass ([NSDocumentController sharedDocumentController], [QuirkProbeDocumentController class]);
+    document = AUTORELEASE ([QuirkProbeDocument new]);
+    [document setFileType: @"QuirkProbeText"];
+    [document runModalSavePanelForSaveOperation: NSSaveAsOperation
+                                       delegate: document
+                                didSaveSelector: @selector(document:didSave:contextInfo:)
+                                    contextInfo: NULL];
+    request = [self lastFileChooserRequest];
+    options = [request objectForKey: @"options"];
+    names = [NSMutableArray array];
+    for (id filter in [options objectForKey: @"filters"])
+      {
+        [(NSMutableArray *)names addObject: [filter objectAtIndex: 0]];
+      }
+    [self check: @"file-chooser-document-save-as"
+           that: (document->saved && [document->savedType isEqualToString: @"QuirkProbeMarkdown"]
+                  && [[document fileType] isEqualToString: @"QuirkProbeMarkdown"]
+                  && [[document fileName] isEqualToString: expected]
+                  && [[NSFileManager defaultManager] fileExistsAtPath: expected]
+                  && [[options objectForKey: @"current_name"] isEqualToString: @"notes.txt"]
+                  && [names isEqual: [NSArray arrayWithObjects: @"Plain text", @"Markdown", nil]]
+                  && [[[options objectForKey: @"current_filter"] objectAtIndex: 0] isEqualToString: @"Plain text"])
+         detail: [NSString stringWithFormat: @"saved %d as %@, type %@, file %@, request %@", document->saved,
+                           document->savedType, [document fileType], [document fileName], request]];
   }
 
   /* When the panel stays GNUstep's. */

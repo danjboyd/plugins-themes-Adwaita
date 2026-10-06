@@ -1709,7 +1709,47 @@ GnomeThemeResizedFrame(NSRect frame, NSUInteger edges, NSPoint delta, NSSize min
   [super mouseDown: event];
 }
 
+/* A press while the app waits for a modal dialog outside it: a drag from
+   the bar's draggable parts moves the window; the bar's buttons, the
+   edges, clicks and double-clicks do nothing (plugins-themes-Adwaita#43).
+   NO when the press isn't the bar's to move with. */
+- (BOOL) moveWindowFromModalPress: (NSEvent *)event
+{
+  NSPoint p = [self convertPoint: [event locationInWindow] fromView: nil];
+  NSView *pressed;
+
+  if (hasTitleBar == NO || NSPointInRect (NSMakePoint (p.x + 0.5, p.y - 0.5), titleBarRect) == NO
+    || [self resizeEdgesForPoint: p] != 0)
+    {
+      return NO;
+    }
+  pressed = [self hitTest: [event locationInWindow]];
+  if (pressed != self
+    && ([pressed isDescendantOf: [[window toolbar] _toolbarView]] == NO || [pressed isKindOfClass: [NSControl class]]))
+    {
+      return NO;
+    }
+  if ([self pointerDraggedFrom: event]
+    && GnomeThemeWindowManagerMoveResize (window, GnomeThemeMoveResizeMove) == NO)
+    {
+      [self moveWindowStartingWithEvent: event];
+    }
+  return YES;
+}
+
 @end
+
+BOOL
+GnomeThemeHeaderBarMoveWindowFromModalPress(NSEvent *event)
+{
+  NSView *frameView = [[[event window] contentView] superview];
+
+  if ([event type] != NSLeftMouseDown || [frameView isKindOfClass: [GnomeThemeHeaderBarDecorationView class]] == NO)
+    {
+      return NO;
+    }
+  return [(GnomeThemeHeaderBarDecorationView *)frameView moveWindowFromModalPress: event];
+}
 
 /* The header bar toolbar setting may have changed (NSUserDefaults
    noticed): move shown toolbars into or out of the bar. */

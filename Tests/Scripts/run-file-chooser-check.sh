@@ -19,9 +19,9 @@
 
 # QuirkProbe's file chooser checks (-ProbeOnly file-chooser,
 # plugins-themes-Adwaita#40) on a private Xvfb display and a private
-# session bus: once against the stand-in portal
-# (fake-file-chooser-portal.py), once with no portal, when the panels
-# must be GNUstep's.
+# session bus: against the stand-in portal (fake-file-chooser-portal.py)
+# with the window manager's title bar and with the header bar, then with
+# no portal, when the panels must be GNUstep's.
 #
 # The bus has no service directories, so nothing on it can start the real
 # xdg-desktop-portal (whose dialogs would open on the desktop).
@@ -69,6 +69,8 @@ run_on_private_bus() {
 status=0
 
 # shellcheck disable=SC2016
+# With the window manager's title bar, then with the theme's header bar.
+for decorations in YES NO; do
 run_on_private_bus bash -c '
   set -eu
   python3 "$1/Tests/Scripts/fake-file-chooser-portal.py" "$2/requests.log" "$2/files" >"$2/portal.out" 2>&1 &
@@ -83,9 +85,11 @@ run_on_private_bus bash -c '
     cat "$2/portal.out" >&2
     exit 1
   fi
-  QUIRK_PROBE_ARGS="-ProbeOnly file-chooser -ProbeFileChooserLog $2/requests.log -ProbeFileChooserDir $2/files" \
+  QUIRK_PROBE_ARGS="-ProbeOnly file-chooser -ProbeFileChooserLog $2/requests.log -ProbeFileChooserDir $2/files -GSX11HandlesWindowDecorations $4" \
     bash "$1/Tests/Scripts/run-quirk-probe.sh" $3
-' _ "$REPO_DIR" "$WORK" "$BUILD_ARG" || status=1
+' _ "$REPO_DIR" "$WORK" "$BUILD_ARG" "$decorations" || status=1
+BUILD_ARG="--no-build"
+done
 
 run_on_private_bus env \
   QUIRK_PROBE_ARGS="-ProbeOnly file-chooser -ProbeFileChooserNoPortal YES" \
