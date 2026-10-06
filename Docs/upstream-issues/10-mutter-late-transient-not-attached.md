@@ -91,9 +91,9 @@ Dimming can't tell the second run's state by itself: GNOME Shell re-checks
 a parent's dimming only when a dialog maps, changes type or is unmanaged
 (`_mapWindow()` in `js/ui/windowManager.js`), not when `attached`
 changes. A toggle of `attach-modal-dialogs` therefore shows nothing either.
-That the dialog isn't attached shows in its behaviour: an Xwayland
-app's file chooser moves on its own, and the app's window doesn't move with
-it.
+The dialog's behaviour shows it: dragging the dialog in the second run
+moves it alone, while with `--early` the parent moves with it. An Xwayland
+app's file chooser behaves like the second run.
 
 ### Possible fix
 
@@ -110,10 +110,6 @@ undimmed.
 
 ### Before filing
 
-- Drag the dialog in the second run (`python3 late_transient_attach.py`):
-  if the parent stays where it is, the dialog isn't attached (the
-  screenshots can't show this; see above). With `--early`, the parent
-  moves with it.
 - Dan's sign-off on this text (`Docs/UPSTREAM_POLICY.md`).
 
 Found for plugins-themes-Adwaita#44.
