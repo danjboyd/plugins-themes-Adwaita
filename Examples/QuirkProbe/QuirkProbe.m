@@ -4624,6 +4624,16 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self checkScrollerDrag];
       return;
     }
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"context-menu"])
+    {
+      [self checkContextMenu];
+      return;
+    }
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"context-menu-demo"])
+    {
+      [self showContextMenuDemo];
+      return;
+    }
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
      high contrast runs (the other checks assume the light palette). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])

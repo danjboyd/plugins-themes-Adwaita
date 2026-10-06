@@ -499,7 +499,56 @@ GnomeThemeUpdatePrimaryMenuPlacement(NSWindow *window)
     }
 }
 
+/* Where a context menu opens: GTK 4's popover menu has its border one
+   pixel below the pointer and at its column, so the pointer is just
+   outside the menu, not over its first item (measured under Mutter with a
+   GtkTextView's menu, #20). libs-gui puts the corner under the pointer. */
+static const CGFloat GnomeThemeContextMenuDrop = 1.0;
+
+/* The menu window's origin for a context menu opened at `point` (screen
+   coordinates): below and to the right of it, or flipped to the left
+   and above where it would leave `screen`, as GTK flips a popover. */
+NSPoint
+GnomeThemeContextMenuOrigin(NSPoint point, NSSize size, NSRect screen)
+{
+  NSPoint origin = NSMakePoint (point.x, point.y - GnomeThemeContextMenuDrop - size.height);
+
+  if (origin.x + size.width > NSMaxX (screen))
+    {
+      origin.x = MAX (NSMinX (screen), point.x - size.width);
+    }
+  if (origin.y < NSMinY (screen))
+    {
+      origin.y = MIN (NSMaxY (screen) - size.height, point.y + GnomeThemeContextMenuDrop);
+    }
+  return origin;
+}
+
 @implementation GnomeTheme (PrimaryMenu)
+
+/* A context menu (+popUpContextMenu:withEvent:forView:, a right click):
+   opened at GTK's place by the pointer, then tracked from the press as
+   libs-gui does. */
+- (void) rightMouseDisplay: (NSMenu *)menu forEvent: (NSEvent *)theEvent
+{
+  NSMenuView *menuView = [menu menuRepresentation];
+  NSWindow *menuWindow;
+  NSWindow *eventWindow = [theEvent window];
+  NSPoint point;
+  NSScreen *screen;
+
+  if ([menuView isHorizontal])
+    {
+      return;
+    }
+  point = eventWindow != nil ? [eventWindow convertBaseToScreen: [theEvent locationInWindow]] : [NSEvent mouseLocation];
+  [menu displayTransient];
+  menuWindow = [menuView window];
+  screen = [eventWindow screen] ?: [menuWindow screen] ?: [NSScreen mainScreen];
+  [menuWindow setFrameOrigin: GnomeThemeContextMenuOrigin (point, [menuWindow frame].size, [screen visibleFrame])];
+  [menuView mouseDown: theEvent];
+  [menu closeTransient];
+}
 
 /* The window's menu bar: a slim bar for the ☰ when there's no toolbar, none
    when the toolbar holds it. The height is kept per window so the menu view

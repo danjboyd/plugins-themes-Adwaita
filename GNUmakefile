@@ -73,7 +73,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-scroller-drag check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -108,6 +108,11 @@ check-menu-timing:
 # scrolls.
 check-scroller-drag:
 	QUIRK_PROBE_ARGS="-ProbeOnly scroller-drag" bash Tests/Scripts/run-quirk-probe.sh
+
+# Context menus open by the pointer as GTK 4's do, kept on screen (#20).
+# Tests/Scripts/measure-context-menu.sh compares with GTK's under Mutter.
+check-context-menu:
+	QUIRK_PROBE_ARGS="-ProbeOnly context-menu" bash Tests/Scripts/run-quirk-probe.sh
 
 # The header bar with Mutter as the window manager (GNOME Shell on a private
 # Xvfb display; see the script).

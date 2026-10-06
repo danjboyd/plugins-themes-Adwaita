@@ -54,6 +54,9 @@ void GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color);
 /* YES when the app asked for GNOME's primary menu instead of a menu bar
    (the GnomeThemeMenuStyle default set to "primary"). */
 BOOL GnomeThemeUsesPrimaryMenu(void);
+/* Where a context menu opened at `point` goes: GTK's place by the pointer,
+   kept on `screen` (#20). */
+NSPoint GnomeThemeContextMenuOrigin(NSPoint point, NSSize size, NSRect screen);
 
 /* YES when GNUstep draws the window decorations itself
    (GSX11HandlesWindowDecorations NO): the theme then draws libadwaita's

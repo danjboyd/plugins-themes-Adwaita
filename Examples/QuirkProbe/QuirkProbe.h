@@ -73,3 +73,8 @@
 @interface QuirkProbe (ScrollerDrag)
 - (void) checkScrollerDrag;
 @end
+
+@interface QuirkProbe (ContextMenu)
+- (void) checkContextMenu;
+- (void) showContextMenuDemo;
+@end
