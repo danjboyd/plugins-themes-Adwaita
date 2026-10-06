@@ -98,13 +98,14 @@ check-quirks:
 check-file-chooser:
 	bash Tests/Scripts/run-file-chooser-check.sh
 
-# The CPU time to fill and size a 2,500-item pop-up menu, against GNUstep's theme
+# The CPU time to fill and size a 1,500-item pop-up menu, against GNUstep's theme
 # in the same process (#46).
 check-menu-timing:
 	QUIRK_PROBE_ARGS="-ProbeOnly menu-timing" bash Tests/Scripts/run-quirk-probe.sh
 
-# Dragging an overlay scroller's knob keeps it shown and scrolling, also
-# when the app tiles its scroll view as it scrolls.
+# Overlay scrollers: the corner where two meet, and dragging a knob keeps
+# it shown and scrolling, also when the app tiles its scroll view as it
+# scrolls.
 check-scroller-drag:
 	QUIRK_PROBE_ARGS="-ProbeOnly scroller-drag" bash Tests/Scripts/run-quirk-probe.sh
 

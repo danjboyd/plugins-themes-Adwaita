@@ -340,6 +340,8 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   NSRect content;
   NSScroller *vertical, *horizontal;
   id documentView;
+  NSSize border = [[GSTheme theme] sizeForBorderType: [scrollView borderType]];
+  NSRect inner;
   GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor (scrollView, NO);
 
   if (state != nil && state->adjusting)
@@ -360,20 +362,82 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   content = [clip frame];
   vertical = [scrollView hasVerticalScroller] ? [scrollView verticalScroller] : nil;
   horizontal = [scrollView hasHorizontalScroller] ? [scrollView horizontalScroller] : nil;
+  /* The scrollers at the edges inside the border, over the content, which
+     runs to those edges. libs-gui reserves its own scroller width there
+     and the scroller is narrower, which left a strip by the edges where
+     the scroll view showed through, with its line by the corner. */
+  inner = NSInsetRect ([scrollView bounds], border.width, border.height);
   if (vertical != nil && [vertical superview] == scrollView)
     {
-      NSRect strip = [vertical frame];
+      NSRect strip = NSIntersectionRect ([vertical frame], inner);
+      BOOL right = NSMidX (strip) >= NSMidX (inner);
 
-      content = NSUnionRect (content, NSMakeRect (NSMinX (strip), NSMinY (content), NSWidth (strip), NSHeight (content)));
+      strip.origin.x = right ? NSMaxX (inner) - NSWidth (strip) : NSMinX (inner);
+      if (NSEqualRects (strip, [vertical frame]) == NO)
+        {
+          [vertical setFrame: strip];
+        }
+      if (right)
+        {
+          content.size.width = NSMaxX (inner) - NSMinX (content);
+        }
+      else
+        {
+          content.size.width = NSMaxX (content) - NSMinX (inner);
+          content.origin.x = NSMinX (inner);
+        }
     }
   if (horizontal != nil && [horizontal superview] == scrollView)
     {
-      NSRect strip = [horizontal frame];
+      NSRect strip = NSIntersectionRect ([horizontal frame], inner);
+      BOOL low = NSMidY (strip) >= NSMidY (inner);   /* The scroll view is flipped. */
 
-      content = NSUnionRect (content, NSMakeRect (NSMinX (content), NSMinY (strip), NSWidth (content), NSHeight (strip)));
+      strip.origin.y = low ? NSMaxY (inner) - NSHeight (strip) : NSMinY (inner);
+      /* Along the edge up to the vertical scroller. */
+      if (vertical != nil && [vertical superview] == scrollView && NSMinX ([vertical frame]) >= NSMaxX (strip) - 1.0)
+        {
+          strip.size.width = NSMinX ([vertical frame]) - NSMinX (strip);
+        }
+      else if (vertical != nil && [vertical superview] == scrollView && NSMaxX ([vertical frame]) <= NSMinX (strip) + 1.0)
+        {
+          strip.size.width = NSMaxX (strip) - NSMaxX ([vertical frame]);
+          strip.origin.x = NSMaxX ([vertical frame]);
+        }
+      if (NSEqualRects (strip, [horizontal frame]) == NO)
+        {
+          [horizontal setFrame: strip];
+        }
+      /* As GTK's: with both, the vertical one stops at the horizontal one,
+         so their sliders don't meet in the corner. */
+      if (vertical != nil && [vertical superview] == scrollView)
+        {
+          NSRect column = [vertical frame];
+
+          if (low && NSMaxY (column) > NSMinY (strip))
+            {
+              column.size.height = NSMinY (strip) - NSMinY (column);
+            }
+          else if (low == NO && NSMinY (column) < NSMaxY (strip))
+            {
+              column.size.height = NSMaxY (column) - NSMaxY (strip);
+              column.origin.y = NSMaxY (strip);
+            }
+          if (NSEqualRects (column, [vertical frame]) == NO)
+            {
+              [vertical setFrame: column];
+            }
+        }
+      if (low)
+        {
+          content.size.height = NSMaxY (inner) - NSMinY (content);
+        }
+      else
+        {
+          content.size.height = NSMaxY (content) - NSMinY (inner);
+          content.origin.y = NSMinY (inner);
+        }
     }
-  /* Inside the scroll view's border. */
-  content = NSIntersectionRect (content, NSInsetRect ([scrollView bounds], 1.0, 1.0));
+  content = NSIntersectionRect (content, inner);
   if (NSEqualRects (content, [clip frame]) == NO)
     {
       [clip setFrame: content];

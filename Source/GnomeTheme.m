@@ -592,6 +592,19 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
   return [_metrics scrollerWidth];
 }
 
+/* The theme's scrollers have no arrows (NSScrollerArrowsNone), but
+   libs-gui still moves the knob one arrow's width along unless the arrows
+   are "at the same end": the knob stopped 13pt short of the start and ran
+   13pt past the end, under the corner and out of the scroller. */
+- (BOOL) scrollerArrowsSameEndForScroller: (NSScroller *)aScroller
+{
+  if ([aScroller arrowsPosition] == NSScrollerArrowsNone)
+    {
+      return YES;
+    }
+  return [super scrollerArrowsSameEndForScroller: aScroller];
+}
+
 - (GSThemeMargins) buttonMarginsForCell: (NSCell *)cell
                                   style: (int)style
                                   state: (GSThemeControlState)state

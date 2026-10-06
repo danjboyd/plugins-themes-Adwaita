@@ -17,7 +17,8 @@
    If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* -ProbeOnly scroller-drag: the overlay scroller stays on screen while
+/* -ProbeOnly scroller-drag: overlay scrollers in the corner where two
+   meet (below), and staying on screen while
    its knob is dragged, for longer than it lingers. The window's pixels in
    the scroller's strip are read during the drag, from what is in the
    window, not redrawn; and the drag scrolls. Twice: once plainly, once
@@ -25,6 +26,8 @@
    preview does. */
 
 #import "QuirkProbe.h"
+
+#import <GNUstepGUI/GSTheme.h>
 
 @interface QuirkProbe (ScrollerDragResults)
 - (void) pass: (NSString *)ident detail: (NSString *)detail;
@@ -149,6 +152,85 @@
 
 @implementation QuirkProbe (ScrollerDrag)
 
+/* Both scrollers of a scroll view at the edges inside its border, the
+   content under all of it, the vertical one stopping at the horizontal
+   one, and each knob inside its scroller at both ends: the corner looked
+   broken, with a strip by the edges and the vertical knob running out of
+   its scroller. */
+- (void) checkScrollerCornerWithBorder: (NSBorderType)borderType
+{
+  NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect (100, 100, 300, 220)
+                                                 styleMask: NSTitledWindowMask
+                                                   backing: NSBackingStoreBuffered
+                                                     defer: NO];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (0, 0, 300, 220)]);
+  QuirkProbeWhitePage *page = AUTORELEASE ([[QuirkProbeWhitePage alloc] initWithFrame: NSMakeRect (0, 0, 3000, 3000)]);
+  NSScroller *vertical, *horizontal;
+  NSSize border;
+  NSRect inner, verticalFrame, horizontalFrame;
+  NSMutableArray *problems = [NSMutableArray array];
+  NSString *ident = [NSString stringWithFormat: @"scroller-corner-%@", borderType == NSNoBorder ? @"plain" : @"bezel"];
+  int end;
+
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setHasHorizontalScroller: YES];
+  [scrollView setBorderType: borderType];
+  [scrollView setDocumentView: page];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [scrollView tile];
+  border = [[GSTheme theme] sizeForBorderType: borderType];
+  inner = NSInsetRect ([scrollView bounds], border.width, border.height);
+  vertical = [scrollView verticalScroller];
+  horizontal = [scrollView horizontalScroller];
+  verticalFrame = [vertical frame];
+  horizontalFrame = [horizontal frame];
+  if (NSEqualRects ([[scrollView contentView] frame], inner) == NO)
+    {
+      [problems addObject: [NSString stringWithFormat: @"content %@, inside the border %@",
+                                     NSStringFromRect ([[scrollView contentView] frame]), NSStringFromRect (inner)]];
+    }
+  if (NSMaxX (verticalFrame) != NSMaxX (inner) || NSMaxY (horizontalFrame) != NSMaxY (inner))
+    {
+      [problems addObject: [NSString stringWithFormat: @"scrollers %@ and %@ not at the edges of %@",
+                                     NSStringFromRect (verticalFrame), NSStringFromRect (horizontalFrame),
+                                     NSStringFromRect (inner)]];
+    }
+  if (NSIntersectsRect (verticalFrame, horizontalFrame))
+    {
+      [problems addObject: [NSString stringWithFormat: @"scrollers overlap: %@ and %@",
+                                     NSStringFromRect (verticalFrame), NSStringFromRect (horizontalFrame)]];
+    }
+  for (end = 0; end < 2; end++)
+    {
+      NSRect knobs[2];
+      NSScroller *scrollers[2] = { vertical, horizontal };
+      int i;
+
+      [[scrollView contentView] scrollToPoint: end ? NSMakePoint (2700, 0) : NSMakePoint (0, 2780)];
+      [scrollView reflectScrolledClipView: [scrollView contentView]];
+      for (i = 0; i < 2; i++)
+        {
+          knobs[i] = [scrollers[i] rectForPart: NSScrollerKnob];
+          if (NSContainsRect ([scrollers[i] bounds], knobs[i]) == NO)
+            {
+              [problems addObject: [NSString stringWithFormat: @"%@ knob %@ outside %@ at value %g",
+                                             i == 0 ? @"vertical" : @"horizontal", NSStringFromRect (knobs[i]),
+                                             NSStringFromRect ([scrollers[i] bounds]), [scrollers[i] doubleValue]]];
+            }
+        }
+    }
+  [window orderOut: nil];
+  if ([problems count] == 0)
+    {
+      [self pass: ident detail: nil];
+    }
+  else
+    {
+      [self fail: ident detail: [problems componentsJoinedByString: @"; "]];
+    }
+}
+
 /* Drags the knob of a fresh scroll view; the ink of the strip at each step. */
 - (NSArray *) scrollerDragInksTiling: (BOOL)tiling tiles: (NSUInteger *)tiles scrolled: (CGFloat *)scrolled
 {
@@ -217,6 +299,9 @@
 {
   CGFloat plainScrolled = 0.0;
   int tiling;
+
+  [self checkScrollerCornerWithBorder: NSNoBorder];
+  [self checkScrollerCornerWithBorder: NSBezelBorder];
 
   for (tiling = 0; tiling < 2; tiling++)
     {

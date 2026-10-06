@@ -18,7 +18,7 @@
 */
 
 /* -ProbeOnly menu-timing: the CPU time to fill a pop-up button with a long
-   menu (2,500 items, as an app's font menu) and size it, under this theme
+   menu (1,500 items, like an app's font menu) and size it, under this theme
    and under GNUstep's default theme in the same process
    (plugins-themes-Adwaita#46).
    Run by `make check-menu-timing`. */
@@ -40,7 +40,7 @@ QuirkProbeMenuTimingItems(void)
 {
   NSInteger count = [[NSUserDefaults standardUserDefaults] integerForKey: @"ProbeMenuItems"];
 
-  return count > 0 ? (NSUInteger)count : 2500;
+  return count > 0 ? (NSUInteger)count : 1500;
 }
 
 /* A pop-up of `count` items, titled as font families (the machine's, then
@@ -91,14 +91,16 @@ QuirkProbeMenuTime(void)
   double themed = 1e9, plain = 1e9;
   int i;
 
-  /* Best of three, each with a fresh pop-up; then GNUstep's theme, in the
-     same process (the probe quits after, without switching back). */
-  for (i = 0; i < 3; i++)
+  /* Best of two, each with a fresh pop-up; then GNUstep's theme, in the
+     same process (the probe quits after, without switching back). Filling
+     a menu is quadratic in libs-gui itself, so more items or runs take the
+     probe past its time limit. */
+  for (i = 0; i < 2; i++)
     {
       themed = MIN (themed, QuirkProbeMenuTime ());
     }
   [GSTheme setTheme: nil];
-  for (i = 0; i < 3; i++)
+  for (i = 0; i < 2; i++)
     {
       plain = MIN (plain, QuirkProbeMenuTime ());
     }
