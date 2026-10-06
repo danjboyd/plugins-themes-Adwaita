@@ -32,7 +32,7 @@ This repository is split into three implementation concerns:
 
 1. Phase 0 is in place:
    repo skeleton, top-level `GNUmakefile`, build-artifact `.gitignore`, and
-   `Resources/Info-gnustep.plist`.
+   `AdwaitaInfo.plist`.
 2. Phase 1 is accepted:
    `Examples/ThemeDemo/` now covers controls, text/input widgets, table view,
    outline view, menus, scrollbars, and a stress page. `Tests/Scripts/` now

@@ -54,11 +54,11 @@ Both must pass. Add the suites for whatever changed (`check-mutter`,
 ### 2. Version, tag, push
 
 `VERSION` in `GNUmakefile` and `GSThemeVersion` in
-`Resources/Info-gnustep.plist`:
+`AdwaitaInfo.plist`:
 
 ```sh
 sed -i "s/^VERSION = .*/VERSION = $V/" GNUmakefile
-sed -i "s/GSThemeVersion = \".*\";/GSThemeVersion = \"$V\";/" Resources/Info-gnustep.plist
+sed -i "s/GSThemeVersion = \".*\";/GSThemeVersion = \"$V\";/" AdwaitaInfo.plist
 git commit -am "Version $V"
 git tag -a "$V" -m "$V"          # annotated, as the earlier tags
 git push origin main "$V"

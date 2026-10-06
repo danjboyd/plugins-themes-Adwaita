@@ -1142,6 +1142,29 @@ objectValueForTableColumn: (NSTableColumn *)column
 
 #pragma mark Checks
 
+/* The theme's GSThemeDomain (interface styles, backend defaults) reached
+   the app: it was in the bundle's Info-gnustep.plist, which a clean build
+   once replaced with gnustep-make's generated one (#45). */
+- (void) checkThemeDomain
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSDictionary *domain = [defaults volatileDomainForName: @"GSThemeDomain"];
+  BOOL searched = [[defaults searchList] containsObject: @"GSThemeDomain"];
+  NSString *style = [domain objectForKey: @"NSMenuInterfaceStyle"];
+  NSString *detail = [NSString stringWithFormat: @"in search list %d, %lu keys, NSMenuInterfaceStyle %@",
+    searched, (unsigned long)[domain count], style];
+
+  if (searched && [style isEqualToString: @"NSWindows95InterfaceStyle"]
+    && [domain objectForKey: @"GSBackHandlesWindowDecorations"] != nil)
+    {
+      [self pass: @"theme-domain" detail: detail];
+    }
+  else
+    {
+      [self fail: @"theme-domain" detail: detail];
+    }
+}
+
 - (void) checkSizedButtons
 {
   NSEnumerator *enumerator = [_sizedButtons objectEnumerator];
@@ -4410,6 +4433,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _controlsWindow named: @"controls"];
   [self saveWindow: _toolbarWindow named: @"toolbar"];
   [self saveWindow: _tableWindow named: @"tables"];
+  [self checkThemeDomain];
   [self checkSizedButtons];
   [self checkFixedButtons];
   [self checkSteppers];

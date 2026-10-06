@@ -44,8 +44,10 @@ VERSION = 0.1.0-alpha4
 
 Adwaita_PRINCIPAL_CLASS = GnomeTheme
 Adwaita_INSTALL_DIR = $(GNUSTEP_LIBRARY)/Themes
+# The theme's Info-gnustep.plist is AdwaitaInfo.plist, which gnustep-make
+# merges into the one it generates. Listed as a resource, it raced the
+# generated file and a clean build could ship without GSThemeDomain (#45).
 Adwaita_RESOURCE_FILES = \
-	Resources/Info-gnustep.plist \
 	Resources/ThemeImages \
 	Resources/ThemeTiles
 
