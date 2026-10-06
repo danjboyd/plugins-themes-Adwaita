@@ -96,7 +96,10 @@ Changes made while preparing the series (beyond splitting it):
 
 ## Before sending: Dan's part
 
-The policy puts these on the contributor, and they can't be done for him:
+Sending follows `Docs/UPSTREAM_POLICY.md`: Dan reviews each commit and signs
+off on its hash in `Docs/UPSTREAM_SIGNOFF.md` before anything is sent.
+GNUstep's policy puts these on the contributor, and they can't be done for
+him:
 
 1. **Review every patch** and be able to explain each change and why it is
    correct (policy 4.2 and 7). The commit messages are written to help.
