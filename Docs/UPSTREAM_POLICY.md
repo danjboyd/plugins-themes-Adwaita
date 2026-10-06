@@ -203,7 +203,7 @@ Tests/Scripts/gcc-syntax-check.sh --files Docs/upstream-issues/override_subclass
 
 ## Where things stand (2026-10-06)
 
-- **Approved, not sent:** libs-back 0001 (`dbfbe53`).
+- **Sent:** libs-back 0001 (`dbfbe53`) as [libs-back#244](https://github.com/gnustep/libs-back/pull/244), 2026-10-06, from branch `x11-keep-wm-functions` of danjboyd/libs-back.
 - **Prepared, not reviewed:** libs-back 0002–0005 and the libs-gui commit
   in `Docs/upstream-patches/`. GCC check passes.
 - **Copyright assignment:** decided 2026-10-06 to send without it, as

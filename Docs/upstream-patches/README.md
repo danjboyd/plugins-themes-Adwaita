@@ -9,7 +9,7 @@ content (`POLICY_AI.md` in gnustep/apps-gorm; posted to discuss-gnustep by
 Gregory Casamento on 2026-03-12, reposted 2026-07-10, and kept in effect on
 gnustep-dev on 2026-07-14).
 
-**Nothing has been sent upstream.** Each patch waits on Dan's own review
+**Sent:** patch 1 as [libs-back#244](https://github.com/gnustep/libs-back/pull/244), 2026-10-06. The rest wait on Dan's own review
 (below). On the FSF copyright assignment, Dan decided on 2026-10-06 to
 send without it, as GNUstep has already accepted his code, and to deal
 with it if a maintainer raises it.
