@@ -57,7 +57,13 @@
 # window manager instead of GNOME Shell (KWin and Xfwm4 with their own
 # compositors, Openbox with picom), over a grey desktop window. Openbox
 # doesn't list _GTK_FRAME_EXTENTS: its windows are expected to get no
-# margin. (plugins-themes-Adwaita#14)
+# margin. KWin runs with its screen-corner actions off (they take presses
+# near the corner, in any app). Xfwm4's compositor is also stopped and
+# started again: the window drops its margin without one and gets it back.
+# (plugins-themes-Adwaita#14)
+#
+# ThemeDemo runs with its menu bar (-GnomeThemeMenuStyle menubar), whatever
+# the user's own defaults say: the checks press its titles.
 #
 #   bash Tests/Scripts/run-mutter-check.sh [--no-build] [--shadow]
 #                                          [--wm mutter|kwin|xfwm4|openbox]
@@ -155,6 +161,12 @@ sleep 1
 # A solid background: shadows are measured against it.
 BACKGROUND=119
 mkdir -p "$WORK"/{config/glib-2.0/settings,data,cache,state,run,gs/glib-2.0/settings}
+# KWin's screen corners (Plasma's default top-left one opens the overview)
+# take presses near the corner: a maximized window's double-click there
+# never reaches it, in any app. Off, as the other window managers have
+# none (plugins-themes-Adwaita#14).
+printf '[ElectricBorders]\nTopLeft=None\nTopRight=None\nBottomLeft=None\nBottomRight=None\n[Effect-overview]\nBorderActivate=9\n' \
+  >"$WORK/config/kwinrc"
 chmod 700 "$WORK/run"
 cat >"$WORK/config/glib-2.0/settings/keyfile" <<'KEYFILE'
 [org/gnome/desktop/background]
@@ -259,8 +271,11 @@ if [ "$SHADOW" = YES ]; then
     "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES \
     -ThemeDemoCommandFIFO "$WORK/commands" >"$WORK/demo.log" 2>&1 &
 else
+  # The menu bar whatever the user's own defaults say (the checks below
+  # press its titles).
   GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
     "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO -ThemeDemoLogFrames YES \
+    -GnomeThemeMenuStyle menubar -NSMenuInterfaceStyle NSWindows95InterfaceStyle \
     -ThemeDemoCommandFIFO "$WORK/commands" \
     >"$WORK/demo.log" 2>&1 &
 fi
@@ -661,6 +676,41 @@ if [ -n "$ALERT" ] && [ "$((TRANSIENT))" = "$WINDOW" ] && [ "$MODAL" = 1 ] && [ 
   report PASS "$NAME-alert-attached" "$DETAIL"
 else
   report FAIL "$NAME-alert-attached" "$DETAIL"
+fi
+
+# The compositing manager stops and starts again: without one the margin
+# would show black, so the window drops it, and gets it back after. Xfwm4
+# only: Mutter is always compositing, Openbox gives no margin, and KWin's
+# can't be stopped here (below).
+compositor() { # on|off
+  local pid bus
+  pid="$(session_pids | while read -r p; do
+    tr '\0' '\n' <"/proc/$p/cmdline" 2>/dev/null | head -1 | grep -qE '(^|/)xfwm4$' && echo "$p"; done | head -1)"
+  bus="$(tr '\0' '\n' <"/proc/$pid/environ" 2>/dev/null | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')"
+  case "$WM" in
+    xfwm4)
+      DBUS_SESSION_BUS_ADDRESS="$bus" xfconf-query -c xfwm4 -p /general/use_compositing -s \
+        "$([ "$1" = on ] && echo true || echo false)" ;;
+  esac
+}
+if [ "$MARGIN" = YES ] && [ "$WM" = kwin ]; then
+  # KWin 6 has no suspend/resume on D-Bus any more, and its shortcut
+  # (Alt+Shift+F12) needs kglobalaccel, which this session doesn't run.
+  report SKIP "$NAME-compositor-restart" "KWin 6's compositor can't be stopped from the test session"
+elif [ "$MARGIN" = YES ] && [ "$WM" = xfwm4 ]; then
+  WITH="$(extents)"
+  compositor off
+  sleep 2
+  WITHOUT="$(extents)"
+  compositor on
+  sleep 2
+  AGAIN="$(extents)"
+  DETAIL="frame extents $WITH, without the compositor $WITHOUT, with it again $AGAIN"
+  if [ "$WITH" != "0 0 0 0" ] && [ "$WITHOUT" = "0 0 0 0" ] && [ "$AGAIN" = "$WITH" ]; then
+    report PASS "$NAME-compositor-restart" "$DETAIL"
+  else
+    report FAIL "$NAME-compositor-restart" "$DETAIL"
+  fi
 fi
 
 echo "SUMMARY $NAME failed=$FAILED"
