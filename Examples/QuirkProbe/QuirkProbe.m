@@ -1492,6 +1492,70 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    of mid grey), and shortcuts end 12pt inside the row, 16pt from the
    cell's edge (the row is inset 4pt), with submenu arrows' boxes (#10:
    flush against the edge). */
+/* A text field whose background the app chose (Gorm's CustomView palette
+   item: dark gray, white bold text, not editable) fills with that colour;
+   a plain read-only field keeps the theme's (#27). */
+static BOOL
+QuirkProbeIsDarkFill (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return red + green + blue < 330;
+}
+
+static BOOL
+QuirkProbeIsWhiteText (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return red + green + blue > 720;
+}
+
+- (void) checkCustomBackgroundField
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 500, 280, 80) title: @"QuirkProbe Fields"];
+  NSView *view = [window contentView];
+  NSTextField *custom = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (10, 20, 120, 40)]);
+  NSTextField *plain = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (150, 20, 120, 40)]);
+  NSBitmapImageRep *rep;
+  NSRect middle;
+  QuirkProbeInk dark, white, plainDark;
+  NSString *detail;
+
+  [custom setBackgroundColor: [NSColor darkGrayColor]];
+  [custom setTextColor: [NSColor whiteColor]];
+  [custom setDrawsBackground: YES];
+  [custom setAlignment: NSCenterTextAlignment];
+  [custom setFont: [NSFont boldSystemFontOfSize: 0]];
+  [custom setEditable: NO];
+  [custom setSelectable: NO];
+  [custom setStringValue: @"CustomView"];
+  [plain setEditable: NO];
+  [plain setSelectable: NO];
+  [plain setStringValue: @"Plain"];
+  [view addSubview: custom];
+  [view addSubview: plain];
+  [window orderFront: nil];
+  [window display];
+
+  rep = QuirkProbeRender (custom);
+  middle = NSMakeRect (10, 6, [rep pixelsWide] - 20, [rep pixelsHigh] - 12);
+  dark = QuirkProbeMeasureIn (rep, QuirkProbeIsDarkFill, middle);
+  white = QuirkProbeMeasureIn (rep, QuirkProbeIsWhiteText, middle);
+  rep = QuirkProbeRender (plain);
+  plainDark = QuirkProbeMeasureIn (rep, QuirkProbeIsDarkFill,
+                                   NSMakeRect (10, 6, [rep pixelsWide] - 20, [rep pixelsHigh] - 12));
+  detail = [NSString stringWithFormat: @"custom: %lu dark and %lu white pixels of %ld; plain: %lu dark",
+                     (unsigned long)dark.count, (unsigned long)white.count,
+                     (long)(NSWidth (middle) * NSHeight (middle)), (unsigned long)plainDark.count];
+  if (dark.count > NSWidth (middle) * NSHeight (middle) / 2 && white.count > 20
+    && plainDark.count < NSWidth (middle) * NSHeight (middle) / 4)
+    {
+      [self pass: @"text-field-custom-background" detail: detail];
+    }
+  else
+    {
+      [self fail: @"text-field-custom-background" detail: detail];
+    }
+  [window orderOut: nil];
+}
+
 /* Shortcut labels as GTK writes them (gtk_accelerator_get_label): Shift,
    Ctrl, Alt, then the key; an uppercase key equivalent means Shift (#41). */
 - (void) checkShortcutLabels
@@ -4489,6 +4553,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkThemeDomain];
   [self checkShortcutLabels];
+  [self checkCustomBackgroundField];
   [self checkSizedButtons];
   [self checkFixedButtons];
   [self checkSteppers];

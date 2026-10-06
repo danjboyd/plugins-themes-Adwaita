@@ -604,6 +604,20 @@ GnomeThemeDrawEntryChrome(GnomeTheme *theme,
                                 &fillColor,
                                 &borderColor,
                                 &borderWidth);
+  /* A background the app chose (not the text background every field has)
+     fills the entry: Gorm's CustomView palette item is a dark tile with a
+     white class name, which drew as a pale read-only entry with the name
+     barely showing (#27). */
+  if ([view isKindOfClass: [NSTextField class]] && [(NSTextField *)view drawsBackground])
+    {
+      NSColor *background = [(NSTextField *)view backgroundColor];
+
+      if (background != nil && [background isEqual: [NSColor textBackgroundColor]] == NO
+        && [background isEqual: [NSColor controlBackgroundColor]] == NO)
+        {
+          fillColor = background;
+        }
+    }
 
   GnomeThemeFillAndStrokeRoundedRect (borderRect,
                                       radius,
