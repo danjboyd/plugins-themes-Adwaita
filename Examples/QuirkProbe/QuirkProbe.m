@@ -4412,6 +4412,11 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self checkFileChooser];
       return;
     }
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"menu-timing"])
+    {
+      [self checkMenuTiming];
+      return;
+    }
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
      high contrast runs (the other checks assume the light palette). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])

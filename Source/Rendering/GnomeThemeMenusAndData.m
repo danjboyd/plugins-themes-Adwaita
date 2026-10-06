@@ -1108,6 +1108,25 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   return rect;
 }
 
+/* libs-gui asks for an item's rect to redraw it, and while the menu needs
+   sizing that sizes the whole menu: each item added to a menu re-measures
+   all the others, so filling a 2,500-item font menu measured items millions
+   of times (#46). The layout changes once it is sized anyway, so redraw the
+   whole view then; sized, redraw just the item. */
+- (void) _overrideNSMenuViewMethod_setNeedsDisplayForItemAtIndex: (NSInteger)index
+{
+  typedef void (*SetNeedsDisplayIMP)(id, SEL, NSInteger);
+  SetNeedsDisplayIMP originalIMP = (SetNeedsDisplayIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
+
+  if ([menuView needsSizing] || originalIMP == NULL)
+    {
+      [menuView setNeedsDisplay: YES];
+      return;
+    }
+  originalIMP (self, _cmd, index);
+}
+
 /* The main menu opens under its button, right edges aligned, as GNOME's
    main-menu popover does; GNUstep lines submenus up on the item's left edge,
    which at the end of the bar would hang past the window. */

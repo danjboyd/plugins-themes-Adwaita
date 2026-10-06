@@ -32,7 +32,8 @@ QuirkProbe_PRINCIPAL_CLASS = NSApplication
 QuirkProbe_OBJC_FILES = \
 	main.m \
 	QuirkProbe.m \
-	QuirkProbeFileChooser.m
+	QuirkProbeFileChooser.m \
+	QuirkProbeMenuTiming.m
 
 QuirkProbe_HEADER_FILES = \
 	QuirkProbe.h

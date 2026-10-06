@@ -26,6 +26,7 @@
 
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
+#include <string.h>
 
 static NSString *GnomeThemeRuntimeDefaultsDomain = @"GnomeThemeRuntimeDomain";
 
@@ -40,11 +41,28 @@ static NSString *GnomeThemeRuntimeDefaultsDomain = @"GnomeThemeRuntimeDomain";
      toDictionary: (NSMutableDictionary *)dictionary;
 @end
 
-IMP
-GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
+/* -overriddenMethod:for: walks every override the theme registered, and
+   the overrides ask for their original on every call: thousands of times
+   when a long menu is sized (#46). The answer for a selector and a class
+   only changes with the theme, so it is kept here, in a small table that
+   is emptied when the theme changes; a collision just looks it up again. */
+typedef struct
+{
+  SEL selector;
+  Class cls;
+  Class baseClass;
+  IMP imp;
+} GnomeThemeOriginalMethodEntry;
+
+#define GNOME_THEME_ORIGINAL_METHOD_CACHE 1024
+
+static GnomeThemeOriginalMethodEntry GnomeThemeOriginalMethodCache[GNOME_THEME_ORIGINAL_METHOD_CACHE];
+static GSTheme *GnomeThemeOriginalMethodCacheTheme = nil;
+
+static IMP
+GnomeThemeLookUpOriginalMethod(GSTheme *theme, SEL selector, id receiver, Class baseClass)
 {
   static NSMapTable *prototypes = nil;
-  GSTheme *theme = [GSTheme theme];
   IMP imp = [theme overriddenMethod: selector for: receiver];
   id prototype;
 
@@ -67,6 +85,38 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
       NSMapInsert (prototypes, (void *)baseClass, (void *)prototype);
     }
   return [theme overriddenMethod: selector for: prototype];
+}
+
+IMP
+GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
+{
+  GSTheme *theme = [GSTheme theme];
+  Class cls = object_getClass (receiver);
+  uintptr_t hash = ((uintptr_t)(void *)selector >> 3) ^ ((uintptr_t)cls >> 4) ^ ((uintptr_t)baseClass >> 5);
+  GnomeThemeOriginalMethodEntry *entry = &GnomeThemeOriginalMethodCache[hash % GNOME_THEME_ORIGINAL_METHOD_CACHE];
+
+  if (theme != GnomeThemeOriginalMethodCacheTheme)
+    {
+      memset (GnomeThemeOriginalMethodCache, 0, sizeof (GnomeThemeOriginalMethodCache));
+      GnomeThemeOriginalMethodCacheTheme = theme;
+    }
+  if (entry->selector != selector || entry->cls != cls || entry->baseClass != baseClass)
+    {
+      entry->imp = GnomeThemeLookUpOriginalMethod (theme, selector, receiver, baseClass);
+      entry->selector = selector;
+      entry->cls = cls;
+      entry->baseClass = baseClass;
+    }
+  return entry->imp;
+}
+
+/* The originals change when the theme's overrides are installed or
+   removed: forget them. */
+void
+GnomeThemeForgetOriginalMethods(void)
+{
+  memset (GnomeThemeOriginalMethodCache, 0, sizeof (GnomeThemeOriginalMethodCache));
+  GnomeThemeOriginalMethodCacheTheme = nil;
 }
 
 /* NSParagraphStyle's class version went to 4 when libs-gui renumbered
@@ -285,7 +335,9 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 
   [self reloadConfiguration];
   [self applyRuntimeDefaults];
+  GnomeThemeForgetOriginalMethods ();
   [super activate];
+  GnomeThemeForgetOriginalMethods ();
   [center addObserver: self
              selector: @selector(windowNeedsMainMenu:)
                  name: NSWindowDidBecomeKeyNotification
@@ -316,6 +368,7 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
   [center removeObserver: self name: NSUserDefaultsDidChangeNotification object: nil];
   [self removeRuntimeDefaults];
   [super deactivate];
+  GnomeThemeForgetOriginalMethods ();
 }
 
 /* With NSWindows95InterfaceStyle, GNUstep puts the main menu only into the

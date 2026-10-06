@@ -73,7 +73,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-file-chooser check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -97,6 +97,11 @@ check-quirks:
 # on a private session bus, and GNUstep's panels without one.
 check-file-chooser:
 	bash Tests/Scripts/run-file-chooser-check.sh
+
+# The CPU time to fill and size a 2,500-item pop-up menu, against GNUstep's theme
+# in the same process (#46).
+check-menu-timing:
+	QUIRK_PROBE_ARGS="-ProbeOnly menu-timing" bash Tests/Scripts/run-quirk-probe.sh
 
 # The header bar with Mutter as the window manager (GNOME Shell on a private
 # Xvfb display; see the script).

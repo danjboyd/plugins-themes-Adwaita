@@ -65,3 +65,7 @@
 @interface QuirkProbe (FileChooser)
 - (void) checkFileChooser;
 @end
+
+@interface QuirkProbe (MenuTiming)
+- (void) checkMenuTiming;
+@end

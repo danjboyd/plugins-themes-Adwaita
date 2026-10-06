@@ -29,6 +29,7 @@
    it answers NULL and the override has nothing to fall back on. This looks the
    method up for `baseClass`, the class the override was installed on, instead. */
 IMP GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass);
+void GnomeThemeForgetOriginalMethods(void);
 
 /* Centred and right-aligned text as the running libs-gui numbers them.
    libs-gui after 0.32 numbers NSTextAlignment as AppKit does (centre 1,
