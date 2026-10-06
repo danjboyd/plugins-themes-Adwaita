@@ -20,6 +20,15 @@ says what its patch does where it differs from what was first proposed.
 `Docs/upstream-patches/libs-back-csd.diff`, with its own ChangeLog entry and
 test (`Tests/x11/windowtype.m`, 4 checks; 3 fail without the patch).
 
+**Updated 2026-10-06: the patches are now a series** in
+`Docs/upstream-patches/libs-back/` (five commits) and
+`Docs/upstream-patches/libs-gui/` (one), against libs-back master 9731f15
+and libs-gui master 549f63913, prepared to follow GNUstep's policy on
+AI-generated content: one change per commit, each with its own ChangeLog
+entry, its own test and a disclosure. They replace the two `.diff` files
+above. `Docs/upstream-patches/README.md` lists them, how they meet the
+policy, and what changed on the way (a libs-gui bug fix among them).
+
 ### Background
 
 With `GSX11HandlesWindowDecorations NO`, GNUstep draws the title bar itself

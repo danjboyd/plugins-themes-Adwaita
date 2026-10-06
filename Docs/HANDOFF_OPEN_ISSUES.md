@@ -150,6 +150,14 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
 
 ## The patched libraries
 
+- **The upstream series (2026-10-06):** `~/git/gnustep/libs-back-series`
+  (branch `ai-policy/csd-series`) and `~/git/gnustep/libs-gui-series`
+  (branch `ai-policy/theme-backend-defaults`), git worktrees of the two
+  repositories below, committed on current master. These are now what is
+  proposed upstream, exported to `Docs/upstream-patches/libs-back/` and
+  `libs-gui/` with `git format-patch`; see `Docs/upstream-patches/README.md`.
+  The `-csd` worktrees below are what apps run with today and still hold
+  the earlier draft (the libs-gui one without the registration-domain fix).
 - **libs-back:** `~/git/gnustep/libs-back-csd`, branch csd-header-bar, base
   5db2ae7, all uncommitted. Build with `make` in the worktree.
 - **libs-gui:** `~/git/gnustep/libs-gui-csd`, branch csd-theme-decorations,
@@ -157,10 +165,11 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
   `make ADDITIONAL_OBJCFLAGS=-Wno-error=format-security`.
 - **Running an app against them:** `~/bin/gs-patched <app>` links the backend
   as `libgnustep-backcsd` and sets `LD_LIBRARY_PATH`.
-- **After any patch change:** add a ChangeLog entry in the worktree,
-  re-export with `git diff > Docs/upstream-patches/libs-back-csd.diff` (or
-  `libs-gui-theme-decorations.diff`), and update
-  `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
+- **After any patch change:** change the commit it belongs to in the
+  series (with its ChangeLog entry and test), check that every commit
+  still builds and passes on its own, re-export with
+  `git format-patch -o Docs/upstream-patches/libs-back origin/master` (or
+  `libs-gui`), and update `Docs/upstream-patches/README.md`.
 - **libs-back's own tests load the installed backend** unless the config
   points elsewhere. Make a GNUstep.conf copy whose
   `GNUSTEP_USER_DIR_LIBRARY` is a directory holding
@@ -170,10 +179,10 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
   `GNUSTEP_CONFIG_FILE=<that> gnustep-tests .` in `libs-back-csd/Tests`.
   Expected: 307 passed, with `cairo/pdfps.m` sometimes aborting (it does on
   the clean backend too; #29).
-- **Comparing with a clean backend:** check out the base commit (5db2ae7)
-  in a separate worktree, build it, and point a second config at it.
-  `x11/shadowmargin.m` should then fail 14 of its 19 checks, and
-  `x11/windowtype.m` 3 of its 4.
+- **Comparing with a clean backend:** check out the commit before the one
+  under test in the series worktree, build it, and run that commit's
+  test: the counts that fail are in each commit message and in
+  `Docs/upstream-patches/README.md`.
 
 ## Pointers
 

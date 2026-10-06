@@ -1,77 +1,136 @@
+From 496f379f456b7446e0dbc5dfc90935eaff8e0de6 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Tue, 6 Oct 2026 11:30:32 -0500
+Subject: [PATCH 4/5] x11, cairo: window shadows and rounded corners for
+ windows the gui decorates
+
+When the gui draws a window's decorations (GSBackHandlesWindowDecorations
+or GSX11HandlesWindowDecorations NO), as a theme drawing GNOME's header
+bar does, the window has neither the window manager's frame nor its
+shadow.  GTK's client-side decorated windows draw their own shadow in a
+transparent margin round the window, tell the window manager where the
+window is within the margin (_GTK_FRAME_EXTENTS), and round their top
+corners.  This does the same for GNUstep windows, when a theme asks for
+it with GSBackWindowShadows (and GSBackWindowCornerRadius) in its
+GSThemeDomain.  Nothing changes unless the default is set.
+
+A styled, buffered window gets the margin only when the gui draws its
+decorations, the window manager lists _GTK_FRAME_EXTENTS in
+_NET_SUPPORTED (otherwise it would place, snap and tile the window by
+the margin's edge) and a compositing manager runs (otherwise the margin
+would show black).  The X window is then the frame plus the margin, with
+the 32-bit visual from the previous change; -_offsets::::for: replaces
+-styleoffsets::::: wherever frames, rectangles and points are converted,
+so the gui keeps working in its frame's coordinates.  The input shape
+lets presses in the margin through to what is below, except a 12 point
+band round a resizable window, where the gui resizes from, as GTK's
+windows do.  The margin is dropped while the window manager has the
+window maximized, fullscreen or tiled, and while no compositing manager
+runs (XFixes tells when one starts or stops).  Margin, radius and band
+are in points and grow with GSScaleFactor.
+
+When the margin changes on a maximize or restore, the window manager
+usually configures the window for the old margin first, so the gui would
+see three resizes for one maximize; the frame is held back until the
+ConfigureNotify events stop (50 ms with none, 300 ms at most) and sent
+once.
+
+XGCairoModernSurface draws the shadow: black, 19% at the sides of the
+window fading over about 30 pixels, weaker above and stronger below, as
+measured from libadwaita 1.7 windows under Mutter (only the numbers are
+taken; no code).  It is computed once as a template of corners and
+edges and put together in the X server for each window size.  Exposes
+copy the contents and the shadow as rectangles, and only the four
+corners go through a rounded clip.  An OpenGL view's X window is placed
+with the new offsets too.
+
+Testing: two tests, each forking a stand-in window manager that knows
+_GTK_FRAME_EXTENTS (Tests/x11/FakeCSDWindowManager.h, which grants every
+configure request and never sets a state itself) and the stand-in
+compositing manager from the previous change.  Both need a display with
+neither (a private Xvfb) and skip otherwise, and set their defaults in
+the argument domain, for the test process only.
+
+- Tests/x11/shadowmargin.m works with the display server alone and
+  reads back what the window manager is told: _GTK_FRAME_EXTENTS, the
+  depth and size of the X window and its input shape, as exact values.
+  It plays a maximize and a restore by setting _NET_WM_STATE, stops and
+  restarts the compositing manager, sets a program resize, and repeats
+  with GSScaleFactor 2.  Negative cases guard against the margin
+  appearing where it must not: without the default, for a non-retained
+  or borderless window, for a window made with no compositing manager,
+  and under a window manager without _GTK_FRAME_EXTENTS.  Without this
+  change the 12 positive checks fail and the 5 negative ones pass; with
+  it all 17 pass.
+- Tests/x11/shadowdrawing.m makes a real NSWindow and reads the alpha of
+  its X window's pixels back: the contents opaque, the top corners
+  rounded off, about 19% black beside the window fading to nearly
+  nothing at the margin's edge, and stronger below than above.  The
+  bounds are loose enough for rounding (values seen: 46, 19 and 3 across
+  the margin, 51 below, 22 above) but would catch a missing shadow,
+  unrounded corners or a shadow drawn over the window.  Without this
+  change its first check fails ("a 32-bit X window larger than its
+  frame") and the rest don't run; with it all 8 pass.  It was run
+  against libs-gui master; with libs-gui 0.32 the test process aborts in
+  the gui before its first check (-[GSCInlineString copy] sent to a
+  deallocated instance while the window is made), which windowtype.m
+  also works around.
+
+Not covered by these tests: the frame being held back while the margin
+settles, the _GTK_EDGE_CONSTRAINTS (tiled) case, and the OpenGL view's
+placement.  Outside libs-back, a GNOME Shell (Mutter 48, X11) on a
+private Xvfb was run against this series by the Adwaita theme's own
+check (make check-mutter-shadow in plugins-themes-Adwaita), which passed:
+among its 16 checks, one resize reaches the gui on a maximize and two on
+the restore, the margin is gone while maximized and back after, and a
+press 12 pixels outside the window resizes it while one 13 pixels out
+reaches the window behind.
+
+AI assistance: this change, its tests and this description were written
+with Claude (Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ChangeLog                            |  75 ++++++
+ Headers/cairo/XGCairoModernSurface.h |   3 +
+ Headers/x11/XGGeneric.h              |   7 +-
+ Headers/x11/XGServer.h               |   1 +
+ Headers/x11/XGServerWindow.h         |  29 +++
+ Source/cairo/XGCairoModernSurface.m  | 295 +++++++++++++++++++++-
+ Source/x11/XGGLContext.m             |  28 ++-
+ Source/x11/XGServer.m                |  26 ++
+ Source/x11/XGServerEvent.m           | 159 +++++++++++-
+ Source/x11/XGServerWindow.m          | 312 ++++++++++++++++++++++-
+ Tests/x11/FakeCSDWindowManager.h     | 145 +++++++++++
+ Tests/x11/shadowdrawing.m            | 229 +++++++++++++++++
+ Tests/x11/shadowmargin.m             | 357 +++++++++++++++++++++++++++
+ 13 files changed, 1641 insertions(+), 25 deletions(-)
+ create mode 100644 Tests/x11/FakeCSDWindowManager.h
+ create mode 100644 Tests/x11/shadowdrawing.m
+ create mode 100644 Tests/x11/shadowmargin.m
+
 diff --git a/ChangeLog b/ChangeLog
-index 2b1b779..8cee13c 100644
+index 9a09d01..82f769c 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,130 @@
-+2026-10-05 Daniel Boyd <danieljboyd@icloud.com>
+@@ -1,3 +1,78 @@
++2026-10-06 Daniel Boyd <danieljboyd@icloud.com>
 +
-+	Popover shadows: menus get libadwaita's popover shadow round their
-+	rounded corners, in a transparent margin as windows do.
-+	* Source/x11/XGServerWindow.m (popoverMargin, marginFor): New.  A
-+	popover's margin, smaller than a window's.
-+	(-_windowGetsPopoverShadow:): New.  A borderless window marked with
-+	NSUtilityWindowMask (which a borderless window has no other use for;
-+	a theme marks its menus) gets a popover's margin when
-+	GSBackPopoverShadows is YES, on a window's terms: the gui draws the
-+	decorations, the window manager lists _GTK_FRAME_EXTENTS and the
-+	compositing manager shows transparency.  GSBackPopoverCornerRadius
-+	rounds its corners.
-+	(-window::::, -_updateShadowSizeOf:): Use the window's margin.
-+	* Source/cairo/XGCairoModernSurface.m (box_shadow_layer,
-+	popover_shadow_alpha): New.  libadwaita's popover box-shadow, two
-+	blurred layers, each from the distance to the popover's rounded
-+	outline (grown by its spread), so it follows the rounded corners.
-+	(shadow_template, create_shadow): Take the kind of shadow; keep a
-+	template for each.
-+	* Headers/x11/XGServerWindow.h: Add shadow_popover to
-+	gswindow_device_t.
-+	* Tests/x11/shadowmargin.m: Check popovers' margin and input shape.
-+
-+2026-10-05 Daniel Boyd <danieljboyd@icloud.com>
-+
-+	Window types as GTK sets them, so window managers neither focus nor
-+	animate menus and tool tips, and compositors can key shadows and
-+	fades on the type.
-+	* Source/x11/XGServerWindow.m (-_setWindowType:): New, from
-+	-setwindowlevel::.  A tool tip (GSTTPanel) is _TOOLTIP, a menu at
-+	the pop-up menu level (a context menu or a pop-up button's) is
-+	_POPUP_MENU rather than _DIALOG, a drag image is _DND, and a modal
-+	panel is _DIALOG rather than _NORMAL.  The new types are followed by
-+	_DIALOG, their old type, for window managers that don't know them
-+	(Openbox).  Other windows keep their types.
-+	(-setwindowlevel::): Use it.
-+	(-orderwindow:::): Set the type again just before mapping a window
-+	at the pop-up menu level: a tool tip's level is set before its window
-+	is registered, so its class wasn't known and it was typed _DIALOG.
-+	* Tests/x11/windowtype.m: New test.
-+
-+2026-10-02 Daniel Boyd <danieljboyd@icloud.com>
-+
-+	Window shadows, rounded corners and window manager functions for
-+	windows whose decorations the gui draws (GSBackHandlesWindowDecorations
-+	or GSX11HandlesWindowDecorations NO), as GTK's client-side
-+	decorations have them under GNOME's Mutter.
-+	* Source/x11/XGServerWindow.m (setWindowHintsForStyle): For a styled
-+	window the gui decorates, ask for no decorations but keep the
-+	functions the style allows, plus move.  With functions 0 window
-+	managers such as Mutter refused to move, resize, maximize, minimize
-+	or close the window, even when asked with _NET_WM_MOVERESIZE or
-+	_NET_WM_STATE.
-+	(argb_visual, -_compositorRuns, -_compositorShowsAlpha,
-+	-_windowGetsShadow:): New.  A styled, buffered window the gui
-+	decorates gets a transparent margin for a shadow when the
-+	GSBackWindowShadows default is YES (a theme sets it in its
-+	GSThemeDomain), the window manager lists _GTK_FRAME_EXTENTS in
-+	_NET_SUPPORTED and a compositing manager runs, with a 32-bit visual
-+	of its own (one per screen).  GSBackWindowCornerRadius rounds its
-+	corners.
++	Window shadows and rounded corners for windows whose decorations the
++	gui draws (GSBackHandlesWindowDecorations or
++	GSX11HandlesWindowDecorations NO), as GTK's client-side decorations
++	have them under GNOME's Mutter.
++	* Source/x11/XGServerWindow.m (-_windowGetsShadow:): New.  A
++	styled, buffered window the gui decorates gets a transparent margin
++	for a shadow when the GSBackWindowShadows default is YES (a theme
++	sets it in its GSThemeDomain), the window manager lists
++	_GTK_FRAME_EXTENTS in _NET_SUPPORTED and a compositing manager
++	shows transparency.  GSBackWindowCornerRadius rounds its corners.
++	(-_compositorRuns): Remember the answer while XFixes reports the
++	compositing manager starting and stopping.
 +	(-_compositorChanged): New.  When the compositing manager stops,
 +	windows lose their margin, which would show black; they get it back
 +	when one starts.
-+	(-_windowGetsAlpha:): New.  A borderless window (menus, tool tips)
-+	gets the 32-bit visual when GSBackBorderlessWindowAlpha is YES and a
-+	compositing manager runs, so what the gui leaves transparent, such
-+	as rounded corners, shows what is behind it.
 +	(-_offsets::::for:): New.  The offsets between the frame and the X
 +	window: the window manager's decorations when it draws them, else
 +	minus the shadow margin.  Use it in the frame, window rectangle and
@@ -88,7 +147,7 @@ index 2b1b779..8cee13c 100644
 +	the resize band are in points: multiply them by the gui's scale
 +	factor (GSScaleFactor), as GTK's grow with its scale.
 +	(-window::::): Create such windows with the 32-bit visual, and the
-+	margin where they have one.
++	margin.
 +	(-placewindow::): Reshape the input region when the size changes:
 +	the ConfigureNotify that follows finds xframe already updated.
 +	* Source/x11/XGServerEvent.m: Use -_offsets::::for: for event
@@ -111,9 +170,6 @@ index 2b1b779..8cee13c 100644
 +	* Source/x11/XGGLContext.m: Place an OpenGL view's X window with
 +	-_offsets::::for:, so it is where the view is in a window with a
 +	margin.
-+	* Tests/x11/shadowmargin.m: New test, with a window manager and a
-+	compositing manager of its own.
-+	* Tests/x11/GNUmakefile: Add it.
 +	* Source/cairo/XGCairoModernSurface.m (shadow_alpha, shadow_template,
 +	create_shadow): New.  The shadow, as libadwaita's under Mutter, put
 +	together in the X server from corners and edges computed once, its
@@ -129,10 +185,13 @@ index 2b1b779..8cee13c 100644
 +	-_shadowSettled:, -_compositorRuns and -_compositorChanged.
 +	* Headers/x11/XGGeneric.h: Add the _GTK_FRAME_EXTENTS and
 +	_GTK_EDGE_CONSTRAINTS atoms.
++	* Tests/x11/FakeCSDWindowManager.h: New.  A window manager that
++	knows _GTK_FRAME_EXTENTS, for tests.
++	* Tests/x11/shadowmargin.m, Tests/x11/shadowdrawing.m: New tests.
 +
- 2026-07-22 Richard Frith-Macdonald <rfm@gnu.org>
+ 2026-10-06 Daniel Boyd <danieljboyd@icloud.com>
  
- 	* Source/x11/XGServerEvent.m:
+ 	* Source/x11/XGServerWindow.m (argb_visual, -_compositorRuns,
 diff --git a/Headers/cairo/XGCairoModernSurface.h b/Headers/cairo/XGCairoModernSurface.h
 index 9a02c62..02c03b6 100644
 --- a/Headers/cairo/XGCairoModernSurface.h
@@ -185,7 +244,7 @@ index c57a7bb..1026b62 100644
    unsigned          monitorsCount;
  }
 diff --git a/Headers/x11/XGServerWindow.h b/Headers/x11/XGServerWindow.h
-index adca517..a8257dd 100644
+index adca517..81bbd7b 100644
 --- a/Headers/x11/XGServerWindow.h
 +++ b/Headers/x11/XGServerWindow.h
 @@ -32,6 +32,8 @@
@@ -197,7 +256,7 @@ index adca517..a8257dd 100644
  /*
   * WindowMaker window manager interaction
   *
-@@ -97,6 +99,27 @@ typedef struct _gswindow_device_t {
+@@ -97,6 +99,25 @@ typedef struct _gswindow_device_t {
    NSBackingStoreType    type;          /* Backing type */
    NSRect                xframe;        /* Window frame in X11 coordinates */
    NSRect                osframe;       /* Window frame in OpenStep coordinates */
@@ -215,8 +274,6 @@ index adca517..a8257dd 100644
 +					  fullscreen nor tiled */
 +  BOOL                  shadow_resizable; /* Takes presses in a band round
 +					  the visible part, for resizing */
-+  BOOL                  shadow_popover; /* A popover's (a menu's) smaller
-+					  margin and shadow, not a window's */
 +  BOOL                  shadow_settling; /* That margin changed and the
 +					  window manager is fitting the
 +					  window to it: the gui hears of
@@ -225,7 +282,7 @@ index adca517..a8257dd 100644
  
    unsigned int          buffer_width;  /* Size in pixels of the current buffers. */
    unsigned int          buffer_height;
-@@ -133,6 +156,14 @@ typedef struct _gswindow_device_t {
+@@ -133,6 +154,14 @@ typedef struct _gswindow_device_t {
  + (gswindow_device_t *) _windowForXParent: (Window)xWindow;
  + (gswindow_device_t *) _windowWithTag: (int)windowNumber;
  - (void) _addExposedRectangle: (XRectangle)rectangle : (int)win : (BOOL) ignoreBacking;
@@ -241,10 +298,10 @@ index adca517..a8257dd 100644
  - (void) _initializeCursorForXWindow: (Window) win;
  - (void) _destroyServerWindows;
 diff --git a/Source/cairo/XGCairoModernSurface.m b/Source/cairo/XGCairoModernSurface.m
-index a722168..0805390 100644
+index a722168..e334283 100644
 --- a/Source/cairo/XGCairoModernSurface.m
 +++ b/Source/cairo/XGCairoModernSurface.m
-@@ -27,9 +27,278 @@
+@@ -27,9 +27,230 @@
  #include "x11/XGServerWindow.h"
  #include "cairo/XGCairoModernSurface.h"
  #include <cairo-xlib.h>
@@ -309,50 +366,6 @@ index a722168..0805390 100644
 +  return side;
 +}
 +
-+/*
-+ * One layer of a CSS box-shadow round a rounded box: the box grown by
-+ * `spread` (its corner radius too) and moved down by `offset`, blurred by
-+ * `blur` (a Gaussian with half that as its deviation), as seen at (px, py).
-+ * Computed from the distance to the grown box's rounded outline, so it
-+ * follows the corners as a browser's does.
-+ */
-+static double
-+box_shadow_layer(double px, double py, double x0, double x1, double y0,
-+		 double y1, double radius, double offset, double spread,
-+		 double blur)
-+{
-+  double r = radius + spread;
-+  double left = x0 - spread, right = x1 + spread;
-+  double top = y0 - spread + offset, bottom = y1 + spread + offset;
-+  double qx = MAX(MAX(left + r - px, px - (right - r)), 0.0);
-+  double qy = MAX(MAX(top + r - py, py - (bottom - r)), 0.0);
-+  double d = sqrt(qx * qx + qy * qy) - r;
-+
-+  return 0.5 * erfc(d / (blur / 2.0 * M_SQRT2));
-+}
-+
-+/*
-+ * A popover's shadow (libadwaita's popover contents): box-shadow
-+ * 0 1px 5px 1px black at 0.09, and 0 2px 14px 3px black at 0.05, at
-+ * scale 1, round its rounded corners. 0 inside the rounded visible part.
-+ */
-+static double
-+popover_shadow_alpha(double px, double py, double x0, double x1, double y0,
-+		     double y1, double radius, double scale)
-+{
-+  double dx = MAX(MAX(x0 + radius - px, px - (x1 - radius)), 0.0);
-+  double dy = MAX(MAX(y0 + radius - py, py - (y1 - radius)), 0.0);
-+
-+  if (sqrt(dx * dx + dy * dy) <= radius && px > x0 && px < x1 && py > y0 && py < y1)
-+    {
-+      return 0.0;
-+    }
-+  return 0.09 * box_shadow_layer(px, py, x0, x1, y0, y1, radius,
-+				 1 * scale, 1 * scale, 5 * scale)
-+    + 0.05 * box_shadow_layer(px, py, x0, x1, y0, y1, radius,
-+			      2 * scale, 3 * scale, 14 * scale);
-+}
-+
 +static inline uint32_t
 +shadow_pixel(double alpha)
 +{
@@ -368,21 +381,21 @@ index a722168..0805390 100644
 + */
 +#define SHADOW_TILE 64
 +
++/* A template kept in the X server, and what it was made for. */
++typedef struct {
++  cairo_surface_t *surface;
++  Display *display;
++  int margin[4];
++  int radius;
++  double scale;
++} shadow_cache;
++
 +static cairo_surface_t *
 +shadow_template(cairo_surface_t *similar, const int *margin, int radius,
-+		double scale, BOOL popover)
++		double scale)
 +{
-+  /* One for windows, one for popovers. */
-+  static cairo_surface_t *cachedTemplates[2] = { NULL, NULL };
-+  static Display *cachedDisplays[2] = { NULL, NULL };
-+  static int cachedMargins[2][4], cachedRadii[2] = { -1, -1 };
-+  static double cachedScales[2] = { 0.0, 0.0 };
-+  int k = popover ? 1 : 0;
-+#define cached cachedTemplates[k]
-+#define cachedDisplay cachedDisplays[k]
-+#define cachedMargin cachedMargins[k]
-+#define cachedRadius cachedRadii[k]
-+#define cachedScale cachedScales[k]
++  static shadow_cache windowCache;
++  shadow_cache *cache = &windowCache;
 +  int width = margin[0] + 2 * radius + SHADOW_TILE + margin[1];
 +  int height = margin[2] + 2 * radius + SHADOW_TILE + margin[3];
 +  double x0 = margin[0], x1 = width - margin[1];
@@ -393,10 +406,11 @@ index a722168..0805390 100644
 +  unsigned char *data;
 +  int stride, x, y;
 +
-+  if (cached != NULL && cachedDisplay == display && cachedRadius == radius
-+    && cachedScale == scale && memcmp(cachedMargin, margin, sizeof(cachedMargin)) == 0)
++  if (cache->surface != NULL && cache->display == display
++    && cache->radius == radius && cache->scale == scale
++    && memcmp(cache->margin, margin, sizeof(cache->margin)) == 0)
 +    {
-+      return cached;
++      return cache->surface;
 +    }
 +  image = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 +  if (cairo_surface_status(image) != CAIRO_STATUS_SUCCESS)
@@ -413,33 +427,28 @@ index a722168..0805390 100644
 +
 +      for (x = 0; x < width; x++)
 +	{
-+	  row[x] = shadow_pixel(popover
-+	    ? popover_shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1, radius, scale)
-+	    : shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1, radius, scale));
++	  row[x] = shadow_pixel(shadow_alpha(x + 0.5, y + 0.5, x0, x1, y0, y1,
++					     radius, scale));
 +	}
 +    }
 +  cairo_surface_mark_dirty(image);
-+  if (cached != NULL)
++  if (cache->surface != NULL)
 +    {
-+      cairo_surface_destroy(cached);
++      cairo_surface_destroy(cache->surface);
 +    }
-+  cached = cairo_surface_create_similar(similar, CAIRO_CONTENT_COLOR_ALPHA, width, height);
-+  cr = cairo_create(cached);
++  cache->surface = cairo_surface_create_similar(similar,
++    CAIRO_CONTENT_COLOR_ALPHA, width, height);
++  cr = cairo_create(cache->surface);
 +  cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 +  cairo_set_source_surface(cr, image, 0, 0);
 +  cairo_paint(cr);
 +  cairo_destroy(cr);
 +  cairo_surface_destroy(image);
-+  cachedDisplay = display;
-+  memcpy(cachedMargin, margin, sizeof(cachedMargin));
-+  cachedRadius = radius;
-+  cachedScale = scale;
-+  return cached;
-+#undef cached
-+#undef cachedDisplay
-+#undef cachedMargin
-+#undef cachedRadius
-+#undef cachedScale
++  cache->display = display;
++  memcpy(cache->margin, margin, sizeof(cache->margin));
++  cache->radius = radius;
++  cache->scale = scale;
++  return cache->surface;
 +}
 +
 +/* Copies a rectangle of the template to (dx, dy) in the shadow. */
@@ -469,7 +478,7 @@ index a722168..0805390 100644
 + */
 +static cairo_surface_t *
 +create_shadow(cairo_surface_t *similar, int width, int height,
-+	      const int *margin, int radius, double scale, BOOL popover)
++	      const int *margin, int radius, double scale)
 +{
 +  int l = margin[0], r = margin[1], t = margin[2], b = margin[3];
 +  cairo_surface_t *template, *shadow;
@@ -481,7 +490,7 @@ index a722168..0805390 100644
 +    {
 +      return NULL;
 +    }
-+  template = shadow_template(similar, margin, radius, scale, popover);
++  template = shadow_template(similar, margin, radius, scale);
 +  if (template == NULL)
 +    {
 +      return NULL;
@@ -523,7 +532,7 @@ index a722168..0805390 100644
  @implementation XGCairoModernSurface
  
  - (id) initWithDevice: (void *)device
-@@ -83,6 +352,17 @@
+@@ -83,6 +304,16 @@
  					      CAIRO_CONTENT_COLOR_ALPHA,
  					      GSWINDEVICE->xframe.size.width,
  					      GSWINDEVICE->xframe.size.height);
@@ -535,13 +544,12 @@ index a722168..0805390 100644
 +					 GSWINDEVICE->xframe.size.height,
 +					 GSWINDEVICE->shadow,
 +					 GSWINDEVICE->corner_radius,
-+					 GSWINDEVICE->shadow_scale,
-+					 GSWINDEVICE->shadow_popover);
++					 GSWINDEVICE->shadow_scale);
 +	}
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
  	(int) cairo_surface_get_type(_windowSurface),
-@@ -101,6 +381,10 @@
+@@ -101,6 +332,10 @@
      {
        cairo_surface_destroy(_windowSurface);
      }
@@ -552,7 +560,7 @@ index a722168..0805390 100644
    [super dealloc];
  }
  
-@@ -127,9 +411,65 @@
+@@ -127,9 +362,65 @@
    // FIXME: should round
    cairo_rectangle(windowCtx, rect.origin.x, rect.origin.y, rect.size.width, rect.size.height);
    cairo_clip(windowCtx);
@@ -946,66 +954,18 @@ index c98ecb3..93ac1e8 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 19c5e9e..8c0728a 100644
+index 12fc835..3a0d8c9 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -40,6 +40,7 @@
- #include <AppKit/NSApplication.h>
- #include <AppKit/NSCursor.h>
- #include <AppKit/NSGraphics.h>
-+#include <AppKit/NSPanel.h>
- #include <AppKit/NSWindow.h>
- #include <AppKit/NSImage.h>
- #include <AppKit/NSBitmapImageRep.h>
-@@ -64,6 +65,9 @@
- #if HAVE_XCURSOR
- #include <X11/Xcursor/Xcursor.h>
- #endif
-+#ifdef XRENDER
-+#include <X11/extensions/Xrender.h>
-+#endif
- #ifdef HAVE_XSHAPE
- #include <X11/extensions/shape.h>
- #endif
-@@ -341,8 +345,7 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
-   hints->functions = 0;
- 
-   /* Now add to the hints from the styleMask */
--  if (styleMask == NSBorderlessWindowMask
--      || !handlesWindowDecorations)
-+  if (styleMask == NSBorderlessWindowMask)
-     {
-       hints->flags |= MWM_HINTS_DECORATIONS;
-       hints->flags |= MWM_HINTS_FUNCTIONS;
-@@ -386,6 +389,19 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
- 	  hints->functions |= MWM_FUNC_MAXIMIZE;
- 	  hints->functions |= MWM_FUNC_MOVE;
-         }
-+      if (!handlesWindowDecorations)
-+	{
-+	  /* The gui library draws the decorations: ask for none, but keep
-+	     the functions, so that the window manager still moves,
-+	     resizes, maximizes, minimizes and closes the window when the
-+	     user or the decorations ask it to (_NET_WM_MOVERESIZE, its
-+	     window menu, keyboard shortcuts). With functions 0 a window
-+	     manager such as Mutter refuses all of them. */
-+	  hints->flags |= MWM_HINTS_DECORATIONS;
-+	  hints->flags |= MWM_HINTS_FUNCTIONS;
-+	  hints->decorations = 0;
-+	  hints->functions |= MWM_FUNC_MOVE;
-+	}
-       if (styleMask & NSIconWindowMask)
- 	{
- 	  // FIXME
-@@ -451,6 +467,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
-                      : (unsigned int) style : (Window) win;
+@@ -468,6 +468,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (void) _setSupportedWMProtocols: (gswindow_device_t *) window;
  - (unsigned long *) _getExtents: (Window)win;
-+- (void) _setWindowType: (gswindow_device_t *)window;
+ - (void) _setWindowType: (gswindow_device_t *)window;
++- (BOOL) _checkWMSupports: (Atom)feature;
  @end
  
  @implementation XGServer (WindowOps)
-@@ -506,7 +523,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -523,7 +524,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	x;
    float	t, b, l, r;
  
@@ -1014,7 +974,7 @@ index 19c5e9e..8c0728a 100644
  
    x.size.width = o.size.width - l - r;
    x.size.height = o.size.height - t - b;
-@@ -550,11 +567,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -567,11 +568,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (NSRect) _XWinRectToOSWinRect: (NSRect)x for: (void*)window
  {
    gswindow_device_t	*win = (gswindow_device_t*)window;
@@ -1027,7 +987,7 @@ index 19c5e9e..8c0728a 100644
    o.size.width = x.size.width;
    o.size.height = x.size.height;
    o.origin.x = x.origin.x + l;
-@@ -577,7 +593,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -594,7 +594,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	o;
    float	t, b, l, r;
  
@@ -1036,7 +996,7 @@ index 19c5e9e..8c0728a 100644
    o = x;
    o.origin.y = xScreenSize.height - x.origin.y;
    o.origin.y = o.origin.y - x.size.height - b;
-@@ -590,6 +606,412 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -607,6 +607,56 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -1066,17 +1026,6 @@ index 19c5e9e..8c0728a 100644
 + */
 +static const int shadowMargin[4] = { 30, 30, 24, 36 };
 +
-+/* A popover's (libadwaita's menus): its shadow is smaller and fades out
-+ * within about 14 pixels at the sides, less above and more below.
-+ */
-+static const int popoverMargin[4] = { 14, 14, 12, 16 };
-+
-+static inline const int *
-+marginFor(gswindow_device_t *win)
-+{
-+  return win->shadow_popover ? popoverMargin : shadowMargin;
-+}
-+
 +/* How far outside the visible edge a resizable window takes presses, for
 + * resizing from the shadow (GTK 4 under Mutter: 12 pixels).
 + */
@@ -1101,104 +1050,43 @@ index 19c5e9e..8c0728a 100644
 +  return (int)floor(length * scale + 0.5);
 +}
 +
-+/*
-+ * A 32-bit visual with an alpha channel, and a colormap for it, for windows
-+ * with a shadow margin: the margin is transparent except for the shadow.
-+ * (The screen context uses the default visual, which has no alpha.)
-+ * NO when the screen has none. Looked up once per screen of the backend's
-+ * one display, and kept for the life of the process.
-+ */
-+#define ARGB_SCREENS 8
-+static BOOL
-+argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
-+{
-+  static Visual *foundVisual[ARGB_SCREENS];
-+  static Colormap foundCmap[ARGB_SCREENS];
-+  static BOOL looked[ARGB_SCREENS];
-+  Visual *found = NULL;
-+
-+  if (screen < 0 || screen >= ARGB_SCREENS)
-+    {
-+      *visual = NULL;
-+      *cmap = None;
-+      return NO;
-+    }
-+  if (!looked[screen])
-+    {
-+#ifdef XRENDER
-+      XVisualInfo templ, *vinfo;
-+      int count, i;
-+
-+      templ.screen = screen;
-+      templ.depth = 32;
-+      templ.class = TrueColor;
-+      vinfo = XGetVisualInfo(dpy, VisualScreenMask | VisualDepthMask
-+			     | VisualClassMask, &templ, &count);
-+      for (i = 0; vinfo != NULL && i < count && found == NULL; i++)
-+	{
-+	  XRenderPictFormat *format
-+	    = XRenderFindVisualFormat(dpy, vinfo[i].visual);
-+
-+	  if (format != NULL && format->type == PictTypeDirect
-+	    && format->direct.alphaMask)
-+	    {
-+	      found = vinfo[i].visual;
-+	      foundVisual[screen] = found;
-+	      foundCmap[screen] = XCreateColormap(dpy, RootWindow(dpy, screen),
-+						  found, AllocNone);
-+	    }
-+	}
-+      if (vinfo != NULL)
-+	{
-+	  XFree(vinfo);
-+	}
-+#endif
-+      looked[screen] = YES;
-+    }
-+  *visual = foundVisual[screen];
-+  *cmap = foundCmap[screen];
-+  return *visual != NULL;
-+}
-+
-+/*
-+ * Whether a compositing manager runs on the default screen. Remembered
-+ * while XFixes reports it starting and stopping (-_compositorChanged),
-+ * asked each time otherwise.
-+ */
+ /*
+  * A 32-bit visual with an alpha channel, and a colormap for it, for windows
+  * that show what is behind them where the gui leaves them transparent.
+@@ -668,14 +718,27 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+ 
+ /*
+  * Whether a compositing manager runs on the default screen: it owns the
+- * _NET_WM_CM_S<n> selection.
++ * _NET_WM_CM_S<n> selection. Remembered while XFixes reports it starting
++ * and stopping (-_compositorChanged), asked each time otherwise.
+  */
 +static int compositorRunning = -1;
 +
-+- (BOOL) _compositorRuns
-+{
-+  char name[32];
+ - (BOOL) _compositorRuns
+ {
+   char name[32];
 +  BOOL runs;
-+
+ 
 +  if (compositorRunning >= 0)
 +    {
 +      return compositorRunning;
 +    }
-+  snprintf(name, sizeof(name), "_NET_WM_CM_S%d", defScreen);
+   snprintf(name, sizeof(name), "_NET_WM_CM_S%d", defScreen);
+-  return XGetSelectionOwner(dpy, XInternAtom(dpy, name, False)) != None;
 +  runs = XGetSelectionOwner(dpy, XInternAtom(dpy, name, False)) != None;
 +  if (xfixesEventBase >= 0)
 +    {
 +      compositorRunning = runs;
 +    }
 +  return runs;
-+}
-+
-+/*
-+ * Whether a window can show what's behind it: a compositing manager draws
-+ * its transparency (without one transparent pixels show black), and the
-+ * display has a 32-bit visual.
-+ */
-+- (BOOL) _compositorShowsAlpha
-+{
-+  Visual *visual;
-+  Colormap cmap;
-+
-+  return [self _compositorRuns]
-+    && argb_visual(dpy, defScreen, &visual, &cmap);
-+}
-+
+ }
+ 
+ /*
+@@ -692,6 +755,58 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+     && argb_visual(dpy, defScreen, &visual, &cmap);
+ }
+ 
 +/*
 + * The compositing manager started or stopped: windows with a shadow margin
 + * lose it without one (their margin would show black) and get it back
@@ -1251,54 +1139,13 @@ index 19c5e9e..8c0728a 100644
 +  return [self _compositorShowsAlpha];
 +}
 +
-+/*
-+ * A borderless window marked as a popover (NSUtilityWindowMask, which a
-+ * borderless window has no other use for; the Adwaita theme marks its
-+ * menus) gets a popover's margin and shadow when GSBackPopoverShadows is
-+ * YES, on the same terms as a window's: the window manager must know the
-+ * margin isn't part of the window, and the compositing manager must show
-+ * transparency. GSBackPopoverCornerRadius rounds its corners.
-+ */
-+- (BOOL) _windowGetsPopoverShadow: (unsigned int)style
-+{
-+  if (handlesWindowDecorations
-+    || (style & (NSTitledWindowMask | NSClosableWindowMask
-+		 | NSMiniaturizableWindowMask | NSResizableWindowMask
-+		 | NSDocModalWindowMask | NSIconWindowMask | NSMiniWindowMask
-+		 | NSFullScreenWindowMask)) != 0
-+    || (style & NSUtilityWindowMask) == 0
-+    || [[NSUserDefaults standardUserDefaults]
-+	 boolForKey: @"GSBackPopoverShadows"] == NO)
-+    {
-+      return NO;
-+    }
-+  if (![self _checkWMSupports: generic._GTK_FRAME_EXTENTS_ATOM])
-+    {
-+      return NO;
-+    }
-+  return [self _compositorShowsAlpha];
-+}
-+
-+/*
-+ * A borderless window (menus, tool tips) gets an alpha channel when
-+ * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-+ * corners sets it in its GSThemeDomain) and the compositing manager shows
-+ * transparency: what the gui leaves transparent, such as the corners, then
-+ * shows what's behind the window.
-+ */
-+- (BOOL) _windowGetsAlpha: (unsigned int)style
-+{
-+  if ((style & (NSTitledWindowMask | NSClosableWindowMask
-+		| NSMiniaturizableWindowMask | NSResizableWindowMask
-+		| NSDocModalWindowMask | NSIconWindowMask | NSMiniWindowMask)) != 0
-+    || [[NSUserDefaults standardUserDefaults]
-+	 boolForKey: @"GSBackBorderlessWindowAlpha"] == NO)
-+    {
-+      return NO;
-+    }
-+  return [self _compositorShowsAlpha];
-+}
-+
+ /*
+  * A borderless window (menus, tool tips) gets an alpha channel when
+  * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
+@@ -712,6 +827,153 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+   return [self _compositorShowsAlpha];
+ }
+ 
 +/*
 + * The window manager's state decides the margin: none while the window is
 + * maximized, fullscreen or tiled against an edge (_GTK_EDGE_CONSTRAINTS),
@@ -1358,7 +1205,7 @@ index 19c5e9e..8c0728a 100644
 +    }
 +  for (i = 0; i < 4; i++)
 +    {
-+      int wanted = flat ? 0 : shadowScaled(marginFor(win)[i], win->shadow_scale);
++      int wanted = flat ? 0 : shadowScaled(shadowMargin[i], win->shadow_scale);
 +
 +      if (win->shadow[i] != wanted)
 +	{
@@ -1449,87 +1296,48 @@ index 19c5e9e..8c0728a 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2048,6 +2470,26 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2170,6 +2432,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
 +  /* A non-retained window has no backing store to keep its shadow in. */
-+  if (type != NSBackingStoreNonretained
-+    && ([self _windowGetsShadow: style] || [self _windowGetsPopoverShadow: style]))
++  if (type != NSBackingStoreNonretained && [self _windowGetsShadow: style])
 +    {
 +      int i;
 +
 +      window->shadow_eligible = YES;
-+      window->shadow_popover = [self _windowGetsPopoverShadow: style];
 +      window->shadow_resizable = (style & NSResizableWindowMask) != 0;
 +      window->shadow_scale = shadowScale();
 +      for (i = 0; i < 4; i++)
 +	{
-+	  window->shadow[i] = shadowScaled(marginFor(window)[i],
++	  window->shadow[i] = shadowScaled(shadowMargin[i],
 +					   window->shadow_scale);
 +	}
 +      window->corner_radius = shadowScaled(MAX(0,
 +	[[NSUserDefaults standardUserDefaults]
-+	  integerForKey: window->shadow_popover ? @"GSBackPopoverCornerRadius"
-+	    : @"GSBackWindowCornerRadius"]), window->shadow_scale);
++	  integerForKey: @"GSBackWindowCornerRadius"]), window->shadow_scale);
 +    }
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2074,17 +2516,41 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2196,13 +2475,13 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
  
    window->xwn_attrs.override_redirect = False;
  
--  window->ident = XCreateWindow(dpy, window->root,
--				NSMinX(frame), NSMinY(frame),
--				NSWidth(frame), NSHeight(frame),
--				0,
--				context->depth,
--				CopyFromParent,
--				context->visual,
--                                // Don't set the CWBackPixel, as the background of the
--                                // window may be different.
--				(CWColormap | CWBorderPixel | CWOverrideRedirect),
--				&window->xwn_attrs);
+-  if ([self _windowGetsAlpha: style])
 +  if (window->shadow_eligible || [self _windowGetsAlpha: style])
-+    {
-+      Visual *visual;
-+      Colormap cmap;
-+
-+      /* An alpha channel for the transparent margin or corners, which
-+	 start transparent. */
-+      argb_visual(dpy, defScreen, &visual, &cmap);
-+      window->depth = 32;
-+      window->xwn_attrs.colormap = cmap;
-+      window->xwn_attrs.border_pixel = 0;
-+      window->xwn_attrs.background_pixel = 0;
-+      window->ident = XCreateWindow(dpy, window->root,
-+				    NSMinX(frame), NSMinY(frame),
-+				    NSWidth(frame), NSHeight(frame),
-+				    0, 32, InputOutput, visual,
-+				    (CWColormap | CWBorderPixel | CWBackPixel
-+				     | CWOverrideRedirect),
-+				    &window->xwn_attrs);
-+    }
-+  else
-+    {
-+      window->ident = XCreateWindow(dpy, window->root,
-+				    NSMinX(frame), NSMinY(frame),
-+				    NSWidth(frame), NSHeight(frame),
-+				    0,
-+				    context->depth,
-+				    CopyFromParent,
-+				    context->visual,
-+				    // Don't set the CWBackPixel, as the background
-+				    // of the window may be different.
-+				    (CWColormap | CWBorderPixel
-+				     | CWOverrideRedirect),
-+				    &window->xwn_attrs);
-+    }
+     {
+       Visual *visual;
+       Colormap cmap;
  
-   /*
-    * Mark the window as the application with name & class so the WM can group it
-@@ -2098,6 +2564,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+-      /* An alpha channel for what the gui leaves transparent, which
+-	 starts transparent. */
++      /* An alpha channel for what the gui leaves transparent (a shadow
++	 margin, rounded corners), which starts transparent. */
+       argb_visual(dpy, defScreen, &visual, &cmap);
+       window->depth = 32;
+       window->xwn_attrs.colormap = cmap;
+@@ -2244,6 +2523,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1538,7 +1346,7 @@ index 19c5e9e..8c0728a 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2842,8 +3310,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2988,8 +3269,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
      }
  #endif
  
@@ -1548,20 +1356,7 @@ index 19c5e9e..8c0728a 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3096,6 +3563,12 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
- 
-       setNormalHints(dpy, window);
-       XSetWMHints(dpy, window->ident, &window->gen_hints);
-+      /* The class is known now: a tool tip's level is set before its
-+         window is registered. */
-+      if (window->win_attrs.window_level == NSPopUpMenuWindowLevel)
-+        {
-+          [self _setWindowType: window];
-+        }
- 
-       /*
-        * If we are asked to set hints for the appicon and the window manager is
-@@ -3489,6 +3962,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3641,6 +3921,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1575,184 +1370,7 @@ index 19c5e9e..8c0728a 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -3560,6 +4040,94 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
-   return rect;
- }
- 
-+/*
-+ * Sets _NET_WM_WINDOW_TYPE from the window's level and, where the level is
-+ * shared, its class, as GTK types its windows: menus and tool tips are
-+ * neither focused nor animated by window managers such as Mutter, and
-+ * compositors key their shadows and fades on the type.  Called when the
-+ * level changes and, for the pop-up menu level, again just before the
-+ * window is mapped: a tool tip's level is set before its window is
-+ * registered, so its class isn't known the first time.  A theme may set
-+ * a finer type (a menu bar's menus as _DROPDOWN_MENU) after the level.
-+ */
-+- (void) _setWindowType: (gswindow_device_t *)window
-+{
-+  int level = window->win_attrs.window_level;
-+  long data[2];
-+  int len = 1;
-+
-+  if ((generic.wm & XGWM_EWMH) == 0
-+    || (window->win_attrs.flags & GSWindowLevelAttr) == 0)
-+    {
-+      return;
-+    }
-+
-+  data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
-+  if (level == NSModalPanelWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
-+    }
-+  else if (level == NSMainMenuWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
-+    }
-+  else if (level == NSSubmenuWindowLevel
-+           || level == NSTornOffMenuWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_MENU_ATOM;
-+    }
-+  else if (level == NSFloatingWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_UTILITY_ATOM;
-+    }
-+  else if (level == NSDockWindowLevel
-+           || level == NSStatusWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
-+    }
-+  else if (level == NSPopUpMenuWindowLevel)
-+    {
-+      NSWindow *nswin = GSWindowWithNumber(window->number);
-+      NSString *className = [nswin className];
-+
-+      /* A window manager that doesn't know the first type (Openbox
-+         knows none of these) uses the second, as before. */
-+      data[1] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
-+      if ([className isEqual: @"GSTTPanel"])
-+        {
-+          data[0] = generic._NET_WM_WINDOW_TYPE_TOOLTIP_ATOM;
-+          len = 2;
-+        }
-+      else if ([className isEqual: @"NSMenuPanel"])
-+        {
-+          data[0] = generic._NET_WM_WINDOW_TYPE_POPUP_MENU_ATOM;
-+          len = 2;
-+        }
-+      else if ([className isEqual: @"XGRawWindow"]
-+               || [className isEqual: @"GSRawWindow"])
-+        {
-+          data[0] = generic._NET_WM_WINDOW_TYPE_DND_ATOM;
-+          len = 2;
-+        }
-+      else
-+        {
-+          data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
-+        }
-+    }
-+  else if (level == NSDesktopWindowLevel)
-+    {
-+      data[0] = generic._NET_WM_WINDOW_TYPE_DESKTOP_ATOM;
-+    }
-+
-+/* Warning ... X-bug .. when we specify 32bit data X actually expects data
-+ * of type 'long' or 'unsigned long' even on machines where those types
-+ * hold 64bit values.
-+ */
-+  XChangeProperty(dpy, window->ident, generic._NET_WM_WINDOW_TYPE_ATOM,
-+                  XA_ATOM, 32, PropModeReplace,
-+                  (unsigned char *)&data, len);
-+}
-+
- - (void) setwindowlevel: (int)level : (int)win
- {
-   gswindow_device_t *window;
-@@ -3603,70 +4171,17 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
- 
-       if ((generic.wm & XGWM_EWMH) != 0)
-         {
--          int len;
--          long data[2];
--          BOOL skipTaskbar = NO;
--
--          data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
--          data[1] = None;
--          len = 1;
--
--          if (level == NSModalPanelWindowLevel)
--            {
--              data[0] = generic._NET_WM_WINDOW_TYPE_NORMAL_ATOM;
--              skipTaskbar = YES;
--            }
--          else if (level == NSMainMenuWindowLevel)
--            {
--              data[0] = generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
--              skipTaskbar = YES;
--            }
--          else if (level == NSSubmenuWindowLevel
--                   || level == NSTornOffMenuWindowLevel)
--            {
--              data[0] = generic._NET_WM_WINDOW_TYPE_MENU_ATOM;
--              skipTaskbar = YES;
--            }
--          else if (level == NSFloatingWindowLevel)
--            {
--              data[0] = generic._NET_WM_WINDOW_TYPE_UTILITY_ATOM;
--              skipTaskbar = YES;
--            }
--          else if (level == NSDockWindowLevel
--                   || level == NSStatusWindowLevel)
--            {
--              data[0] =generic._NET_WM_WINDOW_TYPE_DOCK_ATOM;
--              skipTaskbar = YES;
--            }
--          // Does this belong into a different category?
--          else if (level == NSPopUpMenuWindowLevel)
--            {
--                NSWindow *nswin = GSWindowWithNumber(window->number);
--
--                if ([[nswin className] isEqual: @"GSTTPanel"])
--                  {
--                    data[0] = generic._NET_WM_WINDOW_TYPE_TOOLTIP_ATOM;
--                  }
--                else
--                  {
--//              data[0] = generic._NET_WM_WINDOW_TYPE_POPUP_MENU_ATOM;
--                    data[0] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
--                  }
--              skipTaskbar = YES;
--            }
--          else if (level == NSDesktopWindowLevel)
--            {
--              data[0] = generic._NET_WM_WINDOW_TYPE_DESKTOP_ATOM;
--              skipTaskbar = YES;
--            }
--
--/* Warning ... X-bug .. when we specify 32bit data X actually expects data
-- * of type 'long' or 'unsigned long' even on machines where those types
-- * hold 64bit values.
-- */
--          XChangeProperty(dpy, window->ident, generic._NET_WM_WINDOW_TYPE_ATOM,
--                          XA_ATOM, 32, PropModeReplace,
--                          (unsigned char *)&data, len);
-+          BOOL skipTaskbar = (level == NSModalPanelWindowLevel
-+                              || level == NSMainMenuWindowLevel
-+                              || level == NSSubmenuWindowLevel
-+                              || level == NSTornOffMenuWindowLevel
-+                              || level == NSFloatingWindowLevel
-+                              || level == NSDockWindowLevel
-+                              || level == NSStatusWindowLevel
-+                              || level == NSPopUpMenuWindowLevel
-+                              || level == NSDesktopWindowLevel);
-+
-+          [self _setWindowType: window];
- 
- /*
-  * Change _NET_WM_STATE based on window level.
-@@ -3933,8 +4448,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -4120,8 +4407,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  
@@ -1762,53 +1380,46 @@ index 19c5e9e..8c0728a 100644
    xi = rect.origin.x = NSMinX(rect) - l;
    yi = rect.origin.y = NSHeight(window->xframe) + b - NSMaxY(rect);
    width = NSWidth(rect);
-diff --git a/Tests/x11/shadowmargin.m b/Tests/x11/shadowmargin.m
+diff --git a/Tests/x11/FakeCSDWindowManager.h b/Tests/x11/FakeCSDWindowManager.h
 new file mode 100644
-index 0000000..331574c
+index 0000000..61e92d5
 --- /dev/null
-+++ b/Tests/x11/shadowmargin.m
-@@ -0,0 +1,525 @@
-+/* The shadow margin of windows the gui decorates (GSBackWindowShadows):
-+ * a transparent margin round the frame with a 32-bit visual,
-+ * _GTK_FRAME_EXTENTS telling the window manager where the window is, an
-+ * input shape of the visible part plus a resize band, no margin while the
-+ * window manager has the window maximized or while no compositing manager
-+ * runs, and none at all for a window manager that doesn't know
-+ * _GTK_FRAME_EXTENTS.  Also the Motif hints of such windows, and the alpha
-+ * channel of borderless windows (GSBackBorderlessWindowAlpha).
++++ b/Tests/x11/FakeCSDWindowManager.h
+@@ -0,0 +1,145 @@
++/* A window manager for the tests of windows with a shadow margin, forked by
++ * the test that needs one.
 + *
-+ * The test forks a window manager that maps windows, decorates nothing and
-+ * lists _GTK_FRAME_EXTENTS in _NET_SUPPORTED, and a compositing manager that
-+ * only owns the _NET_WM_CM_S0 selection; stopping it is how the compositing
-+ * manager goes away.  It needs a display with neither (a private Xvfb).
-+ * Popovers (GSBackPopoverShadows: a borderless window marked with
-+ * NSUtilityWindowMask) get a smaller margin of their own.
++ * It announces itself as an EWMH window manager that knows
++ * _GTK_FRAME_EXTENTS, which a window manager must for the backend to give a
++ * window a margin, decorates nothing, maps what asks to be and grants
++ * every configure request.  It never sets a window's state: a test sets
++ * _NET_WM_STATE itself to play a maximize.  A test using it needs a display
++ * with no window manager of its own (a private Xvfb).
 + */
-+#import <Foundation/Foundation.h>
-+#import "Testing.h"
-+#include "config.h"
++#ifndef FAKE_CSD_WINDOW_MANAGER_H
++#define FAKE_CSD_WINDOW_MANAGER_H
 +
-+#if defined(BUILD_SERVER) && defined(SERVER_x11) && BUILD_SERVER == SERVER_x11 \
-+  && defined(HAVE_XSHAPE) && defined(XRENDER)
-+
-+#import <AppKit/AppKit.h>
-+#import <GNUstepGUI/GSDisplayServer.h>
 +#include <X11/Xlib.h>
 +#include <X11/Xatom.h>
-+#include <X11/extensions/shape.h>
 +#include <signal.h>
 +#include <sys/wait.h>
 +#include <unistd.h>
++#ifdef __linux__
++#include <sys/prctl.h>
++#endif
 +
++/* The windows a test makes come and go, so a request naming one can fail
++ * at any point.  Xlib's default handler exits.
++ */
 +static int
-+ignoreErrors(Display *d, XErrorEvent *e)
++fakeCSDWMIgnoreError(Display *d, XErrorEvent *e)
 +{
 +  return 0;
 +}
 +
-+/* Announces itself, lists what it supports, and maps what asks to be. */
++/* Runs in the child and never returns. */
 +static void
-+windowManagerRun(void)
++fakeCSDWMRun(void)
 +{
 +  Display	*dpy = XOpenDisplay(NULL);
 +  Window	root;
@@ -1820,7 +1431,7 @@ index 0000000..331574c
 +    {
 +      _exit(1);
 +    }
-+  XSetErrorHandler(ignoreErrors);
++  XSetErrorHandler(fakeCSDWMIgnoreError);
 +  root = DefaultRootWindow(dpy);
 +  netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
 +  check = XCreateSimpleWindow(dpy, root, -100, -100, 1, 1, 0, 0, 0);
@@ -1833,6 +1444,7 @@ index 0000000..331574c
 +  XChangeProperty(dpy, root, XInternAtom(dpy, "_NET_SUPPORTED", False),
 +    XA_ATOM, 32, PropModeReplace, (unsigned char *)supported, 4);
 +  XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
++  /* Announced last, so a client that sees it finds the rest in place. */
 +  XChangeProperty(dpy, root, netCheck, XA_WINDOW, 32, PropModeReplace,
 +    (unsigned char *)&check, 1);
 +  XFlush(dpy);
@@ -1861,43 +1473,55 @@ index 0000000..331574c
 +    }
 +}
 +
-+/* Owns _NET_WM_CM_S0 until killed. */
-+static void
-+compositorRun(void)
-+{
-+  Display	*dpy = XOpenDisplay(NULL);
-+  Window	owner;
-+
-+  if (dpy == NULL)
-+    {
-+      _exit(1);
-+    }
-+  owner = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), -100, -100,
-+    1, 1, 0, 0, 0);
-+  XSetSelectionOwner(dpy, XInternAtom(dpy, "_NET_WM_CM_S0", False), owner,
-+    CurrentTime);
-+  XFlush(dpy);
-+  for (;;)
-+    {
-+      pause();
-+    }
-+}
-+
++/* Forks the window manager and waits until it has announced itself: its
++ * pid, or -1.
++ */
 +static pid_t
-+startChild(void (*run)(void))
++fakeCSDWMStart(Display *dpy)
 +{
-+  pid_t	pid = fork();
++  Atom		netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
++  pid_t		pid = fork();
++  unsigned	i;
 +
 +  if (pid == 0)
 +    {
-+      run();
++#ifdef __linux__
++      /* Gone with the test, should it abort. */
++      prctl(PR_SET_PDEATHSIG, SIGKILL);
++#endif
++      fakeCSDWMRun();
 +      _exit(0);
 +    }
-+  return pid;
++  if (pid < 0)
++    {
++      return -1;
++    }
++  for (i = 0; i < 100; i++)
++    {
++      Atom		type;
++      int		format;
++      unsigned long	n, after;
++      unsigned char	*data = NULL;
++
++      if (XGetWindowProperty(dpy, DefaultRootWindow(dpy), netCheck, 0, 1,
++	  False, XA_WINDOW, &type, &format, &n, &after, &data) == Success
++	&& data != NULL)
++	{
++	  XFree(data);
++	  if (n > 0)
++	    {
++	      return pid;
++	    }
++	}
++      usleep(50000);
++    }
++  kill(pid, SIGKILL);
++  waitpid(pid, NULL, 0);
++  return -1;
 +}
 +
 +static void
-+stopChild(pid_t pid)
++fakeCSDWMStop(pid_t pid)
 +{
 +  if (pid > 0)
 +    {
@@ -1906,39 +1530,314 @@ index 0000000..331574c
 +    }
 +}
 +
-+/* Waits for a root property, or for a selection to be owned or not. */
-+static BOOL
-+waitFor(Display *dpy, Atom selection, BOOL owned, Atom rootProperty)
++#endif
+diff --git a/Tests/x11/shadowdrawing.m b/Tests/x11/shadowdrawing.m
+new file mode 100644
+index 0000000..234bf32
+--- /dev/null
++++ b/Tests/x11/shadowdrawing.m
+@@ -0,0 +1,229 @@
++/* What a window with a shadow margin (GSBackWindowShadows) shows: the
++ * gui's drawing inside its visible part, opaque, with that part's corners
++ * rounded (GSBackWindowCornerRadius), and round it a black shadow that is
++ * strongest at the edge, fades out across the margin, and is stronger
++ * below the window than above it.
++ *
++ * The test forks a window manager that knows _GTK_FRAME_EXTENTS
++ * (FakeCSDWindowManager.h) and a compositing manager (FakeCompositor.h),
++ * orders a window in and reads the alpha of its X window's pixels back.
++ * It needs a display with neither (a private Xvfb).
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_x11) && BUILD_SERVER == SERVER_x11 \
++  && defined(HAVE_XSHAPE) && defined(XRENDER)
++
++#import <AppKit/AppKit.h>
++#import <GNUstepGUI/GSDisplayServer.h>
++#include <X11/Xutil.h>
++#include <string.h>
++#include "FakeCSDWindowManager.h"
++#include "FakeCompositor.h"
++
++/* Sets a default for this process only, in the argument domain. */
++static void
++setDefault(id value, NSString *key)
 +{
-+  unsigned	i;
++  NSUserDefaults	*defs = [NSUserDefaults standardUserDefaults];
++  NSMutableDictionary	*args;
 +
-+  for (i = 0; i < 100; i++)
++  args = [[defs volatileDomainForName: NSArgumentDomain] mutableCopy];
++  if (args == nil)
 +    {
-+      if (rootProperty != None)
-+	{
-+	  Atom		type;
-+	  int		format;
-+	  unsigned long	n, after;
-+	  unsigned char	*data = NULL;
-+
-+	  if (XGetWindowProperty(dpy, DefaultRootWindow(dpy), rootProperty,
-+	      0, 1, False, AnyPropertyType, &type, &format, &n, &after, &data)
-+	    == Success && data != NULL)
-+	    {
-+	      XFree(data);
-+	      if (n > 0)
-+		{
-+		  return YES;
-+		}
-+	    }
-+	}
-+      else if ((XGetSelectionOwner(dpy, selection) != None) == owned)
-+	{
-+	  return YES;
-+	}
-+      usleep(50000);
++      args = [NSMutableDictionary new];
 +    }
-+  return NO;
++  [args setObject: value forKey: key];
++  [defs removeVolatileDomainForName: NSArgumentDomain];
++  [defs setVolatileDomain: args forName: NSArgumentDomain];
++  [args release];
++}
++
++static void
++spin(NSTimeInterval seconds)
++{
++  [[NSRunLoop currentRunLoop]
++    runUntilDate: [NSDate dateWithTimeIntervalSinceNow: seconds]];
++}
++
++/* The window's _GTK_FRAME_EXTENTS: left, right, top, bottom. */
++static BOOL
++frameExtents(Display *dpy, Window w, unsigned long extents[4])
++{
++  Atom		type;
++  int		format;
++  unsigned long	n, after;
++  unsigned char	*data = NULL;
++  BOOL		found = NO;
++
++  if (XGetWindowProperty(dpy, w, XInternAtom(dpy, "_GTK_FRAME_EXTENTS", False),
++      0, 4, False, XA_CARDINAL, &type, &format, &n, &after, &data) == Success
++    && data != NULL)
++    {
++      if (n == 4)
++	{
++	  memcpy(extents, data, 4 * sizeof(unsigned long));
++	  found = YES;
++	}
++      XFree(data);
++    }
++  return found;
++}
++
++/* Orders the window in, lets it draw, and answers its X window's pixels,
++ * with the X window's size in a and its _GTK_FRAME_EXTENTS in extents;
++ * NULL when the X window has no alpha channel or no extents.
++ */
++static XImage *
++grab(Display *dpy, NSWindow *window, XWindowAttributes *a,
++  unsigned long extents[4])
++{
++  Window	xwin;
++
++  [window orderFront: nil];
++  [window display];
++  [window flushWindow];
++  spin(0.5);
++  xwin = (Window)[GSCurrentServer() windowDevice: [window windowNumber]];
++  XSync((Display *)[GSCurrentServer() serverDevice], False);
++  if (XGetWindowAttributes(dpy, xwin, a) == 0 || a->depth != 32
++    || frameExtents(dpy, xwin, extents) == NO)
++    {
++      return NULL;
++    }
++  return XGetImage(dpy, xwin, 0, 0, a->width, a->height, AllPlanes, ZPixmap);
++}
++
++/* The alpha (0-255) of a pixel of a 32-bit image. */
++static int
++alphaAt(XImage *image, int x, int y)
++{
++  return (int)((XGetPixel(image, x, y) >> 24) & 0xff);
++}
++
++int
++main(int argc, const char **argv)
++{
++  START_SET("shadow drawing")
++
++  Display		*dpy;
++  pid_t			wm;
++  pid_t			compositor;
++  NSWindow		*window;
++  XWindowAttributes	a;
++  XImage		*image;
++  unsigned long		extents[4];
++
++  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
++    {
++      SKIP("no window server available")
++    }
++  dpy = XOpenDisplay(NULL);
++  if (dpy == NULL)
++    {
++      SKIP("no window server available")
++    }
++  XSetErrorHandler(fakeCSDWMIgnoreError);
++  if (XGetSelectionOwner(dpy, XInternAtom(dpy, "WM_S0", False)) != None
++    || XGetSelectionOwner(dpy, fakeCompositorSelection(dpy)) != None)
++    {
++      SKIP("the display has a window or compositing manager of its own")
++    }
++  wm = fakeCSDWMStart(dpy);
++  if (wm < 0)
++    {
++      SKIP("the test window manager did not start")
++    }
++  compositor = fakeCompositorStart(dpy);
++  if (compositor < 0)
++    {
++      fakeCSDWMStop(wm);
++      SKIP("the test compositing manager did not start")
++    }
++
++  setDefault(@"NO", @"GSBackHandlesWindowDecorations");
++  setDefault(@"YES", @"GSIgnoreRootOffsets");
++  setDefault(@"YES", @"GSBackWindowShadows");
++  setDefault(@"12", @"GSBackWindowCornerRadius");
++  NS_DURING
++    {
++      [NSApplication sharedApplication];
++    }
++  NS_HANDLER
++    {
++      fakeCompositorStop(dpy, compositor);
++      fakeCSDWMStop(wm);
++      SKIP("It looks like the GNUstep backend is not installed")
++    }
++  NS_ENDHANDLER
++
++  window = [[NSWindow alloc]
++    initWithContentRect: NSMakeRect(100, 100, 400, 300)
++	      styleMask: NSTitledWindowMask | NSClosableWindowMask
++			 | NSResizableWindowMask
++		backing: NSBackingStoreBuffered
++		  defer: NO];
++  image = grab(dpy, window, &a, extents);
++  PASS(image != NULL && a.width > NSWidth([window frame])
++    && a.height > NSHeight([window frame]),
++    "a window has a 32-bit X window with a margin round its frame");
++  if (image != NULL)
++    {
++      /* The visible part of the X window. */
++      int	left = extents[0];
++      int	right = a.width - extents[1];
++      int	top = extents[2];
++      int	bottom = a.height - extents[3];
++      int	midX = (left + right) / 2;
++      int	midY = (top + bottom) / 2;
++
++      PASS(alphaAt(image, midX, midY) == 255,
++	"the window's contents are opaque");
++      PASS(alphaAt(image, midX, top) == 255,
++	"the top edge of the visible part is opaque between the corners");
++      PASS(alphaAt(image, left, top) < 128
++	&& alphaAt(image, right - 1, top) < 128,
++	"the top corners of the visible part are rounded off (%d, %d)",
++	alphaAt(image, left, top), alphaAt(image, right - 1, top));
++      PASS(alphaAt(image, left - 1, midY) >= 30
++	&& alphaAt(image, left - 1, midY) <= 60,
++	"beside the window the shadow is about 19%% black (%d)",
++	alphaAt(image, left - 1, midY));
++      PASS(alphaAt(image, 0, midY) < alphaAt(image, left - 10, midY)
++	&& alphaAt(image, left - 10, midY) < alphaAt(image, left - 1, midY)
++	&& alphaAt(image, 0, midY) <= 8,
++	"the shadow fades out across the margin (%d, %d, %d)",
++	alphaAt(image, left - 1, midY), alphaAt(image, left - 10, midY),
++	alphaAt(image, 0, midY));
++      PASS(alphaAt(image, midX, bottom) > alphaAt(image, midX, top - 1),
++	"the shadow is stronger below the window than above it (%d, %d)",
++	alphaAt(image, midX, bottom), alphaAt(image, midX, top - 1));
++      PASS(alphaAt(image, 0, 0) <= 2,
++	"the margin's far corner is transparent (%d)", alphaAt(image, 0, 0));
++      XDestroyImage(image);
++    }
++  [window close];
++
++  fakeCompositorStop(dpy, compositor);
++  fakeCSDWMStop(wm);
++  XCloseDisplay(dpy);
++
++  END_SET("shadow drawing")
++
++  return 0;
++}
++
++#else
++
++int
++main(int argc, const char **argv)
++{
++  START_SET("shadow drawing")
++    SKIP("back is not built with the x11 server, XShape and XRender")
++  END_SET("shadow drawing")
++  return 0;
++}
++
++#endif
+diff --git a/Tests/x11/shadowmargin.m b/Tests/x11/shadowmargin.m
+new file mode 100644
+index 0000000..7b0e122
+--- /dev/null
++++ b/Tests/x11/shadowmargin.m
+@@ -0,0 +1,357 @@
++/* The shadow margin of windows the gui decorates (GSBackWindowShadows):
++ * a transparent margin round the frame with a 32-bit visual,
++ * _GTK_FRAME_EXTENTS telling the window manager where the window is, an
++ * input shape of the visible part plus a resize band, no margin while the
++ * window manager has the window maximized or while no compositing manager
++ * runs, a margin that grows with GSScaleFactor, and none at all for a
++ * non-retained window, a borderless one, or a window manager that doesn't
++ * know _GTK_FRAME_EXTENTS.
++ *
++ * The test forks a window manager that knows _GTK_FRAME_EXTENTS
++ * (FakeCSDWindowManager.h) and a compositing manager (FakeCompositor.h).
++ * It needs a display with neither (a private Xvfb).
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_x11) && BUILD_SERVER == SERVER_x11 \
++  && defined(HAVE_XSHAPE) && defined(XRENDER)
++
++#import <AppKit/AppKit.h>
++#import <GNUstepGUI/GSDisplayServer.h>
++#include <X11/Xlib.h>
++#include <X11/Xatom.h>
++#include <X11/extensions/shape.h>
++#include "FakeCSDWindowManager.h"
++#include "FakeCompositor.h"
++
++/* Sets a default for this process only, in the argument domain, or
++   removes it when value is nil. */
++static void
++setDefault(id value, NSString *key)
++{
++  NSUserDefaults	*defs = [NSUserDefaults standardUserDefaults];
++  NSMutableDictionary	*args;
++
++  args = [[defs volatileDomainForName: NSArgumentDomain] mutableCopy];
++  if (args == nil)
++    {
++      args = [NSMutableDictionary new];
++    }
++  if (value == nil)
++    {
++      [args removeObjectForKey: key];
++    }
++  else
++    {
++      [args setObject: value forKey: key];
++    }
++  [defs removeVolatileDomainForName: NSArgumentDomain];
++  [defs setVolatileDomain: args forName: NSArgumentDomain];
++  [args release];
++}
++
++/* The backend's own connection: what it asked for may still be in its
++   buffer, so the helpers below flush it before they read. */
++static Display	*serverDisplay = NULL;
++
++static void
++syncServer(Display *dpy)
++{
++  if (serverDisplay != NULL)
++    {
++      XSync(serverDisplay, False);
++    }
++  XSync(dpy, False);
 +}
 +
 +/* Lets the backend handle what the X server sent it. */
@@ -1959,7 +1858,7 @@ index 0000000..331574c
 +  unsigned char	*data = NULL;
 +  NSString	*s = @"none";
 +
-+  XSync(dpy, False);
++  syncServer(dpy);
 +  if (XGetWindowProperty(dpy, w, XInternAtom(dpy, "_GTK_FRAME_EXTENTS", False),
 +      0, 4, False, XA_CARDINAL, &type, &format, &n, &after, &data) == Success
 +    && data != NULL)
@@ -1981,6 +1880,7 @@ index 0000000..331574c
 +{
 +  XWindowAttributes	a;
 +
++  syncServer(dpy);
 +  return XGetWindowAttributes(dpy, w, &a) ? a.depth : 0;
 +}
 +
@@ -1989,7 +1889,7 @@ index 0000000..331574c
 +{
 +  XWindowAttributes	a;
 +
-+  XSync(dpy, False);
++  syncServer(dpy);
 +  return XGetWindowAttributes(dpy, w, &a)
 +    ? NSMakeSize(a.width, a.height) : NSZeroSize;
 +}
@@ -2004,7 +1904,7 @@ index 0000000..331574c
 +  XRectangle	*r;
 +  NSRect	result = NSZeroRect;
 +
-+  XSync(dpy, False);
++  syncServer(dpy);
 +  r = XShapeGetRectangles(dpy, w, ShapeInput, &count, &ordering);
 +  if (r != NULL)
 +    {
@@ -2035,12 +1935,10 @@ index 0000000..331574c
 +  START_SET("shadow margin")
 +
 +  extern void	initialize_gnustep_backend(void);
-+  NSUserDefaults	*defs = [NSUserDefaults standardUserDefaults];
 +  NSUInteger		styled = NSTitledWindowMask | NSClosableWindowMask
 +    | NSMiniaturizableWindowMask | NSResizableWindowMask;
 +  GSDisplayServer	*srv = nil;
 +  Display		*dpy;
-+  Atom			cm;
 +  pid_t			wm;
 +  pid_t			compositor;
 +  int			win;
@@ -2057,26 +1955,26 @@ index 0000000..331574c
 +    {
 +      SKIP("no window server available")
 +    }
-+  XSetErrorHandler(ignoreErrors);
-+  cm = XInternAtom(dpy, "_NET_WM_CM_S0", False);
-+  if (XGetSelectionOwner(dpy, cm) != None)
++  XSetErrorHandler(fakeCSDWMIgnoreError);
++  if (XGetSelectionOwner(dpy, fakeCompositorSelection(dpy)) != None)
 +    {
 +      SKIP("the display has a compositing manager of its own")
 +    }
 +
-+  wm = startChild(windowManagerRun);
-+  compositor = startChild(compositorRun);
-+  if (!waitFor(dpy, None, YES,
-+	XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False))
-+    || !waitFor(dpy, cm, YES, None))
++  wm = fakeCSDWMStart(dpy);
++  if (wm < 0)
 +    {
-+      stopChild(wm);
-+      stopChild(compositor);
-+      SKIP("the test window or compositing manager did not start")
++      SKIP("the test window manager did not start")
++    }
++  compositor = fakeCompositorStart(dpy);
++  if (compositor < 0)
++    {
++      fakeCSDWMStop(wm);
++      SKIP("the test compositing manager did not start")
 +    }
 +
-+  [defs setBool: NO forKey: @"GSBackHandlesWindowDecorations"];
-+  [defs setBool: YES forKey: @"GSIgnoreRootOffsets"];
++  setDefault(@"NO", @"GSBackHandlesWindowDecorations");
++  setDefault(@"YES", @"GSIgnoreRootOffsets");
 +  NS_DURING
 +    {
 +      initialize_gnustep_backend();
@@ -2084,12 +1982,13 @@ index 0000000..331574c
 +    }
 +  NS_HANDLER
 +    {
-+      stopChild(wm);
-+      stopChild(compositor);
++      fakeCSDWMStop(wm);
++      fakeCompositorStop(dpy, compositor);
 +      SKIP("It looks like the GNUstep backend is not installed")
 +    }
 +  NS_ENDHANDLER
 +  [GSDisplayServer setCurrentServer: srv];
++  serverDisplay = (Display *)[srv serverDevice];
 +
 +  /* Without GSBackWindowShadows nothing changes. */
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
@@ -2098,31 +1997,10 @@ index 0000000..331574c
 +  PASS([frameExtents(dpy, xwin) isEqual: @"none"]
 +    && NSEqualSizes(sizeOf(dpy, xwin), NSMakeSize(400, 300)),
 +    "without GSBackWindowShadows a window has no margin");
-+  {
-+    Atom		type;
-+    int			format;
-+    unsigned long	n, after;
-+    unsigned char	*data = NULL;
-+    BOOL		movable = NO;
-+
-+    if (XGetWindowProperty(dpy, xwin,
-+	XInternAtom(dpy, "_MOTIF_WM_HINTS", False), 0, 5, False,
-+	AnyPropertyType, &type, &format, &n, &after, &data) == Success
-+      && data != NULL)
-+      {
-+	unsigned long *hints = (unsigned long *)data;
-+
-+	/* flags (functions, decorations), functions, decorations */
-+	movable = n >= 3 && (hints[0] & 1) && (hints[1] & 4) && hints[2] == 0;
-+	XFree(data);
-+      }
-+    PASS(movable, "a window the gui decorates asks for no decorations but"
-+      " lets the window manager move it");
-+  }
 +  [srv termwindow: win];
 +
-+  [defs setBool: YES forKey: @"GSBackWindowShadows"];
-+  [defs setInteger: 15 forKey: @"GSBackWindowCornerRadius"];
++  setDefault(@"YES", @"GSBackWindowShadows");
++  setDefault(@"15", @"GSBackWindowCornerRadius");
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
 +		   : NSBackingStoreBuffered : styled : 0];
 +  xwin = (Window)[srv windowDevice: win];
@@ -2152,13 +2030,11 @@ index 0000000..331574c
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"30 30 24 36",
 +    "the margin comes back when the window is restored");
 +
-+  stopChild(compositor);
-+  waitFor(dpy, cm, NO, None);
++  fakeCompositorStop(dpy, compositor);
 +  spin();
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"0 0 0 0",
 +    "without a compositing manager the window has no margin");
-+  compositor = startChild(compositorRun);
-+  waitFor(dpy, cm, YES, None);
++  compositor = fakeCompositorStart(dpy);
 +  spin();
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"30 30 24 36",
 +    "the margin comes back with a compositing manager");
@@ -2166,7 +2042,7 @@ index 0000000..331574c
 +
 +  /* The margin, the corners and the band are in points: they grow with
 +     the gui's scale factor. */
-+  [defs setFloat: 2.0 forKey: @"GSScaleFactor"];
++  setDefault(@"2", @"GSScaleFactor");
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
 +		   : NSBackingStoreBuffered : styled : 0];
 +  xwin = (Window)[srv windowDevice: win];
@@ -2185,7 +2061,7 @@ index 0000000..331574c
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"60 60 48 72",
 +    "with GSScaleFactor 2 the margin comes back twice as wide");
 +  [srv termwindow: win];
-+  [defs removeObjectForKey: @"GSScaleFactor"];
++  setDefault(nil, @"GSScaleFactor");
 +
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
 +		   : NSBackingStoreNonretained : styled : 0];
@@ -2197,50 +2073,11 @@ index 0000000..331574c
 +  win = [srv window: NSMakeRect(100, 100, 200, 100)
 +		   : NSBackingStoreBuffered : NSBorderlessWindowMask : 0];
 +  xwin = (Window)[srv windowDevice: win];
-+  PASS(depthOf(dpy, xwin) != 32 && [frameExtents(dpy, xwin) isEqual: @"none"],
-+    "a borderless window has neither margin nor alpha channel by default");
-+  [srv termwindow: win];
-+  [defs setBool: YES forKey: @"GSBackBorderlessWindowAlpha"];
-+  win = [srv window: NSMakeRect(100, 100, 200, 100)
-+		   : NSBackingStoreBuffered : NSBorderlessWindowMask : 0];
-+  xwin = (Window)[srv windowDevice: win];
-+  PASS(depthOf(dpy, xwin) == 32 && [frameExtents(dpy, xwin) isEqual: @"none"],
-+    "with GSBackBorderlessWindowAlpha a borderless window has an alpha"
-+    " channel and no margin");
++  PASS([frameExtents(dpy, xwin) isEqual: @"none"],
++    "a borderless window has no margin");
 +  [srv termwindow: win];
 +
-+  /* A popover (a borderless window marked with NSUtilityWindowMask, as the
-+     Adwaita theme marks its menus): a popover's margin, and presses only
-+     in its visible part (no resize band). */
-+  win = [srv window: NSMakeRect(100, 100, 200, 100)
-+		   : NSBackingStoreBuffered
-+		   : NSBorderlessWindowMask | NSUtilityWindowMask : 0];
-+  xwin = (Window)[srv windowDevice: win];
-+  PASS([frameExtents(dpy, xwin) isEqual: @"none"],
-+    "without GSBackPopoverShadows a popover has no margin");
-+  [srv termwindow: win];
-+  [defs setBool: YES forKey: @"GSBackPopoverShadows"];
-+  win = [srv window: NSMakeRect(100, 100, 200, 100)
-+		   : NSBackingStoreBuffered
-+		   : NSBorderlessWindowMask | NSUtilityWindowMask : 0];
-+  xwin = (Window)[srv windowDevice: win];
-+  PASS(depthOf(dpy, xwin) == 32
-+    && [frameExtents(dpy, xwin) isEqual: @"14 14 12 16"]
-+    && NSEqualSizes(sizeOf(dpy, xwin), NSMakeSize(228, 128))
-+    && NSEqualRects(inputShape(dpy, xwin), NSMakeRect(14, 12, 200, 100)),
-+    "with GSBackPopoverShadows a popover has a popover's margin and takes"
-+    " presses only in its visible part");
-+  [srv termwindow: win];
-+  win = [srv window: NSMakeRect(100, 100, 200, 100)
-+		   : NSBackingStoreBuffered : NSBorderlessWindowMask : 0];
-+  xwin = (Window)[srv windowDevice: win];
-+  PASS([frameExtents(dpy, xwin) isEqual: @"none"],
-+    "a borderless window that isn't a popover has no margin");
-+  [srv termwindow: win];
-+  [defs setBool: NO forKey: @"GSBackPopoverShadows"];
-+
-+  stopChild(compositor);
-+  waitFor(dpy, cm, NO, None);
++  fakeCompositorStop(dpy, compositor);
 +  spin();
 +  win = [srv window: NSMakeRect(100, 100, 400, 300)
 +		   : NSBackingStoreBuffered : styled : 0];
@@ -2248,8 +2085,7 @@ index 0000000..331574c
 +  PASS([frameExtents(dpy, xwin) isEqual: @"none"] && depthOf(dpy, xwin) != 32,
 +    "a window made without a compositing manager has no margin");
 +  [srv termwindow: win];
-+  compositor = startChild(compositorRun);
-+  waitFor(dpy, cm, YES, None);
++  compositor = fakeCompositorStart(dpy);
 +  spin();
 +
 +  /* A window manager that doesn't know _GTK_FRAME_EXTENTS. */
@@ -2272,8 +2108,8 @@ index 0000000..331574c
 +    "under a window manager without _GTK_FRAME_EXTENTS there is no margin");
 +  [srv termwindow: win];
 +
-+  stopChild(compositor);
-+  stopChild(wm);
++  fakeCompositorStop(dpy, compositor);
++  fakeCSDWMStop(wm);
 +  XCloseDisplay(dpy);
 +
 +  END_SET("shadow margin")
@@ -2293,300 +2129,6 @@ index 0000000..331574c
 +}
 +
 +#endif
-diff --git a/Tests/x11/windowtype.m b/Tests/x11/windowtype.m
-new file mode 100644
-index 0000000..7b8a2b9
---- /dev/null
-+++ b/Tests/x11/windowtype.m
-@@ -0,0 +1,291 @@
-+/* The _NET_WM_WINDOW_TYPE of the gui's windows, as GTK types its own:
-+ * a tool tip is _TOOLTIP although its level is set before its window is
-+ * registered (libs-gui#965), a context menu is _POPUP_MENU, a
-+ * modal panel is _DIALOG, and any other window at the pop-up menu level
-+ * stays _DIALOG.  The new types are followed by _DIALOG, what the window
-+ * had before, for window managers that don't know them.
-+ *
-+ * The test forks a window manager that announces itself as an EWMH one
-+ * and maps what asks to be.  It needs a display with no window manager of
-+ * its own (a private Xvfb).
-+ */
-+#import <Foundation/Foundation.h>
-+#import "Testing.h"
-+#include "config.h"
-+
-+#if defined(BUILD_SERVER) && defined(SERVER_x11) && BUILD_SERVER == SERVER_x11
-+
-+#import <AppKit/AppKit.h>
-+#import <GNUstepGUI/GSDisplayServer.h>
-+#include <X11/Xlib.h>
-+#include <X11/Xatom.h>
-+#include <signal.h>
-+#include <sys/wait.h>
-+#include <unistd.h>
-+#ifdef __linux__
-+#include <sys/prctl.h>
-+#endif
-+
-+static int
-+ignoreErrors(Display *d, XErrorEvent *e)
-+{
-+  return 0;
-+}
-+
-+/* Announces itself, lists the window types, and maps what asks to be. */
-+static void
-+windowManagerRun(void)
-+{
-+  Display	*dpy = XOpenDisplay(NULL);
-+  Window	root;
-+  Window	check;
-+  Atom		netCheck;
-+  Atom		supported[2];
-+
-+  if (dpy == NULL)
-+    {
-+      _exit(1);
-+    }
-+  XSetErrorHandler(ignoreErrors);
-+  root = DefaultRootWindow(dpy);
-+  netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
-+  check = XCreateSimpleWindow(dpy, root, -100, -100, 1, 1, 0, 0, 0);
-+  XChangeProperty(dpy, check, netCheck, XA_WINDOW, 32, PropModeReplace,
-+    (unsigned char *)&check, 1);
-+  supported[0] = netCheck;
-+  supported[1] = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
-+  XChangeProperty(dpy, root, XInternAtom(dpy, "_NET_SUPPORTED", False),
-+    XA_ATOM, 32, PropModeReplace, (unsigned char *)supported, 2);
-+  XSelectInput(dpy, root, SubstructureRedirectMask | SubstructureNotifyMask);
-+  XChangeProperty(dpy, root, netCheck, XA_WINDOW, 32, PropModeReplace,
-+    (unsigned char *)&check, 1);
-+  XFlush(dpy);
-+  for (;;)
-+    {
-+      XEvent	e;
-+
-+      XNextEvent(dpy, &e);
-+      if (e.type == MapRequest)
-+	{
-+	  XMapWindow(dpy, e.xmaprequest.window);
-+	}
-+      XFlush(dpy);
-+    }
-+}
-+
-+static pid_t
-+startWindowManager(void)
-+{
-+  pid_t	pid = fork();
-+
-+  if (pid == 0)
-+    {
-+#ifdef __linux__
-+      /* Gone with the test, should it abort. */
-+      prctl(PR_SET_PDEATHSIG, SIGKILL);
-+#endif
-+      windowManagerRun();
-+      _exit(0);
-+    }
-+  return pid;
-+}
-+
-+static void
-+stopWindowManager(pid_t pid)
-+{
-+  if (pid > 0)
-+    {
-+      kill(pid, SIGKILL);
-+      waitpid(pid, NULL, 0);
-+    }
-+}
-+
-+static BOOL
-+waitForWindowManager(Display *dpy)
-+{
-+  Atom		netCheck = XInternAtom(dpy, "_NET_SUPPORTING_WM_CHECK", False);
-+  unsigned	i;
-+
-+  for (i = 0; i < 100; i++)
-+    {
-+      Atom		type;
-+      int		format;
-+      unsigned long	n, after;
-+      unsigned char	*data = NULL;
-+
-+      if (XGetWindowProperty(dpy, DefaultRootWindow(dpy), netCheck, 0, 1,
-+	  False, XA_WINDOW, &type, &format, &n, &after, &data) == Success
-+	&& data != NULL)
-+	{
-+	  XFree(data);
-+	  if (n > 0)
-+	    {
-+	      return YES;
-+	    }
-+	}
-+      usleep(50000);
-+    }
-+  return NO;
-+}
-+
-+/* Lets the backend handle what the X server sent it. */
-+static void
-+spin(void)
-+{
-+  [[NSRunLoop currentRunLoop]
-+    runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.3]];
-+}
-+
-+/* The window's _NET_WM_WINDOW_TYPE, in order of preference, each less its
-+ * _NET_WM_WINDOW_TYPE_ prefix and separated by spaces, or "none". */
-+static NSString *
-+windowType(Display *dpy, NSWindow *window)
-+{
-+  Window	w = (Window)[GSCurrentServer() windowDevice: [window windowNumber]];
-+  Atom		type;
-+  int		format;
-+  unsigned long	n, after, i;
-+  unsigned char	*data = NULL;
-+  NSMutableArray *names = [NSMutableArray array];
-+
-+  XSync(dpy, False);
-+  if (XGetWindowProperty(dpy, w, XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False),
-+      0, 8, False, XA_ATOM, &type, &format, &n, &after, &data) == Success
-+    && data != NULL)
-+    {
-+      for (i = 0; i < n; i++)
-+	{
-+	  char	*name = XGetAtomName(dpy, ((Atom *)data)[i]);
-+
-+	  [names addObject: [[NSString stringWithUTF8String: name]
-+	    substringFromIndex: strlen("_NET_WM_WINDOW_TYPE_")]];
-+	  XFree(name);
-+	}
-+      XFree(data);
-+    }
-+  return [names count] > 0 ? [names componentsJoinedByString: @" "] : @"none";
-+}
-+
-+int
-+main(int argc, const char **argv)
-+{
-+  START_SET("window types")
-+
-+  Display		*dpy;
-+  pid_t			wm;
-+  Class			toolTipClass;
-+  NSPanel		*toolTip;
-+  NSPanel		*modal;
-+  NSWindow		*popUpLevel;
-+  NSWindow		*menuWindow;
-+
-+  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
-+    {
-+      SKIP("no window server available")
-+    }
-+  dpy = XOpenDisplay(NULL);
-+  if (dpy == NULL)
-+    {
-+      SKIP("no window server available")
-+    }
-+  XSetErrorHandler(ignoreErrors);
-+  if (XGetSelectionOwner(dpy, XInternAtom(dpy, "WM_S0", False)) != None)
-+    {
-+      SKIP("the display has a window manager of its own")
-+    }
-+
-+  wm = startWindowManager();
-+  if (!waitForWindowManager(dpy))
-+    {
-+      stopWindowManager(wm);
-+      SKIP("the test window manager did not start")
-+    }
-+
-+  NS_DURING
-+    {
-+      [NSApplication sharedApplication];
-+    }
-+  NS_HANDLER
-+    {
-+      stopWindowManager(wm);
-+      SKIP("It looks like the GNUstep backend is not installed")
-+    }
-+  NS_ENDHANDLER
-+
-+  /* As GSToolTips makes its window: deferred, its level set before it has
-+     an X window, so the backend first sees the level with no window
-+     registered for it. */
-+  toolTipClass = NSClassFromString(@"GSTTPanel");
-+  if (toolTipClass == Nil)
-+    {
-+      toolTipClass = [NSPanel class];
-+    }
-+  toolTip = [[toolTipClass alloc] initWithContentRect: NSMakeRect(0, 0, 100, 25)
-+					    styleMask: NSBorderlessWindowMask
-+					      backing: NSBackingStoreRetained
-+						defer: YES];
-+  [toolTip setLevel: NSPopUpMenuWindowLevel];
-+  [toolTip orderFront: nil];
-+  spin();
-+  PASS_EQUAL(windowType(dpy, toolTip),
-+    toolTipClass == [NSPanel class] ? @"DIALOG" : @"TOOLTIP DIALOG",
-+    "a tool tip is a tool tip (a dialog for window managers that don't know it)");
-+
-+  /* A menu's window at the pop-up menu level, as a context menu's or a
-+     pop-up button's is.  (No menu in it: a font looked up here can read a
-+     font name the defaults have released, -[GSCInlineString copy]: message
-+     sent to deallocated instance, and the test harness aborts on that.) */
-+  menuWindow = [[NSClassFromString(@"NSMenuPanel") alloc]
-+    initWithContentRect: NSMakeRect(0, 0, 100, 50)
-+	      styleMask: NSBorderlessWindowMask
-+		backing: NSBackingStoreBuffered
-+		  defer: YES];
-+  [menuWindow setLevel: NSPopUpMenuWindowLevel];
-+  [menuWindow orderFront: nil];
-+  spin();
-+  PASS(menuWindow != nil
-+    && [windowType(dpy, menuWindow) isEqual: @"POPUP_MENU DIALOG"],
-+    "a context menu is a pop-up menu (a dialog for window managers that don't"
-+    " know it)");
-+  [menuWindow orderOut: nil];
-+
-+  modal = [[NSPanel alloc] initWithContentRect: NSMakeRect(100, 100, 300, 120)
-+				     styleMask: NSBorderlessWindowMask
-+				       backing: NSBackingStoreBuffered
-+					 defer: NO];
-+  [modal setLevel: NSModalPanelWindowLevel];
-+  [modal orderFront: nil];
-+  spin();
-+  PASS_EQUAL(windowType(dpy, modal), @"DIALOG", "a modal panel is a dialog");
-+
-+  popUpLevel = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 50, 50)
-+					   styleMask: NSBorderlessWindowMask
-+					     backing: NSBackingStoreBuffered
-+					       defer: NO];
-+  [popUpLevel setLevel: NSPopUpMenuWindowLevel];
-+  [popUpLevel orderFront: nil];
-+  spin();
-+  PASS_EQUAL(windowType(dpy, popUpLevel), @"DIALOG",
-+    "another window at the pop-up menu level stays a dialog");
-+
-+  [toolTip close];
-+  [modal close];
-+  [popUpLevel close];
-+  stopWindowManager(wm);
-+
-+  END_SET("window types")
-+  return 0;
-+}
-+
-+#else
-+
-+int
-+main(int argc, const char **argv)
-+{
-+  START_SET("window types")
-+    SKIP("x11 backend only")
-+  END_SET("window types")
-+  return 0;
-+}
-+
-+#endif
+-- 
+2.47.3
+

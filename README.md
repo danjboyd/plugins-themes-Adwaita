@@ -244,7 +244,7 @@ bar's row.
 
 Not yet with the installed GNUstep: the window's shadow, its rounded
 corners and resizing from the shadow. These need the libs-back and
-libs-gui patches in `Docs/upstream-patches/` (see
+libs-gui patches in `Docs/upstream-patches/` (see its README and
 `Docs/PROPOSAL_LIBS_BACK_CSD.md`). The installed backend already gives
 windows an alpha channel with the header bar, so under a compositor menus
 and tool tips are rounded and tool tips translucent, as libadwaita's.
