@@ -91,7 +91,7 @@ The test needs a private display; the packet's results came from `run-back-tests
 
 ## Sign-off
 
-If you approve this exact version, add this row to `Docs/UPSTREAM_SIGNOFF.md` yourself:
+If you approve this exact version, say so in the chat ("I approve libs-back-0001") and Claude records it, or add this row to `Docs/UPSTREAM_SIGNOFF.md` yourself:
 
 ```
 | 2026-10-06 | libs-back 0001 | dbfbe5397bc18895ef3e49951574e312603b03fa | | |

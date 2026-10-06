@@ -87,9 +87,10 @@ asked for the push.
   why, and the Co-Authored-By line.
 - **Anything sent to GNUstep follows `Docs/UPSTREAM_POLICY.md`**: tests or
   a reproducer, the GCC check (`Tests/Scripts/gcc-syntax-check.sh`),
-  disclosure, and Dan's sign-off on the exact hash in
-  `Docs/UPSTREAM_SIGNOFF.md` before it is sent. Claude never writes in
-  that file.
+  disclosure, and Dan's sign-off on the exact hash, recorded in
+  `Docs/UPSTREAM_SIGNOFF.md` before it is sent. Dan may approve in the
+  chat ("I approve libs-back-0001"); Claude then records it there, quoting
+  him, and otherwise never writes in that file.
 - Upstream text carries the disclosure line "Investigated, reproduced and
   written up with AI assistance (Claude)." Never write in Dan's voice that
   he checked something.

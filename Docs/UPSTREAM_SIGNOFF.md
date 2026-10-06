@@ -3,8 +3,11 @@
 Dan's record that he has reviewed an item and that exact version may be
 sent upstream (`Docs/UPSTREAM_POLICY.md`, stage 2).
 
-**Only Dan writes in this table.** Claude reads it before sending anything
-and sends nothing whose hash isn't here.
+A line is added by Dan, or by Claude recording an approval Dan gave in the
+chat: explicit, naming the item, given after Claude presented that item's
+review document and hash, quoted in Notes. Claude adds nothing else here,
+and reads this table before sending anything: nothing is sent whose hash
+isn't in it.
 
 - A patch: the commit's hash (`git rev-parse` in the series worktree).
 - An issue: `git hash-object` of the draft and of its reproducer.
@@ -13,3 +16,4 @@ Any change to an item after its line was added voids the line.
 
 | Date | Item | Hash(es) reviewed | Notes | Sent |
 |---|---|---|---|---|
+| 2026-10-06 | libs-back 0001 | dbfbe5397bc18895ef3e49951574e312603b03fa | Approved in chat: "i approve libs-back-0001", after review document `Docs/upstream-patches/review/libs-back-0001.md` for this hash | |

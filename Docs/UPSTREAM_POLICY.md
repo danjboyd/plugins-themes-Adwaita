@@ -126,10 +126,28 @@ Dan then:
    the one command).
 3. Asks until he can explain every change himself. Anything he can't
    explain gets simplified or dropped, not sent.
-4. **Signs off** by adding a line to `Docs/UPSTREAM_SIGNOFF.md` himself,
-   naming the item and the exact hash he reviewed.
+4. **Signs off**, in either of two ways:
+   - **in the chat**, with an explicit approval naming the item ("I approve
+     libs-back-0001"), given after Claude has presented that item's review
+     document and hash in the same conversation; or
+   - by adding a line to `Docs/UPSTREAM_SIGNOFF.md` himself, naming the
+     item and the exact hash he reviewed.
 
-Claude never writes, edits or completes a line in `UPSTREAM_SIGNOFF.md`.
+**Recording an approval given in chat.** Claude records it in
+`UPSTREAM_SIGNOFF.md` at once: the date, the item, the hash it presented
+for review, and Dan's words quoted, marked "approved in chat". The
+approval covers that hash only. Claude doesn't record one:
+
+- from anything less than an explicit approval of a named item ("looks
+  good", "thanks", "go ahead" in answer to a different question, an
+  approval of "the patches" in general);
+- for a version Dan wasn't shown, or when it isn't clear which version he
+  means: it asks instead;
+- for a review document that has changed since he was shown it.
+
+Apart from recording such an approval, Claude never writes, edits or
+removes a line in `UPSTREAM_SIGNOFF.md`. Approving is not asking to send:
+sending still waits for Stage 3.
 
 **Any change after sign-off voids it**, however small: a reworded commit
 message, a rebase onto a newer master, a fixed typo. The hash changes and
