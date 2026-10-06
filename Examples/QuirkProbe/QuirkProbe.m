@@ -1492,6 +1492,50 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    of mid grey), and shortcuts end 12pt inside the row, 16pt from the
    cell's edge (the row is inset 4pt), with submenu arrows' boxes (#10:
    flush against the edge). */
+/* Shortcut labels as GTK writes them (gtk_accelerator_get_label): Shift,
+   Ctrl, Alt, then the key; an uppercase key equivalent means Shift (#41). */
+- (void) checkShortcutLabels
+{
+  NSArray *cases = [NSArray arrayWithObjects:
+    [NSArray arrayWithObjects: @"o", [NSNumber numberWithUnsignedInteger: NSCommandKeyMask], @"Ctrl+O", nil],
+    [NSArray arrayWithObjects: @"O", [NSNumber numberWithUnsignedInteger: NSCommandKeyMask], @"Shift+Ctrl+O", nil],
+    [NSArray arrayWithObjects: @"s", [NSNumber numberWithUnsignedInteger: NSCommandKeyMask | NSShiftKeyMask],
+              @"Shift+Ctrl+S", nil],
+    [NSArray arrayWithObjects: @"s",
+              [NSNumber numberWithUnsignedInteger: NSCommandKeyMask | NSShiftKeyMask | NSAlternateKeyMask],
+              @"Shift+Ctrl+Alt+S", nil],
+    [NSArray arrayWithObjects: @"1", [NSNumber numberWithUnsignedInteger: NSCommandKeyMask], @"Ctrl+1", nil],
+    [NSArray arrayWithObjects: @"?", [NSNumber numberWithUnsignedInteger: NSCommandKeyMask], @"Ctrl+?", nil],
+    nil];
+  NSMutableArray *wrong = [NSMutableArray array];
+  NSEnumerator *e = [cases objectEnumerator];
+  NSArray *c;
+
+  while ((c = [e nextObject]) != nil)
+    {
+      NSMenuItem *item = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: @"Item" action: NULL
+                                                          keyEquivalent: [c objectAtIndex: 0]]);
+      NSString *label;
+
+      [item setKeyEquivalentModifierMask: [[c objectAtIndex: 1] unsignedIntegerValue]];
+      label = [item respondsToSelector: @selector(gnomeThemeShortcutLabel)]
+        ? [item performSelector: @selector(gnomeThemeShortcutLabel)] : nil;
+      if ([label isEqualToString: [c objectAtIndex: 2]] == NO)
+        {
+          [wrong addObject: [NSString stringWithFormat: @"\"%@\" mask %@: %@, want %@", [c objectAtIndex: 0],
+                                      [c objectAtIndex: 1], label, [c objectAtIndex: 2]]];
+        }
+    }
+  if ([wrong count] == 0)
+    {
+      [self pass: @"menu-shortcut-labels" detail: nil];
+    }
+  else
+    {
+      [self fail: @"menu-shortcut-labels" detail: [wrong componentsJoinedByString: @"; "]];
+    }
+}
+
 - (void) checkMenuSeparatorAndShortcut
 {
   NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Probe"]);
@@ -4444,6 +4488,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _toolbarWindow named: @"toolbar"];
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkThemeDomain];
+  [self checkShortcutLabels];
   [self checkSizedButtons];
   [self checkFixedButtons];
   [self checkSteppers];

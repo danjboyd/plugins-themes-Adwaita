@@ -279,50 +279,71 @@ GnomeThemePhase67DisplayKeyForEquivalent(NSString *equivalent)
   return [equivalent uppercaseString];
 }
 
+/* A menu item's shortcut as GTK labels it: Shift, Ctrl, Alt, then the
+   key (gtk_accelerator_get_label). An uppercase letter is AppKit's way of
+   saying Shift ("O" is Shift+Ctrl+O, as GNUstep matches it), so it gets
+   Shift too (#41). */
 static NSString *
-GnomeThemePhase67KeyEquivalentString(NSMenuItemCell *cell)
+GnomeThemeMenuItemShortcutLabel(NSMenuItem *item)
 {
-  NSMenuItem *item = [cell menuItem];
+  NSString *equivalent = [item keyEquivalent];
+  NSMutableArray *parts;
+  NSUInteger mask;
+  NSString *displayKey;
 
-  if (item == nil)
+  if (item == nil || [equivalent length] == 0)
     {
       return @"";
     }
-
-  {
-    NSMutableArray *parts = [NSMutableArray array];
-    NSUInteger mask = [item keyEquivalentModifierMask];
-    NSString *displayKey = GnomeThemePhase67DisplayKeyForEquivalent ([item keyEquivalent]);
-
-    if (GnomeThemePhase67UsesPopupButtonCellLayout (cell) || [displayKey length] == 0)
-      {
-        return @"";
-      }
-
-    if (mask & NSCommandKeyMask)
-      {
-        GnomeThemePhase67AddShortcutPart (parts, @"Ctrl");
-      }
-    if (mask & NSControlKeyMask)
-      {
-        GnomeThemePhase67AddShortcutPart (parts, @"Ctrl");
-      }
-    if (mask & NSAlternateKeyMask)
-      {
-        GnomeThemePhase67AddShortcutPart (parts, @"Alt");
-      }
-    if (mask & NSShiftKeyMask)
-      {
-        GnomeThemePhase67AddShortcutPart (parts, @"Shift");
-      }
-    if ([displayKey length] > 0)
-      {
-        [parts addObject: displayKey];
-      }
-
-    return [parts componentsJoinedByString: @"+"];
-  }
+  displayKey = GnomeThemePhase67DisplayKeyForEquivalent (equivalent);
+  if ([displayKey length] == 0)
+    {
+      return @"";
+    }
+  mask = [item keyEquivalentModifierMask];
+  if ([equivalent length] == 1 && [equivalent isEqualToString: [equivalent lowercaseString]] == NO
+    && [equivalent isEqualToString: [equivalent uppercaseString]])
+    {
+      mask |= NSShiftKeyMask;
+    }
+  parts = [NSMutableArray arrayWithCapacity: 4];
+  if (mask & NSShiftKeyMask)
+    {
+      GnomeThemePhase67AddShortcutPart (parts, @"Shift");
+    }
+  if (mask & (NSCommandKeyMask | NSControlKeyMask))
+    {
+      GnomeThemePhase67AddShortcutPart (parts, @"Ctrl");
+    }
+  if (mask & NSAlternateKeyMask)
+    {
+      GnomeThemePhase67AddShortcutPart (parts, @"Alt");
+    }
+  [parts addObject: displayKey];
+  return [parts componentsJoinedByString: @"+"];
 }
+
+static NSString *
+GnomeThemePhase67KeyEquivalentString(NSMenuItemCell *cell)
+{
+  if (GnomeThemePhase67UsesPopupButtonCellLayout (cell))
+    {
+      return @"";
+    }
+  return GnomeThemeMenuItemShortcutLabel ([cell menuItem]);
+}
+
+/* For QuirkProbe. */
+@interface NSMenuItem (GnomeThemeShortcutLabel)
+- (NSString *) gnomeThemeShortcutLabel;
+@end
+
+@implementation NSMenuItem (GnomeThemeShortcutLabel)
+- (NSString *) gnomeThemeShortcutLabel
+{
+  return GnomeThemeMenuItemShortcutLabel (self);
+}
+@end
 
 static CGFloat
 GnomeThemePhase67MenuStateImageWidth(NSMenuItemCell *cell)
