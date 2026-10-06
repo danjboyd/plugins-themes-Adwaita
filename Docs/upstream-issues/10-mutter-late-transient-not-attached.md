@@ -1,7 +1,7 @@
 **Repository:** GNOME/mutter (gitlab.gnome.org)
 
-**Filed:** not yet. The cause comes from reading the source; it has not been
-reproduced on the desktop yet (see "Before filing").
+**Filed:** not yet (see "Before filing"). Reproduced with the GTK 4 program
+below on 2026-10-06.
 
 **Title:** Wayland: a modal dialog that gets its parent after it is mapped is never attached
 
@@ -68,8 +68,32 @@ and `meta_window_should_attach_to_parent()` reads the parent through
 `meta_window_get_transient_for (window)`, which still returns the old
 parent (none). So setting a parent on a mapped dialog leaves `attached`
 FALSE. Nothing else recomputes it for a Wayland window except a change to
-the `attach-modal-dialogs` setting, so toggling the setting while the
-dialog is open should attach it.
+the `attach-modal-dialogs` setting (`prefs_changed_callback()`) and a change
+of window type (`meta_window_type_changed()`), and both of those read the
+stored parent.
+
+### What happened
+
+On GNOME Shell 48.7 (Wayland), `late_transient_attach.py`, screenshots taken
+3s after start (6s for the third run):
+
+| Run | Parent dimmed |
+| --- | --- |
+| `--early` (parent set before mapping) | yes: attached |
+| parent set 1s after mapping | no |
+| parent set 1s after mapping, then the dialog's modal flag turned off and on at 4s (a window type change) | yes |
+
+The third run shows that once anything recomputes `attached` after the
+parent is stored, the dialog is attached: only the computation in
+`set_transient_for` gets it wrong.
+
+Dimming can't tell the second run's state by itself: GNOME Shell re-checks
+a parent's dimming only when a dialog maps, changes type or is unmanaged
+(`_mapWindow()` in `js/ui/windowManager.js`), not when `attached`
+changes. A toggle of `attach-modal-dialogs` therefore shows nothing either.
+That the dialog isn't attached shows in its behaviour: an Xwayland
+app's file chooser moves on its own, and the app's window doesn't move with
+it.
 
 ### Possible fix
 
@@ -80,13 +104,16 @@ windows. It has to stay after the `window->attached && parent == NULL`
 check, which closes an attached dialog whose parent goes away and relies on
 `attached` still describing the old parent.
 
+GNOME Shell would then also need to re-check dimming when `attached`
+changes (for example on a notification of it), or the parent stays
+undimmed.
+
 ### Before filing
 
-- Run `late_transient_attach.py` both ways on the desktop and note what
-  each does (screenshots).
-- With the theme's chooser open over a GNUstep app:
-  `gsettings set org.gnome.mutter attach-modal-dialogs false` then `true`.
-  If the chooser then attaches, the cause above is confirmed.
+- Drag the dialog in the second run (`python3 late_transient_attach.py`):
+  if the parent stays where it is, the dialog isn't attached (the
+  screenshots can't show this; see above). With `--early`, the parent
+  moves with it.
 - Dan's sign-off on this text (`Docs/UPSTREAM_POLICY.md`).
 
 Found for plugins-themes-Adwaita#44.
