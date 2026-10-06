@@ -59,32 +59,39 @@ typedef struct
 static GnomeThemeOriginalMethodEntry GnomeThemeOriginalMethodCache[GNOME_THEME_ORIGINAL_METHOD_CACHE];
 static GSTheme *GnomeThemeOriginalMethodCacheTheme = nil;
 
-static IMP
-GnomeThemeLookUpOriginalMethod(GSTheme *theme, SEL selector, id receiver, Class baseClass)
+/* An instance of exactly `cls`, used only as a lookup key: it is never
+   initialised, messaged, or freed. */
+static id
+GnomeThemePrototype(Class cls)
 {
   static NSMapTable *prototypes = nil;
-  IMP imp = [theme overriddenMethod: selector for: receiver];
   id prototype;
 
-  if (imp != NULL || baseClass == Nil)
-    {
-      return imp;
-    }
-  /* An instance of exactly `baseClass`, used only as a lookup key: it is never
-     initialised, messaged, or freed. */
   if (prototypes == nil)
     {
       prototypes = [[NSMapTable alloc] initWithKeyOptions: NSPointerFunctionsOpaqueMemory | NSPointerFunctionsOpaquePersonality
                                              valueOptions: NSPointerFunctionsOpaqueMemory | NSPointerFunctionsOpaquePersonality
                                                  capacity: 16];
     }
-  prototype = (id)NSMapGet (prototypes, (void *)baseClass);
+  prototype = (id)NSMapGet (prototypes, (void *)cls);
   if (prototype == nil)
     {
-      prototype = class_createInstance (baseClass, 0);
-      NSMapInsert (prototypes, (void *)baseClass, (void *)prototype);
+      prototype = class_createInstance (cls, 0);
+      NSMapInsert (prototypes, (void *)cls, (void *)prototype);
     }
-  return [theme overriddenMethod: selector for: prototype];
+  return prototype;
+}
+
+static IMP
+GnomeThemeLookUpOriginalMethod(GSTheme *theme, SEL selector, id receiver, Class baseClass)
+{
+  IMP imp = [theme overriddenMethod: selector for: receiver];
+
+  if (imp != NULL || baseClass == Nil)
+    {
+      return imp;
+    }
+  return [theme overriddenMethod: selector for: GnomeThemePrototype (baseClass)];
 }
 
 IMP
@@ -108,6 +115,15 @@ GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass)
       entry->baseClass = baseClass;
     }
   return entry->imp;
+}
+
+/* `cls`'s own original, whatever the receiver's class: what an override
+   that a subclass reaches through super must call, or a subclass the
+   theme also overrides would call itself back. */
+IMP
+GnomeThemeOriginalMethodOfClass(SEL selector, Class cls)
+{
+  return GnomeThemeOriginalMethod (selector, GnomeThemePrototype (cls), Nil);
 }
 
 /* The originals change when the theme's overrides are installed or

@@ -205,6 +205,26 @@ when `-[NSImage isTemplate]` says so (libs-gui after 0.32), or when its
 name ends in `Template` (Cocoa's convention) or `-symbolic` (GNOME's), for
 example `[NSImage imageNamed: @"zoom-in-symbolic"]`.
 
+### Inline button rows in menus
+
+GNOME apps put a row of buttons in a menu, such as the "- 100% +" zoom row
+(GTK's `horizontal-buttons` menu sections). To get one, give consecutive
+menu items the same string as their `representedObject`, starting with
+`GnomeThemeInlineGroup:`:
+
+```objc
+[zoomOut setRepresentedObject: @"GnomeThemeInlineGroup:zoom"];
+[actualSize setRepresentedObject: @"GnomeThemeInlineGroup:zoom"];  /* "110%" */
+[zoomIn setRepresentedObject: @"GnomeThemeInlineGroup:zoom"];
+```
+
+The theme shows them as one row of flat buttons: each item's image
+(symbolic images take the text colour, see above), or its title when it
+has none, with the items between the first and the last taking the
+spare room. They stay ordinary items, with their actions, key
+equivalents and validation; under other themes they show as a plain
+list. Two items or more make a row.
+
 ### Windows without the menu bar
 
 GNOME apps keep their menus in the main window. The theme leaves the menu

@@ -501,6 +501,134 @@ GnomeThemePhase67MenuForegroundColor(GnomeTheme *theme,
   return color;
 }
 
+/* Inline button rows (#42), as GTK's "horizontal-buttons" menu sections
+   (GNOME's "- 100% +" zoom row): consecutive items of a vertical menu
+   whose representedObject is the same @"GnomeThemeInlineGroup:<name>"
+   string share one row, each a flat button with its image (or title).
+   Under other themes they stay ordinary items. */
+static NSString *const GnomeThemeInlineGroupPrefix = @"GnomeThemeInlineGroup:";
+static const CGFloat GnomeThemeInlineButtonWidth = 40.0;
+static const CGFloat GnomeThemeInlineRowInset = 4.0;
+
+static NSString *
+GnomeThemeInlineGroupName(NSMenuItem *item)
+{
+  id object = [item representedObject];
+
+  if ([object isKindOfClass: [NSString class]] && [(NSString *)object hasPrefix: GnomeThemeInlineGroupPrefix]
+    && [item isSeparatorItem] == NO)
+    {
+      return object;
+    }
+  return nil;
+}
+
+/* The group of the item at `index` in a vertical menu view (two items or
+   more), or NSNotFound. */
+static NSRange
+GnomeThemeInlineGroupRange(NSMenuView *menuView, NSInteger index)
+{
+  NSMenu *menu = [menuView menu];
+  NSInteger count = [menu numberOfItems];
+  NSInteger first = index, last = index;
+  NSString *name;
+
+  if ([menuView isHorizontal] || [menu _ownedByPopUp] || index < 0 || index >= count)
+    {
+      return NSMakeRange (NSNotFound, 0);
+    }
+  name = GnomeThemeInlineGroupName ((NSMenuItem *)[menu itemAtIndex: index]);
+  if (name == nil)
+    {
+      return NSMakeRange (NSNotFound, 0);
+    }
+  while (first > 0 && [name isEqualToString: GnomeThemeInlineGroupName ((NSMenuItem *)[menu itemAtIndex: first - 1]) ?: @""])
+    {
+      first--;
+    }
+  while (last + 1 < count && [name isEqualToString: GnomeThemeInlineGroupName ((NSMenuItem *)[menu itemAtIndex: last + 1]) ?: @""])
+    {
+      last++;
+    }
+  if (last == first)
+    {
+      return NSMakeRange (NSNotFound, 0);
+    }
+  return NSMakeRange (first, last - first + 1);
+}
+
+/* The width an item of a row wants: a button for an image, else its
+   title with some room. */
+static CGFloat
+GnomeThemeInlineNaturalWidth(NSMenuView *menuView, NSInteger index)
+{
+  NSMenuItem *item = (NSMenuItem *)[[menuView menu] itemAtIndex: index];
+  NSMenuItemCell *cell = [menuView menuItemCellForItemAtIndex: index];
+  NSFont *font = [cell font] ?: [NSFont menuFontOfSize: 0];
+
+  if ([item image] != nil)
+    {
+      return MAX (GnomeThemeInlineButtonWidth, [[item image] size].width + 16.0);
+    }
+  return ceil ([[item title] sizeWithAttributes: [NSDictionary dictionaryWithObject: font
+                                                                             forKey: NSFontAttributeName]].width)
+    + 24.0;
+}
+
+/* What the whole row wants, inset included. */
+static CGFloat
+GnomeThemeInlineRowWidth(NSMenuView *menuView, NSRange group)
+{
+  CGFloat width = 2.0 * GnomeThemeInlineRowInset;
+  NSUInteger i;
+
+  for (i = group.location; i < NSMaxRange (group); i++)
+    {
+      width += GnomeThemeInlineNaturalWidth (menuView, i);
+    }
+  return width;
+}
+
+/* The item's segment of its group's row: each at the width it wants,
+   the room left over going to the items between the first and last (the
+   label of "- 100% +"), or shared out when there are none; narrowed in
+   proportion when the row is short. */
+static NSRect
+GnomeThemeInlineSegment(NSMenuView *menuView, NSRect row, NSRange group, NSInteger index)
+{
+  NSRect inner = NSInsetRect (row, GnomeThemeInlineRowInset, 0.0);
+  CGFloat widths[group.length];
+  CGFloat total = 0.0, spare, x = NSMinX (inner);
+  NSUInteger i, middle = group.length > 2 ? group.length - 2 : 0;
+
+  for (i = 0; i < group.length; i++)
+    {
+      widths[i] = GnomeThemeInlineNaturalWidth (menuView, group.location + i);
+      total += widths[i];
+    }
+  spare = NSWidth (inner) - total;
+  for (i = 0; i < group.length; i++)
+    {
+      if (spare < 0.0)
+        {
+          widths[i] *= NSWidth (inner) / total;
+        }
+      else if (middle > 0 && i > 0 && i < group.length - 1)
+        {
+          widths[i] += spare / middle;
+        }
+      else if (middle == 0)
+        {
+          widths[i] += spare / group.length;
+        }
+    }
+  for (i = 0; i < (NSUInteger)(index - (NSInteger)group.location); i++)
+    {
+      x += widths[i];
+    }
+  return NSMakeRect (floor (x), NSMinY (row), floor (widths[index - group.location]), NSHeight (row));
+}
+
 /* The background rows draw on, for the table a header (or corner) view
    belongs to. */
 static NSColor *
@@ -1105,7 +1233,14 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSRect rect = (originalIMP != NULL) ? originalIMP (self, _cmd, index) : NSZeroRect;
   NSRect appRect;
   NSRect lastRect;
+  NSRange group = GnomeThemeInlineGroupRange (menuView, index);
 
+  if (group.location != NSNotFound && originalIMP != NULL)
+    {
+      NSRect row = (index == (NSInteger)group.location) ? rect : originalIMP (self, _cmd, group.location);
+
+      return GnomeThemeInlineSegment (menuView, row, group, index);
+    }
   if ([menuView isHorizontal] == NO || [menu numberOfItems] < 2
     || GnomeThemeIsApplicationMenuItem ((NSMenuItem *)[menu itemAtIndex: 0]) == NO)
     {
@@ -1127,6 +1262,85 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
       rect.origin.x -= NSWidth (appRect);
     }
   return rect;
+}
+
+/* An inline group's row is its first item's: the others take no height
+   of their own. */
+- (CGFloat) _overrideNSMenuViewMethod_heightForItem: (NSInteger)index
+{
+  typedef CGFloat (*HeightIMP)(id, SEL, NSInteger);
+  HeightIMP originalIMP = (HeightIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSRange group = GnomeThemeInlineGroupRange ((NSMenuView *)self, index);
+
+  if (group.location != NSNotFound && index != (NSInteger)group.location)
+    {
+      return 0.0;
+    }
+  return originalIMP != NULL ? originalIMP (self, _cmd, index) : 0.0;
+}
+
+/* An item of an inline row: its image (a template one in the text
+   colour) or its title, centred in its button. */
+- (void) _overrideNSMenuItemCellMethod_drawInteriorWithFrame: (NSRect)cellFrame inView: (NSView *)controlView
+{
+  typedef void (*DrawIMP)(id, SEL, NSRect, NSView *);
+  NSMenuItemCell *cell = (NSMenuItemCell *)self;
+  NSMenuView *menuView = [cell menuView];
+  NSMenuItem *item = [cell menuItem];
+  NSRange group = NSMakeRange (NSNotFound, 0);
+
+  if (menuView != nil && item != nil)
+    {
+      group = GnomeThemeInlineGroupRange (menuView, [[menuView menu] indexOfItem: item]);
+    }
+  if (group.location == NSNotFound)
+    {
+      /* NSPopUpButtonCell reaches this through super. */
+      DrawIMP originalIMP = (DrawIMP)GnomeThemeOriginalMethodOfClass (_cmd, [NSMenuItemCell class]);
+
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, cellFrame, controlView);
+        }
+      return;
+    }
+  {
+    GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
+    NSColor *color = GnomeThemePhase67MenuForegroundColor (theme, cell, [cell isHighlighted]);
+    NSImage *image = [item image];
+
+    if (image != nil)
+      {
+        NSSize size = [image size];
+        NSRect imageRect = NSMakeRect (floor (NSMidX (cellFrame) - size.width / 2.0),
+                                       floor (NSMidY (cellFrame) - size.height / 2.0),
+                                       size.width, size.height);
+
+        if (GnomeThemeImageIsTemplate (image))
+          {
+            image = GnomeThemeTintedImage (image, color);
+          }
+        [image drawInRect: imageRect
+                 fromRect: NSZeroRect
+                operation: NSCompositeSourceOver
+                 fraction: [item isEnabled] ? 1.0 : 0.5];
+      }
+    else
+      {
+        NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+          [cell font] ?: [NSFont menuFontOfSize: 0], NSFontAttributeName,
+          color, NSForegroundColorAttributeName, nil];
+        NSString *title = [item title];
+        NSSize size = [title sizeWithAttributes: attributes];
+
+        [NSGraphicsContext saveGraphicsState];
+        NSRectClip (cellFrame);
+        [title drawAtPoint: NSMakePoint (floor (NSMidX (cellFrame) - MIN (size.width, NSWidth (cellFrame)) / 2.0),
+                                         floor (NSMidY (cellFrame) - size.height / 2.0))
+            withAttributes: attributes];
+        [NSGraphicsContext restoreGraphicsState];
+      }
+  }
 }
 
 /* libs-gui asks for an item's rect to redraw it, and while the menu needs
@@ -1343,6 +1557,18 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   if ([[cell menuView] isHorizontal])
     {
       return originalWidth;
+    }
+  /* An inline row: its first item makes the menu as wide as the row. */
+  if ([cell menuView] != nil && [cell menuItem] != nil)
+    {
+      NSMenuView *menuView = [cell menuView];
+      NSInteger index = [[menuView menu] indexOfItem: [cell menuItem]];
+      NSRange group = GnomeThemeInlineGroupRange (menuView, index);
+
+      if (group.location != NSNotFound)
+        {
+          return index == (NSInteger)group.location ? GnomeThemeInlineRowWidth (menuView, group) : 0.0;
+        }
     }
 
   /* titleRectForBounds insets the drawable area by 1pt on the left and caps

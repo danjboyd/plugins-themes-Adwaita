@@ -1492,6 +1492,100 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
    of mid grey), and shortcuts end 12pt inside the row, 16pt from the
    cell's edge (the row is inset 4pt), with submenu arrows' boxes (#10:
    flush against the edge). */
+/* An inline button row (#42): three items declared as one group share a
+   row, side by side, and a click in each lands on it; the menu is three
+   rows high, not five. */
+- (void) checkInlineMenuRow
+{
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"View"]);
+  NSArray *titles = [NSArray arrayWithObjects: @"Before", @"Zoom Out", @"110%", @"Zoom In", @"After", nil];
+  NSWindow *window;
+  NSMenuView *menuView;
+  NSRect rects[5];
+  NSMutableArray *problems = [NSMutableArray array];
+  NSInteger i;
+  CGFloat rowHeight;
+  QuirkProbeInk ink;
+
+  for (i = 0; i < 5; i++)
+    {
+      NSMenuItem *item = (NSMenuItem *)[menu addItemWithTitle: [titles objectAtIndex: i]
+                                                       action: @selector(description)
+                                                keyEquivalent: @""];
+
+      [item setTarget: self];
+      if (i >= 1 && i <= 3)
+        {
+          [item setRepresentedObject: @"GnomeThemeInlineGroup:zoom"];
+        }
+    }
+  menuView = AUTORELEASE ([[NSMenuView alloc] initWithFrame: NSMakeRect (0, 0, 200, 100)]);
+  [menuView setMenu: menu];
+  [menuView sizeToFit];
+  window = [self windowWithFrame: NSMakeRect (40, 200, NSWidth ([menuView frame]) + 40, NSHeight ([menuView frame]) + 40)
+                           title: @"QuirkProbe Inline Row"];
+  [menuView setFrameOrigin: NSMakePoint (20, 20)];
+  [[window contentView] addSubview: menuView];
+  [window orderFront: nil];
+  [window display];
+  for (i = 0; i < 5; i++)
+    {
+      rects[i] = [menuView rectOfItemAtIndex: i];
+    }
+  rowHeight = NSHeight (rects[0]);
+  for (i = 1; i <= 3; i++)
+    {
+      NSPoint middle = NSMakePoint (NSMidX (rects[i]), NSMidY (rects[i]));
+
+      if (NSMinY (rects[i]) != NSMinY (rects[1]) || NSHeight (rects[i]) != rowHeight)
+        {
+          [problems addObject: [NSString stringWithFormat: @"item %ld not on the row: %@", (long)i,
+                                         NSStringFromRect (rects[i])]];
+        }
+      if (i > 1 && NSMinX (rects[i]) < NSMaxX (rects[i - 1]))
+        {
+          [problems addObject: [NSString stringWithFormat: @"items %ld and %ld overlap", (long)(i - 1), (long)i]];
+        }
+      if ([menuView indexOfItemAtPoint: middle] != i)
+        {
+          [problems addObject: [NSString stringWithFormat: @"a click on item %ld finds %ld", (long)i,
+                                         (long)[menuView indexOfItemAtPoint: middle]]];
+        }
+    }
+  /* Three rows and the menu's padding, under four rows. */
+  if (NSHeight ([menuView frame]) >= 4 * rowHeight)
+    {
+      [problems addObject: [NSString stringWithFormat: @"menu %g high for rows of %g",
+                                     NSHeight ([menuView frame]), rowHeight]];
+    }
+  /* The middle item's title is drawn in its own segment. */
+  {
+    NSBitmapImageRep *rep = QuirkProbeRender (menuView);
+    NSRect area = rects[2];
+
+    if ([menuView isFlipped] == NO)
+      {
+        area.origin.y = NSHeight ([menuView bounds]) - NSMaxY (area);
+      }
+    ink = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk, area);
+    if (ink.count < 20)
+      {
+        [problems addObject: [NSString stringWithFormat: @"no title in the middle segment %@", NSStringFromRect (area)]];
+      }
+  }
+  [window orderOut: nil];
+  if ([problems count] == 0)
+    {
+      [self pass: @"menu-inline-row"
+          detail: [NSString stringWithFormat: @"%@ | %@ | %@", NSStringFromRect (rects[1]), NSStringFromRect (rects[2]),
+                            NSStringFromRect (rects[3])]];
+    }
+  else
+    {
+      [self fail: @"menu-inline-row" detail: [problems componentsJoinedByString: @"; "]];
+    }
+}
+
 /* A text field whose background the app chose (Gorm's CustomView palette
    item: dark gray, white bold text, not editable) fills with that colour;
    a plain read-only field keeps the theme's (#27). */
@@ -4554,6 +4648,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkThemeDomain];
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];
+  [self checkInlineMenuRow];
   [self checkSizedButtons];
   [self checkFixedButtons];
   [self checkSteppers];

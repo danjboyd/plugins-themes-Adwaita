@@ -29,6 +29,7 @@
    it answers NULL and the override has nothing to fall back on. This looks the
    method up for `baseClass`, the class the override was installed on, instead. */
 IMP GnomeThemeOriginalMethod(SEL selector, id receiver, Class baseClass);
+IMP GnomeThemeOriginalMethodOfClass(SEL selector, Class cls);
 void GnomeThemeForgetOriginalMethods(void);
 
 /* Centred and right-aligned text as the running libs-gui numbers them.
