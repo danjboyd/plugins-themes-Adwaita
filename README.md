@@ -67,7 +67,8 @@ Examples/ThemeDemo/      GNUstep-side demo app
 Reference/AdwaitaDemo/   GTK4/libadwaita comparison harness
 Reference/HeaderBar/     libadwaita header bar measurements and renders
 Tests/Scripts/           Capture and local verification helpers
-Docs/                    Public design notes and roadmap
+Docs/                    Public design notes and roadmap; releasing in Docs/RELEASING.md
+Tools/                   Release helpers
 ```
 
 ## Requirements
