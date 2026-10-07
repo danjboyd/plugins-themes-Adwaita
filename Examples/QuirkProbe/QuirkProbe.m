@@ -4751,6 +4751,67 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
 /* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
    the knob at the end, a neutral track when off with the knob at the start
    (plugins-themes-Adwaita#35). */
+/* The slider's knob as libadwaita's: 20px with its outline and shadow,
+   and lighter than the trough in any palette (the dark palette's knob
+   was the window's colour and vanished; plugins-themes-Adwaita#56). */
+- (void) checkSliderKnob
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 80) title: @"Probe Slider"];
+  NSSlider *slider = AUTORELEASE ([[NSSlider alloc] initWithFrame: NSMakeRect (20, 20, 200, 30)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect knob;
+  NSUInteger centre[3], trough[3], background[3], pixel[3];
+  NSInteger x, y, top = -1, bottom = -1, backgroundSum, frameHeight;
+  NSString *detail;
+
+  [slider setMinValue: 0.0];
+  [slider setMaxValue: 100.0];
+  [slider setDoubleValue: 30.0];
+  [[window contentView] addSubview: slider];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+  frameHeight = (NSInteger)NSHeight ([frameView bounds]);
+  knob = [slider convertRect: [[slider cell] knobRectFlipped: [slider isFlipped]] toView: nil];
+  x = (NSInteger)floor (NSMidX (knob));
+  y = frameHeight - (NSInteger)floor (NSMidY (knob)) - 1;
+  QuirkProbePixelAt (rep, x, y, centre);
+  /* The trough to the right of the knob: the slider is at 30%. */
+  QuirkProbePixelAt (rep, x + 60, y, trough);
+  QuirkProbePixelAt (rep, x, y - 20, background);
+  backgroundSum = (NSInteger)(background[0] + background[1] + background[2]);
+  for (y = frameHeight - (NSInteger)floor (NSMidY (knob)) - 16; y <= frameHeight - (NSInteger)floor (NSMidY (knob)) + 16; y++)
+    {
+      QuirkProbePixelAt (rep, x, y, pixel);
+      if (labs ((NSInteger)(pixel[0] + pixel[1] + pixel[2]) - backgroundSum) > 12)
+        {
+          if (top < 0)
+            {
+              top = y;
+            }
+          bottom = y;
+        }
+    }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"knob %ldpx high with its outline and shadow, centre %lu/%lu/%lu, trough %lu/%lu/%lu, window %lu/%lu/%lu",
+    (long)(top >= 0 ? bottom - top + 1 : 0),
+    (unsigned long)centre[0], (unsigned long)centre[1], (unsigned long)centre[2],
+    (unsigned long)trough[0], (unsigned long)trough[1], (unsigned long)trough[2],
+    (unsigned long)background[0], (unsigned long)background[1], (unsigned long)background[2]];
+  if (top >= 0 && bottom - top + 1 >= 20 && bottom - top + 1 <= 24
+      && centre[0] + centre[1] + centre[2] >= trough[0] + trough[1] + trough[2] + 60)
+    {
+      [self pass: @"slider-knob" detail: detail];
+    }
+  else
+    {
+      [self fail: @"slider-knob" detail: detail];
+    }
+}
+
 - (void) checkSwitch
 {
   Class switchClass = NSClassFromString (@"NSSwitch");
@@ -5060,6 +5121,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkSliderKnob];
       [self finish];
       return;
     }
@@ -5114,6 +5176,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkSliderKnob];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

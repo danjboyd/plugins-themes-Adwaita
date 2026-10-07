@@ -2227,14 +2227,18 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   NSSliderCell *sliderCell = (NSSliderCell *)cell;
   BOOL horizontal = (rect.size.width >= rect.size.height);
-  CGFloat thickness = 6.0;
+  /* libadwaita's trough: 4px, the text colour at 15% over the window
+     background (#dddddd light, #434346 dark) (#56). */
+  CGFloat thickness = 4.0;
   CGFloat margin = 11.0;
   CGFloat fraction = 0.0;
   NSRect trackRect = rect;
   NSRect fillRect = NSZeroRect;
-  NSColor *trackFill = GnomeThemeBlend ([NSColor controlColor],
-                                        [NSColor controlBackgroundColor],
-                                        0.3);
+  NSColor *trackFill = GnomeThemeBlend (GnomeThemeColor (self, @"windowBackgroundColor",
+                                                         [NSColor windowBackgroundColor]),
+                                        GnomeThemeColor (self, @"controlTextColor",
+                                                         [NSColor controlTextColor]),
+                                        0.15);
   NSColor *accentFill = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
 
   if ([sliderCell maxValue] > [sliderCell minValue])
@@ -2293,6 +2297,11 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
+/* libadwaita's slider knob: 20px, light in both styles (sliderKnobColor),
+   with a faint outline and a soft shadow below it (measured from
+   libadwaita 1.7: about 10% black round the edge, 20% just under it,
+   fading over 3px). A knob in textBackgroundColor vanished on the dark
+   palette's trough (#56). */
 - (void) drawKnobInCell: (NSCell *)cell
 {
   NSSliderCell *sliderCell = (NSSliderCell *)cell;
@@ -2300,18 +2309,17 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSRect knobRect = [sliderCell knobRectFlipped: [controlView isFlipped]];
   BOOL enabled = [cell isEnabled];
   BOOL focused = GnomeThemeViewShowsFocusRing (controlView) && enabled;
-  NSColor *fillColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                         @"textBackgroundColor",
-                                                         [NSColor textBackgroundColor]),
-                                        [NSColor controlBackgroundColor],
-                                        0.1);
-  NSColor *strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                           @"controlShadowColor",
-                                                           [NSColor controlShadowColor]),
-                                          fillColor,
-                                          0.24);
-  CGFloat knobSize = 16.0;
+  /* Not a system colour: the palette's own key (-colorNamed:state: reads
+     GSTheme's extra colours, not the palette). */
+  NSColor *fillColor = [[self colors] colorWithKey: @"sliderKnobColor"];
+  NSColor *black = [NSColor blackColor];
+  CGFloat knobSize = 20.0;
+  CGFloat down = [controlView isFlipped] ? 1.0 : -1.0;
 
+  if (fillColor == nil)
+    {
+      fillColor = [NSColor whiteColor];
+    }
   knobRect = GnomeThemeCenteredRect (knobRect, knobSize, knobSize);
   if (controlView != nil)
     {
@@ -2320,24 +2328,30 @@ GnomeThemeDrawTabLabel(NSString *label,
 
   if (enabled == NO)
     {
-      fillColor = GnomeThemeBlend (fillColor, [NSColor controlBackgroundColor], 0.35);
-      strokeColor = GnomeThemeBlend (strokeColor, [NSColor controlBackgroundColor], 0.35);
+      fillColor = GnomeThemeBlend (fillColor,
+                                   GnomeThemeColor (self, @"windowBackgroundColor",
+                                                    [NSColor windowBackgroundColor]),
+                                   0.5);
     }
+
+  /* The shadow below the knob: two wider, fainter discs. */
+  [[black colorWithAlphaComponent: 0.06] set];
+  [[NSBezierPath bezierPathWithOvalInRect:
+     NSOffsetRect (NSInsetRect (knobRect, -1.5, -1.5), 0.0, 1.5 * down)] fill];
+  [[black colorWithAlphaComponent: 0.1] set];
+  [[NSBezierPath bezierPathWithOvalInRect:
+     NSOffsetRect (NSInsetRect (knobRect, -0.5, -0.5), 0.0, 1.0 * down)] fill];
 
   if (focused)
     {
-      strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                      @"selectedControlColor",
-                                                      [NSColor selectedControlColor]),
-                                     strokeColor,
-                                     0.35);
+      GnomeThemeDrawFocusRing (self, NSInsetRect (knobRect, -2.0, -2.0), knobSize / 2.0 + 2.0);
     }
 
   GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (knobRect, 0.5, 0.5),
                                       knobSize / 2.0,
                                       fillColor,
-                                      strokeColor,
-                                      focused ? 1.4 : 1.0);
+                                      [black colorWithAlphaComponent: 0.1],
+                                      1.0);
 }
 
 /* Scroll views holding a table or outline view get no bezel and no line
