@@ -25,7 +25,9 @@
 
 int main(int argc, const char *argv[])
 {
-  @autoreleasepool {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  {
     NSActionCell *base;
     MyCell *sub;
 
@@ -40,5 +42,6 @@ int main(int argc, const char *argv[])
     NSLog(@"NSActionCell tag = %ld", (long)[base tag]);
     NSLog(@"MyCell tag       = %ld  (%@)", (long)[sub tag], [sub tag] == 7 ? @"PASS" : @"FAIL");
   }
+  [pool release];
   return 0;
 }

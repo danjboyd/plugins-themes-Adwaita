@@ -13,7 +13,8 @@ bar unless the app calls `[window setMenu: [NSApp mainMenu]]` itself.
 ### Steps to reproduce
 
 Excerpt below; the complete program is `win95_late_window_menu.m`, to paste in or attach. Run it with
-`-NSMenuInterfaceStyle NSWindows95InterfaceStyle`. It sets the main menu,
+`-GSTheme GNUstep -NSMenuInterfaceStyle NSWindows95InterfaceStyle` (a theme
+that attaches menus itself hides the bug). It sets the main menu,
 opens one window in `applicationDidFinishLaunching:` and a second window one
 second later, then checks both.
 
@@ -37,9 +38,8 @@ window created at launch: menu attached
 window created later:     menu none
 ```
 
-On screen, the second window has no menu bar, even when it is the key and
-main window. Same result under GNOME/Mutter and under Xvfb with no window
-manager, and with the default theme.
+On screen (Xvfb, no window manager, GNUstep's default theme), the second
+window has no menu bar, though it is the key window; the first has one.
 
 ### Expected
 
@@ -83,6 +83,13 @@ launch.
 
 ### Environment
 
-- libs-gui master ff49ac8 (2026-09-22), libs-base master a8dd1b8. Also seen
-  with the released gui 0.32.0 and base 1.31.1.
-- Debian 13, clang 19, libobjc2 (gnustep-2.2 runtime), cairo/xlib backend.
+- Reproduced 2026-10-07 with libs-gui master 549f639 (2026-10-02, unpatched,
+  run uninstalled through `LD_LIBRARY_PATH`) and with the installed gui
+  0.32.0 (a Debian build carrying unrelated window-decoration patches);
+  libs-base 1.31.1 in both runs.
+- Debian 13, clang 19, libobjc2 2.3 (gnustep-2.2 runtime), cairo/xlib
+  backend, under Xvfb with no window manager.
+
+---
+
+Investigated, reproduced and written up with AI assistance (Claude).

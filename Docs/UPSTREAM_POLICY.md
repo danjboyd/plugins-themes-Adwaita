@@ -209,8 +209,9 @@ Tests/Scripts/gcc-syntax-check.sh --files Docs/upstream-issues/override_subclass
 - **Copyright assignment:** decided 2026-10-06 to send without it, as
   GNUstep has already accepted Dan's code; deal with it if a maintainer
   raises it.
-- **Issue drafts 2 and 4** (the next to file, #29): their reproducers fail
-  the GCC check, only for `@autoreleasepool`. Fix before review.
+- **Issue drafts 2, 4 and 11** (the next to file, #29): reproducers pass
+  the GCC check and were re-run on master 549f639 on 2026-10-07; ready for
+  review, not reviewed.
 - **Filed before this policy:** libs-base#806, libs-gui#964, #965 and #972.
   Their reproducers aren't re-checked retroactively; if a maintainer asks
   for a GCC-buildable one, `main_queue_modes.m` (#806) is the one that

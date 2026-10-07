@@ -1,4 +1,4 @@
-/* Run with: ./win95_late_window_menu -NSMenuInterfaceStyle NSWindows95InterfaceStyle */
+/* Run with: ./win95_late_window_menu -GSTheme GNUstep -NSMenuInterfaceStyle NSWindows95InterfaceStyle */
 #import <AppKit/AppKit.h>
 
 @interface Delegate : NSObject
@@ -41,7 +41,9 @@
 
 int main(int argc, const char *argv[])
 {
-  @autoreleasepool {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+
+  {
     NSMenu *menu;
     NSMenu *fileMenu;
     NSMenuItem *fileItem;
@@ -56,5 +58,6 @@ int main(int argc, const char *argv[])
     [NSApp setDelegate: [Delegate new]];
     [NSApp run];
   }
+  [pool release];
   return 0;
 }

@@ -88,6 +88,12 @@ overridden class, for example an instance created with
 
 ### Environment
 
-- libs-gui master ff49ac8 (2026-09-22), libs-base master a8dd1b8. Also seen
-  with the released gui 0.32.0.
-- Debian 13, clang 19, libobjc2 (gnustep-2.2 runtime).
+- Reproduced 2026-10-07 with libs-gui master 549f639 (2026-10-02, unpatched,
+  run uninstalled through `LD_LIBRARY_PATH`) and with the installed gui
+  0.32.0 (a Debian build carrying unrelated window-decoration patches);
+  libs-base 1.31.1 in both runs.
+- Debian 13, clang 19, libobjc2 2.3 (gnustep-2.2 runtime).
+
+---
+
+Investigated, reproduced and written up with AI assistance (Claude).
