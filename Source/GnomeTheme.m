@@ -811,6 +811,25 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
     }
 }
 
+/* With GNOME's metrics, text is laid out and drawn at the font's own size,
+   as GTK draws it. libs-back makes a screen font one whole pixel size up
+   (GNOME's 11pt, 14.67px, became 15px), so text set in it ran 2-3% wider
+   than GTK's at the same font and wrapped earlier. With compact metrics
+   (whole sizes, nib layouts) GNUstep's screen fonts stay. */
+- (NSFont *) _overrideNSFontMethod_screenFont
+{
+  typedef NSFont *(*ScreenFontIMP)(id, SEL);
+  GnomeTheme *theme = (GnomeTheme *)[GSTheme theme];
+  ScreenFontIMP originalIMP;
+
+  if ([theme isKindOfClass: [GnomeTheme class]] && [[theme metrics] compact] == NO)
+    {
+      return (NSFont *)self;
+    }
+  originalIMP = (ScreenFontIMP)GnomeThemeOriginalMethod (_cmd, self, [NSFont class]);
+  return originalIMP != NULL ? originalIMP (self, _cmd) : (NSFont *)self;
+}
+
 - (void) addFont: (NSFont *)font
           forKey: (NSString *)key
      toDictionary: (NSMutableDictionary *)dictionary
@@ -862,6 +881,14 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
                  forKey: @"GSScrollerDefaultWidth"];
   if ([_metrics compact] == NO)
     {
+      /* GNOME's hint style for the outlines (font-hinting), with hinted
+         metrics as libs-back's default has them (GSFontHinting's high
+         nibble 2): whole-pixel advances and line heights. GTK 4 doesn't
+         hint the metrics, but libs-gui sizes tool tips, menus and cells
+         from text without rounding, so fractional metrics give windows
+         fractional frames. A user's own GSFontHinting still wins. */
+      [dictionary setObject: [NSNumber numberWithInteger: 32 + [_settings fontHintStyle]]
+                     forKey: @"GSFontHinting"];
       [dictionary setObject: [NSNumber numberWithFloat: [_metrics minimumTabHeight]]
                      forKey: @"GSMinimumTabHeight"];
       [dictionary setObject: [NSNumber numberWithFloat: [_metrics maximumTabHeight]]

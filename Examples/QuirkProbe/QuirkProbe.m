@@ -1165,6 +1165,66 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* Text about as wide as GTK 4's at GNOME's font (#23): the widths GTK 4.18
+   gives these strings at Cantarell 11 with GNOME's settings (unhinted
+   metrics), measured on 2026-10-07 with a GtkLabel's Pango layout. GNUstep
+   measures them with -sizeWithAttributes: and an NSLayoutManager, both of
+   which use screen fonts. Before #23 a screen font was a whole pixel size
+   up (15 for 14.67) and the strings came out 3.1% and 2.7% wider (296 and
+   423). The theme keeps libs-back's hinted metrics, whole-pixel advances,
+   which come to 283 and 407: 1.4% and 1.1% narrower than GTK's. */
+- (void) checkTextWidth
+{
+  NSFont *font = [NSFont systemFontOfSize: 0];
+  NSString *strings[2] = {
+    @"The quick brown fox jumps over the lazy dog",
+    @"Are you sure you want to discard the changes to this document?" };
+  CGFloat gtk[2] = { 287.094, 411.679 };
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok = YES;
+  int i;
+
+  if (font == nil || [[font familyName] isEqualToString: @"Cantarell"] == NO
+    || fabs ([font pointSize] - 11.0 * 96.0 / 72.0) > 0.01)
+    {
+      [self skip: @"text-width" detail: [NSString stringWithFormat:
+        @"needs Cantarell at 14.667 (have %@ %.3f)", [font fontName], [font pointSize]]];
+      return;
+    }
+  for (i = 0; i < 2; i++)
+    {
+      NSDictionary *attrs = [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName];
+      NSTextStorage *storage = [[NSTextStorage alloc] initWithString: strings[i] attributes: attrs];
+      NSLayoutManager *layout = [NSLayoutManager new];
+      NSTextContainer *container = [[NSTextContainer alloc] initWithContainerSize: NSMakeSize (10000, 1000)];
+      CGFloat drawn = [strings[i] sizeWithAttributes: attrs].width;
+      CGFloat laidOut;
+
+      [container setLineFragmentPadding: 0];
+      [layout addTextContainer: container];
+      [storage addLayoutManager: layout];
+      [layout glyphRangeForTextContainer: container];
+      laidOut = NSWidth ([layout usedRectForTextContainer: container]);
+      /* Within 2%: hinted advances, but not the screen font's larger size. */
+      if (fabs (drawn / gtk[i] - 1.0) > 0.02 || fabs (laidOut / gtk[i] - 1.0) > 0.02)
+        {
+          ok = NO;
+        }
+      [detail appendFormat: @"%s%.3f and %.3f for GTK's %.3f", i ? "; " : "", drawn, laidOut, gtk[i]];
+      [container release];
+      [layout release];
+      [storage release];
+    }
+  if (ok)
+    {
+      [self pass: @"text-width" detail: detail];
+    }
+  else
+    {
+      [self fail: @"text-width" detail: detail];
+    }
+}
+
 - (void) checkSizedButtons
 {
   NSEnumerator *enumerator = [_sizedButtons objectEnumerator];
@@ -4656,6 +4716,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _toolbarWindow named: @"toolbar"];
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkThemeDomain];
+  [self checkTextWidth];
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];
   [self checkInlineMenuRow];

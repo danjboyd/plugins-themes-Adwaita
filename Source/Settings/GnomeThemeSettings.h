@@ -37,6 +37,7 @@ typedef enum
   GnomeThemeColorScheme _colorScheme;
   BOOL _highContrast;
   BOOL _overlayScrolling;
+  NSInteger _fontHintStyle;
   BOOL _compactMetrics;
   NSString *_buttonLayout;
   NSString *_titlebarDoubleClickAction;
@@ -56,6 +57,9 @@ typedef enum
 /* GNOME's overlay-scrolling (on unless turned off): scrollbars that hide
    until needed, over the content. */
 - (BOOL) overlayScrollingEnabled;
+/* GNOME's font-hinting (none, slight, medium or full; slight when unset)
+   as libs-back's hint style: 1 none, 2 slight, 3 medium, 4 full. */
+- (NSInteger) fontHintStyle;
 /* GNUstep's metrics (12pt text, GNUstep's button margins and tab height)
    instead of GNOME's, for apps whose windows come from Gorm or nib files and
    were laid out at those metrics. The GnomeThemeMetrics default chooses
