@@ -539,6 +539,15 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   if (state->originKnown && NSEqualPoints (origin, state->origin) == NO)
     {
       [state reveal];
+      /* The clip view redraws what it shows (it doesn't copy on scroll),
+         and an opaque document view keeps that as its own invalid rect.
+         Where the scrollers' redraws don't cover all of it (the vertical
+         scroller stops at the horizontal one's strip, even while that is
+         hidden), libs-gui draws the document again after the scrollers,
+         over them: the scroller vanishes while its knob is dragged. Redraw
+         the clip view's area from the scroll view, so the document is drawn
+         first and the scrollers on top. */
+      [(NSScrollView *)self setNeedsDisplayInRect: [[(NSScrollView *)self contentView] frame]];
     }
   state->origin = origin;
   state->originKnown = YES;
