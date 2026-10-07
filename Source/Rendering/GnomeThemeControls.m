@@ -632,16 +632,28 @@ GnomeThemeDrawEntryChrome(GnomeTheme *theme,
     }
 }
 
+/* Whether image is the system image of that name. The name is looked up
+   only for an image there is: +imageNamed: loads it, and classifying every
+   button on its first draw loaded eight images (about 120ms at launch),
+   for buttons that mostly have none (#50). The comparison is by identity,
+   not -name: GNUstep maps names such as NSSwitch to its own image files,
+   whose names differ. */
+static BOOL
+GnomeThemeImageHasName(NSImage *image, NSString *name)
+{
+  return image != nil && image == [NSImage imageNamed: name];
+}
+
 static BOOL
 GnomeThemeButtonCellUsesSearchImage(NSButtonCell *cell)
 {
-  return ([cell image] == [NSImage imageNamed: @"GSSearch"]);
+  return GnomeThemeImageHasName ([cell image], @"GSSearch");
 }
 
 static BOOL
 GnomeThemeButtonCellUsesCancelImage(NSButtonCell *cell)
 {
-  return ([cell image] == [NSImage imageNamed: @"GSStop"]);
+  return GnomeThemeImageHasName ([cell image], @"GSStop");
 }
 
 static void
@@ -1093,22 +1105,22 @@ GnomeThemeDrawModernScroller(GnomeTheme *theme,
 static BOOL
 GnomeThemeButtonCellIsCheckbox(NSButtonCell *cell)
 {
-  return ([cell image] == [NSImage imageNamed: @"NSSwitch"]
-    || [cell alternateImage] == [NSImage imageNamed: @"NSHighlightedSwitch"]);
+  return (GnomeThemeImageHasName ([cell image], @"NSSwitch")
+    || GnomeThemeImageHasName ([cell alternateImage], @"NSHighlightedSwitch"));
 }
 
 static BOOL
 GnomeThemeButtonCellIsRadio(NSButtonCell *cell)
 {
-  return ([cell image] == [NSImage imageNamed: @"NSRadioButton"]
-    || [cell alternateImage] == [NSImage imageNamed: @"NSHighlightedRadioButton"]);
+  return (GnomeThemeImageHasName ([cell image], @"NSRadioButton")
+    || GnomeThemeImageHasName ([cell alternateImage], @"NSHighlightedRadioButton"));
 }
 
 static BOOL
 GnomeThemeButtonCellUsesLegacyReturnImage(NSButtonCell *cell)
 {
-  return ([cell image] == [NSImage imageNamed: @"common_ret"]
-    || [cell alternateImage] == [NSImage imageNamed: @"common_retH"]);
+  return (GnomeThemeImageHasName ([cell image], @"common_ret")
+    || GnomeThemeImageHasName ([cell alternateImage], @"common_retH"));
 }
 
 static BOOL
@@ -1811,13 +1823,11 @@ GnomeThemeDrawTabLabel(NSString *label,
 - (void) setKeyEquivalent: (NSString *)key
              forButtonCell: (NSButtonCell *)cell
 {
-  NSImage *returnImage = [NSImage imageNamed: @"common_ret"];
-  NSImage *returnAlternateImage = [NSImage imageNamed: @"common_retH"];
   BOOL isReturnKey = [key isEqualToString: @"\r"] || [key isEqualToString: @"\n"];
 
   if (isReturnKey)
     {
-      if ([cell image] == returnImage)
+      if (GnomeThemeImageHasName ([cell image], @"common_ret"))
         {
           [cell setImage: nil];
           if ([cell imagePosition] == NSImageRight)
@@ -1826,7 +1836,7 @@ GnomeThemeDrawTabLabel(NSString *label,
             }
         }
 
-      if ([cell alternateImage] == returnAlternateImage)
+      if (GnomeThemeImageHasName ([cell alternateImage], @"common_retH"))
         {
           [cell setAlternateImage: nil];
         }
@@ -4280,7 +4290,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       BOOL cancelButton = GnomeThemeButtonCellUsesCancelImage (cell);
       BOOL hasCustomImage = ([cell image] != nil && hasLegacyReturnImage == NO);
       BOOL hasCustomAlternateImage = ([cell alternateImage] != nil
-        && [cell alternateImage] != [NSImage imageNamed: @"common_retH"]);
+        && GnomeThemeImageHasName ([cell alternateImage], @"common_retH") == NO);
       BOOL enabled = [cell isEnabled];
       NSColor *textColor = enabled
         ? [NSColor controlTextColor]

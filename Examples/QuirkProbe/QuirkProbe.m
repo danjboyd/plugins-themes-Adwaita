@@ -1232,6 +1232,63 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* +imageNamed: calls for the images the theme classifies buttons by,
+   counted while -checkImageFreeButton runs (#50). */
+static IMP QuirkProbeImageNamedIMP = NULL;
+static NSUInteger QuirkProbeClassifyLookups = 0;
+
+static id
+QuirkProbeCountingImageNamed (id receiver, SEL selector, NSString *name)
+{
+  static NSSet *names = nil;
+
+  if (names == nil)
+    {
+      names = [[NSSet alloc] initWithObjects: @"NSSwitch", @"NSHighlightedSwitch",
+        @"NSRadioButton", @"NSHighlightedRadioButton", @"common_ret",
+        @"common_retH", @"GSSearch", @"GSStop", nil];
+    }
+  if ([names containsObject: name])
+    {
+      QuirkProbeClassifyLookups++;
+    }
+  return ((id (*)(id, SEL, NSString *))QuirkProbeImageNamedIMP) (receiver, selector, name);
+}
+
+/* A button with a title and no image is sized and drawn without the theme
+   looking up the checkbox, radio, return-key, search or stop images: the
+   first lookup of each loads it, and they cost about 120ms on the first
+   button an app drew (#50). */
+- (void) checkImageFreeButton
+{
+  Method method = class_getClassMethod ([NSImage class], @selector(imageNamed:));
+  NSWindow *window = [self windowWithFrame: NSMakeRect (0, 0, 200, 60) title: @"Image-free button"];
+  NSButton *button;
+  NSUInteger lookups;
+
+  QuirkProbeClassifyLookups = 0;
+  QuirkProbeImageNamedIMP = method_setImplementation (method, (IMP)QuirkProbeCountingImageNamed);
+  button = [[NSButton alloc] initWithFrame: NSMakeRect (20, 13, 120, 34)];
+  [button setTitle: @"Plain"];
+  [[window contentView] addSubview: button];
+  [[button cell] cellSize];
+  QuirkProbeRender (button);
+  method_setImplementation (method, QuirkProbeImageNamedIMP);
+  lookups = QuirkProbeClassifyLookups;
+  [button release];
+  [window orderOut: nil];
+
+  if (lookups == 0)
+    {
+      [self pass: @"image-free-button" detail: @"sized and drawn with no classification image looked up"];
+    }
+  else
+    {
+      [self fail: @"image-free-button" detail: [NSString stringWithFormat:
+        @"%lu lookups of classification images", (unsigned long)lookups]];
+    }
+}
+
 - (void) checkSizedButtons
 {
   NSEnumerator *enumerator = [_sizedButtons objectEnumerator];
@@ -5011,6 +5068,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkThemeDomain];
   [self checkTextWidth];
+  [self checkImageFreeButton];
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];
   [self checkInlineMenuRow];
