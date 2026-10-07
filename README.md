@@ -110,7 +110,7 @@ windows, menus and tool tips have square corners and no shadow.
 
 ## Known issues
 
-This is an alpha (`0.1.0-alpha5`). What is open, with an issue for each in
+This is an alpha (`0.1.0-alpha6`). What is open, with an issue for each in
 [the tracker](https://github.com/danjboyd/plugins-themes-Adwaita/issues):
 
 - Text is about 1.4% narrower than GTK's at the same font (#23): libs-back
