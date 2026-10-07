@@ -96,6 +96,12 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#99c1f1") forKey: @"selectedTextBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"selectedTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"labelColor"];
+  /* libadwaita's dimmed labels: the text colour at 55% over the window
+     background; the next steps down at 40% and 25%. Unset, libs-gui gives
+     them black (#51). */
+  [colors setColor: GnomeThemeColorFromHex (@"#828282") forKey: @"secondaryLabelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#a2a2a2") forKey: @"tertiaryLabelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#c3c3c3") forKey: @"quaternaryLabelColor"];
   /* libadwaita's tool tips are 80% black over whatever is behind them; our
      tool tip windows are opaque, so this is that over the window
      background. */
@@ -149,14 +155,18 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"selectedTextBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#0f1720") forKey: @"selectedTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"labelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#979797") forKey: @"secondaryLabelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#787878") forKey: @"tertiaryLabelColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#585858") forKey: @"quaternaryLabelColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#070707") forKey: @"toolTipColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
 }
 
 /* libadwaita's high contrast keeps the light or dark palette and makes
    its lines stronger (its base-hc.css): borders and separators are the
-   text colour at 50% instead of 15%, and disabled controls fade to 40%
-   instead of 50%, so they stand apart from enabled ones. */
+   text colour at 50% instead of 15%, disabled controls fade to 40%
+   instead of 50%, so they stand apart from enabled ones, and dimmed
+   labels are stronger. */
 static void
 GnomeThemeApplyHighContrast(NSColorList *colors)
 {
@@ -180,6 +190,11 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
     }
   [colors setColor: strongBorder forKey: @"controlDarkShadowColor"];
   [colors setColor: disabled forKey: @"disabledControlTextColor"];
+  /* Dimmed labels stay readable: 80%, 65% and 50% instead of 55%, 40%
+     and 25%. */
+  [colors setColor: [background blendedColorWithFraction: 0.8 ofColor: text] forKey: @"secondaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.65 ofColor: text] forKey: @"tertiaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.5 ofColor: text] forKey: @"quaternaryLabelColor"];
 }
 
 @implementation GnomeThemePalette
