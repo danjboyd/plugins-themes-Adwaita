@@ -8,6 +8,8 @@ W=$1; export DISPLAY=":$(cat "$W/display")"
 TITLE=$2 THEME=$3 WIDTH_WANTED=$4 HEIGHT_WANTED=$5
 best=""; area=0
 for w in $(xdotool search --onlyvisible --name "$TITLE" 2>/dev/null); do
+  # Mutter's frame for the window has its title too, but can't be sized.
+  xprop -id "$w" WM_CLASS 2>/dev/null | grep -q mutter-x11-frames && continue
   eval "$(xdotool getwindowgeometry --shell "$w")"
   [ $((WIDTH*HEIGHT)) -gt $area ] && { area=$((WIDTH*HEIGHT)); best=$w; }
 done

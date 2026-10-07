@@ -2,7 +2,8 @@
 
 ## `compare/`: GNUstep's theme and Adwaita
 
-The README's side-by-side shots. Taken 2026-10-07 on a private Xvfb with
+The README's side-by-side shots. Taken 2026-10-07 (MarkdownViewer and
+ScreenshotTool retaken the same day with the primary menu) on a private Xvfb with
 GNOME Shell 48.7 (X11) as the window manager, never on a real desktop, with
 the installed `+csd` libraries (gui 0.32.0-5+csd2, back 0.32.0-6+csd3), the
 theme built from this repository (0.1.0-alpha5 plus `main`), light style,
@@ -31,7 +32,9 @@ display.
 `danjboyd/ObjcMarkdown` built in `~/git/ObjcMarkdown`, with its libraries on
 `LD_LIBRARY_PATH` (`ObjcMarkdown/obj` and the three `third_party/*/obj`
 directories), opening that repository's `README.md` in Read mode. Placed at
-1036x740 visible (its minimum width) with `place.sh "^README.md"`.
+1036x740 visible (its minimum width) with `place.sh "^README.md"`. The
+Adwaita side runs with `-GnomeThemeMenuStyle primary`: the menus are in the
+header bar's ☰ and there is no menu bar row.
 
 ### ScreenshotTool
 
@@ -39,8 +42,11 @@ directories), opening that repository's `README.md` in Read mode. Placed at
 `weekly-report.png` (in `Tests/Scripts/readme-shots/`, drawn for these shots)
 copied to `/tmp/Pictures`, so the GNUstep title bar shows a short path. The
 GNUstep side keeps the image's full size (1200 wide; the app won't shrink
-it), and the Adwaita side is placed at the same visible size with
-`place.sh "weekly-report" Adwaita 1200 865`. Then, with `drag.sh`:
+it). The Adwaita side runs with `-GnomeThemeMenuStyle primary`, as
+MarkdownViewer's, and is placed with `place.sh "weekly-report" Adwaita
+1200 808`, the image's height plus the header bar (taller, and the app
+centres the image with empty bands above and below). Then, with
+`drag.sh`:
 
 - the highlighter (the default tool), three passes over "Linux up 18%";
 - the arrow tool, from the right of the chart's title to the Linux bar.
@@ -72,5 +78,10 @@ cramped at GNOME's fonts (#26): the shots show both as they are.
 
 ## `theme-*.png`
 
-ThemeDemo's pages, from `Tests/Scripts/capture-theme-demo.sh` (see the
-README's Development Notes).
+ThemeDemo's controls, text and data pages under Adwaita, taken 2026-10-07 in
+the same session as `compare/`:
+
+```sh
+$H/app.sh "$W" Adwaita Examples/ThemeDemo/ThemeDemo.app/ThemeDemo --page controls &
+$H/shot.sh "$W" theme-controls.png      # likewise --page text and --page data
+```

@@ -24,14 +24,14 @@ with this one:
   </tr>
   <tr>
     <td><img src="Docs/Screenshots/compare/markdownviewer-gnustep.png" alt="MarkdownViewer with GNUstep's theme: the window manager's title bar, a grey in-window menu bar and toolbar, and arrow scrollers"></td>
-    <td><img src="Docs/Screenshots/compare/markdownviewer-adwaita.png" alt="MarkdownViewer with Adwaita: a header bar holding the toolbar and the Read, Edit and Split switcher, a flat menu bar with the primary menu, rounded corners and a window shadow"></td>
+    <td><img src="Docs/Screenshots/compare/markdownviewer-adwaita.png" alt="MarkdownViewer with Adwaita: a header bar holding the toolbar, the Read, Edit and Split switcher and the primary menu, rounded corners and a window shadow"></td>
   </tr>
   <tr>
     <td colspan="2" align="center"><a href="https://github.com/danjboyd/ObjcMarkdown">MarkdownViewer</a></td>
   </tr>
   <tr>
     <td><img src="Docs/Screenshots/compare/screenshottool-gnustep.png" alt="ScreenshotTool with GNUstep's theme, annotating a chart: bevelled toolbar buttons and a grey toolbar under the window manager's title bar"></td>
-    <td><img src="Docs/Screenshots/compare/screenshottool-adwaita.png" alt="ScreenshotTool with Adwaita, annotating the same chart: its tools as a linked button group in the header bar, symbolic icons and round window buttons"></td>
+    <td><img src="Docs/Screenshots/compare/screenshottool-adwaita.png" alt="ScreenshotTool with Adwaita, annotating the same chart: its tools as a linked button group in the header bar with the primary menu, symbolic icons and round window buttons"></td>
   </tr>
   <tr>
     <td colspan="2" align="center"><a href="https://github.com/danjboyd/ScreenshotTool">ScreenshotTool</a></td>
