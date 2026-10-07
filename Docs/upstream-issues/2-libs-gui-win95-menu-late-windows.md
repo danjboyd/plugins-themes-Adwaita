@@ -85,8 +85,8 @@ launch.
 
 - Reproduced 2026-10-07 with libs-gui master 549f639 (2026-10-02, unpatched,
   run uninstalled through `LD_LIBRARY_PATH`) and with the installed gui
-  0.32.0 (a Debian build carrying unrelated window-decoration patches);
-  libs-base 1.31.1 in both runs.
+  (a Debian build of the master snapshot 7892137bd, 2026-03-31, with two
+  unrelated patches); libs-base 1.31.1 in both runs.
 - Debian 13, clang 19, libobjc2 2.3 (gnustep-2.2 runtime), cairo/xlib
   backend, under Xvfb with no window manager.
 
