@@ -2830,7 +2830,9 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   width = [rep pixelsWide];
   QuirkProbePixelAt (rep, width - 6, [rep pixelsHigh] / 2, fill);
   QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
-  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (width - 40, 0, 36, [rep pixelsHigh]));
+  /* Inside the bezel: in high contrast its 1px outline (#61) runs along the
+     top, bottom and right edges and isn't the chevron. */
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (width - 40, 4, 32, [rep pixelsHigh] - 8));
   QuirkProbeInkBackground = 750;
   [window orderOut: nil];
 
