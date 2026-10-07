@@ -674,6 +674,194 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
+/* A menu bar too narrow for its titles (#25): the titles that don't fit
+   fold into an overflow button at the bar's end (GNOME's view-more icon),
+   whose menu holds them. ☰ stays first. Every window's bar shows the same
+   main menu, so the menu itself is left as it is (key equivalents,
+   validation and Services keep working): a folded item gets an empty rect,
+   which nothing draws or hits, and the overflow menu is a copy made each
+   time it opens. */
+typedef struct
+{
+  NSInteger folded;   /* The first folded item, or NSNotFound. */
+  NSRect overflow;    /* The overflow button; empty when nothing folds. */
+} GnomeThemeMenuBarFold;
+
+/* The bar whose overflow button is pressed or whose menu is open. */
+static NSMenuView *GnomeThemeOverflowActiveView = nil;
+
+static GnomeThemeMenuBarFold
+GnomeThemeMenuBarFolding(NSMenuView *menuView)
+{
+  typedef NSRect (*RectIMP)(id, SEL, NSInteger);
+  SEL selector = @selector(rectOfItemAtIndex:);
+  RectIMP originalIMP = (RectIMP)GnomeThemeOriginalMethod (selector, menuView, [NSMenuView class]);
+  GnomeThemeMenuBarFold fold = { NSNotFound, NSZeroRect };
+  NSMenu *menu = [menuView menu];
+  NSInteger count = [menu numberOfItems];
+  NSRect bounds = [menuView bounds];
+  NSRect first;
+  NSInteger index;
+  CGFloat width;
+
+  if (originalIMP == NULL || count == 0 || [menuView isHorizontal] == NO
+    || [menu _ownedByPopUp] || GnomeThemeUsesPrimaryMenu ()
+    || NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", menuView) != NSWindows95InterfaceStyle)
+    {
+      return fold;
+    }
+  first = originalIMP (menuView, selector, 0);
+  /* Everything fits with the bar's left padding mirrored at its end. */
+  if (NSMaxX (originalIMP (menuView, selector, count - 1)) + NSMinX (first) <= NSMaxX (bounds))
+    {
+      return fold;
+    }
+  /* As wide as ☰, at the end of the bar where ☰ goes when all fits. */
+  width = GnomeThemeApplicationMenuIconWidth + 2.0 * [menuView horizontalEdgePadding];
+  fold.overflow = NSMakeRect (NSMaxX (bounds) - NSMinX (first) - width, NSMinY (first), width, NSHeight (first));
+  index = GnomeThemeIsApplicationMenuItem ((NSMenuItem *)[menu itemAtIndex: 0]) ? 1 : 0;
+  for (; index < count; index++)
+    {
+      if (NSMaxX (originalIMP (menuView, selector, index)) > NSMinX (fold.overflow))
+        {
+          fold.folded = index;
+          break;
+        }
+    }
+  if (fold.folded == NSNotFound)
+    {
+      /* Only ☰, which never folds. */
+      fold.overflow = NSZeroRect;
+    }
+  return fold;
+}
+
+/* GNOME's view-more-symbolic: three dots, one above the other. */
+static void
+GnomeThemeDrawOverflowIcon(NSRect rect, NSColor *color)
+{
+  NSInteger dot;
+
+  [color set];
+  for (dot = -1; dot <= 1; dot++)
+    {
+      [[NSBezierPath bezierPathWithOvalInRect: NSMakeRect (floor (NSMidX (rect)) - 1.5,
+                                                           floor (NSMidY (rect)) - 1.5 + 5.0 * dot,
+                                                           3.0, 3.0)] fill];
+    }
+}
+
+/* A highlighted menu bar title's pill, as for an open menu's title. */
+static void
+GnomeThemeFillMenuBarPill(GnomeTheme *theme, NSRect cellFrame, NSView *controlView)
+{
+  NSColor *fillColor = GnomeThemePhase67ViewIsActive (controlView)
+    ? GnomeThemePhase67Color (theme,
+                              @"secondarySelectedControlColor",
+                              [NSColor selectedControlColor])
+    : GnomeThemePhase67Color (theme,
+                              @"selectedInactiveColor",
+                              [NSColor selectedControlColor]);
+  NSColor *strokeColor = GnomeThemePhase67Blend (fillColor,
+                                                 GnomeThemePhase67Color (theme,
+                                                                         @"menuBarBorderColor",
+                                                                         [NSColor controlShadowColor]),
+                                                 0.28);
+  NSRect pillRect = NSInsetRect (cellFrame, 6.0, 4.0);
+
+  GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (pillRect, 0.5, 0.5),
+                                             8.0,
+                                             fillColor,
+                                             strokeColor,
+                                             1.0);
+}
+
+/* The folded items, copied: the overflow button's menu. */
+static NSMenu *
+GnomeThemeMenuBarOverflowMenu(NSMenuView *menuView, GnomeThemeMenuBarFold fold)
+{
+  NSMenu *menu = [menuView menu];
+  NSMenu *overflow = AUTORELEASE ([[NSMenu alloc] initWithTitle: @""]);
+  NSInteger index;
+
+  for (index = fold.folded; fold.folded != NSNotFound && index < [menu numberOfItems]; index++)
+    {
+      NSMenuItem *copy = [(NSMenuItem *)[menu itemAtIndex: index] copy];
+
+      [overflow addItem: copy];
+      RELEASE (copy);
+    }
+  return overflow;
+}
+
+BOOL
+GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
+{
+  GnomeThemeMenuBarFold fold = GnomeThemeMenuBarFolding (menuView);
+  NSWindow *window = [menuView window];
+  NSEvent *current = event;
+  BOOL pressed = YES;
+
+  if (NSIsEmptyRect (fold.overflow) || window == nil
+    || NSPointInRect ([menuView convertPoint: [event locationInWindow] fromView: nil], fold.overflow) == NO)
+    {
+      return NO;
+    }
+  /* As a GTK menu button: pressed while the pointer is on it, and the menu
+     opens when the click is released there. */
+  GnomeThemeOverflowActiveView = menuView;
+  [menuView displayRect: fold.overflow];
+  while ([current type] != NSLeftMouseUp)
+    {
+      BOOL inside;
+
+      current = [window nextEventMatchingMask: NSLeftMouseUpMask | NSLeftMouseDraggedMask
+                                    untilDate: [NSDate distantFuture]
+                                       inMode: NSEventTrackingRunLoopMode
+                                      dequeue: YES];
+      inside = NSPointInRect ([menuView convertPoint: [current locationInWindow] fromView: nil], fold.overflow);
+      if (inside != pressed)
+        {
+          pressed = inside;
+          GnomeThemeOverflowActiveView = pressed ? menuView : nil;
+          [menuView displayRect: fold.overflow];
+        }
+    }
+  if (pressed)
+    {
+      NSMenu *overflow = GnomeThemeMenuBarOverflowMenu (menuView, fold);
+      NSRect button = [menuView convertRect: fold.overflow toView: nil];
+
+      if ([overflow numberOfItems] > 0)
+        {
+          /* Under the button, right edges aligned, as the main menu. */
+          GnomeThemeTrackMenu (overflow, [window convertBaseToScreen: NSMakePoint (NSMaxX (button), NSMinY (button))],
+                               YES);
+        }
+    }
+  GnomeThemeOverflowActiveView = nil;
+  [menuView setNeedsDisplayInRect: fold.overflow];
+  return YES;
+}
+
+/* For QuirkProbe. */
+@interface NSMenuView (GnomeThemeMenuBarOverflow)
+- (NSRect) gnomeThemeOverflowRect;
+- (NSMenu *) gnomeThemeOverflowMenu;
+@end
+
+@implementation NSMenuView (GnomeThemeMenuBarOverflow)
+- (NSRect) gnomeThemeOverflowRect
+{
+  return GnomeThemeMenuBarFolding (self).overflow;
+}
+
+- (NSMenu *) gnomeThemeOverflowMenu
+{
+  return GnomeThemeMenuBarOverflowMenu (self, GnomeThemeMenuBarFolding (self));
+}
+@end
+
 @implementation GnomeTheme (MenusAndData)
 
 - (CGFloat) menuSeparatorInset
@@ -706,6 +894,21 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
       [borderColor set];
       [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMinX (bounds), NSMinY (bounds) + 0.5)
                                 toPoint: NSMakePoint (NSMaxX (bounds), NSMinY (bounds) + 0.5)];
+
+      /* The overflow button: the folded titles have no rects, so nothing
+         else draws here. */
+      {
+        NSRect overflow = GnomeThemeMenuBarFolding (menuView).overflow;
+
+        if (NSIsEmptyRect (overflow) == NO)
+          {
+            if (GnomeThemeOverflowActiveView == menuView)
+              {
+                GnomeThemeFillMenuBarPill (self, overflow, menuView);
+              }
+            GnomeThemeDrawOverflowIcon (overflow, [NSColor controlTextColor]);
+          }
+      }
     }
   else
     {
@@ -757,25 +960,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 
   if (isHorizontal)
     {
-      NSColor *fillColor = GnomeThemePhase67ViewIsActive (controlView)
-        ? GnomeThemePhase67Color (self,
-                                  @"secondarySelectedControlColor",
-                                  [NSColor selectedControlColor])
-        : GnomeThemePhase67Color (self,
-                                  @"selectedInactiveColor",
-                                  [NSColor selectedControlColor]);
-      NSColor *strokeColor = GnomeThemePhase67Blend (fillColor,
-                                                     GnomeThemePhase67Color (self,
-                                                                             @"menuBarBorderColor",
-                                                                             [NSColor controlShadowColor]),
-                                                     0.28);
-      NSRect pillRect = NSInsetRect (cellFrame, 6.0, 4.0);
-
-      GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (pillRect, 0.5, 0.5),
-                                                 8.0,
-                                                 fillColor,
-                                                 strokeColor,
-                                                 1.0);
+      GnomeThemeFillMenuBarPill (self, cellFrame, controlView);
     }
   else
     {
@@ -1223,7 +1408,8 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
    so move its rect instead: to the right end of the bar, with the other
    items shifted into its place. Drawing, hit testing, highlighting and
    submenu placement all use these rects. When the items don't all fit (a
-   narrow window), it stays first, where it can't cover them. */
+   narrow window), it stays first, and the titles that don't fit fold into
+   the overflow button (GnomeThemeMenuBarFolding). */
 - (NSRect) _overrideNSMenuViewMethod_rectOfItemAtIndex: (NSInteger)index
 {
   typedef NSRect (*RectIMP)(id, SEL, NSInteger);
@@ -1234,6 +1420,7 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
   NSRect appRect;
   NSRect lastRect;
   NSRange group = GnomeThemeInlineGroupRange (menuView, index);
+  GnomeThemeMenuBarFold fold;
 
   if (group.location != NSNotFound && originalIMP != NULL)
     {
@@ -1241,7 +1428,17 @@ GnomeThemePhase67RecordTableGrid(id tableView, NSTableViewGridLineStyle mask)
 
       return GnomeThemeInlineSegment (menuView, row, group, index);
     }
-  if ([menuView isHorizontal] == NO || [menu numberOfItems] < 2
+  if ([menuView isHorizontal] == NO || originalIMP == NULL)
+    {
+      return rect;
+    }
+  fold = GnomeThemeMenuBarFolding (menuView);
+  if (fold.folded != NSNotFound)
+    {
+      /* Folded: no size, past the bar's end. */
+      return (index >= fold.folded) ? NSMakeRect (NSMaxX ([menuView bounds]), NSMinY (rect), 0.0, 0.0) : rect;
+    }
+  if ([menu numberOfItems] < 2
     || GnomeThemeIsApplicationMenuItem ((NSMenuItem *)[menu itemAtIndex: 0]) == NO)
     {
       return rect;

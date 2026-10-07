@@ -951,6 +951,10 @@ GnomeThemeMenuIsOwnedByPopUp(NSMenu *menu)
         }
       return;
     }
+  if (GnomeThemeMenuBarOverflowMouseDown ((NSMenuView *)self, event))
+    {
+      return;
+    }
   if (originalIMP != NULL)
     {
       originalIMP (self, _cmd, event);

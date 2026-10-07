@@ -156,6 +156,12 @@ case "${QUIRK_PROBE_ARGS:-}" in
   *HandlesWindowDecorations*) ;;
   *) PROBE_ARGS+=(-GSX11HandlesWindowDecorations YES) ;;
 esac
+# The menu bar unless the run asks for the primary menu, whatever the
+# user's own defaults say.
+case "${QUIRK_PROBE_ARGS:-}" in
+  *GnomeThemeMenuStyle*) ;;
+  *) PROBE_ARGS+=(-GnomeThemeMenuStyle menubar) ;;
+esac
 # Extra defaults for the probe, e.g. QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".
 if [ -n "${QUIRK_PROBE_ARGS:-}" ]; then
   read -r -a EXTRA_ARGS <<< "$QUIRK_PROBE_ARGS"

@@ -26,6 +26,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* From the theme (GnomeThemeMenusAndData.m): a narrow menu bar's overflow
+   button and the menu it shows. */
+@interface NSMenuView (QuirkProbeMenuBarOverflow)
+- (NSRect) gnomeThemeOverflowRect;
+- (NSMenu *) gnomeThemeOverflowMenu;
+@end
+
 static NSString *QuirkProbeImageItem = @"ImageItem";
 static NSString *QuirkProbeViewItem = @"ViewItem";
 static NSString *QuirkProbePath =
@@ -2870,6 +2877,285 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* The menu bar overflow check: actions run by a folded menu's key
+   equivalent, and the items of the menu the overflow button showed. */
+static NSUInteger QuirkProbeOverflowActions = 0;
+static NSString *QuirkProbeOverflowShown = nil;
+
+- (void) overflowAction: (id)sender
+{
+  QuirkProbeOverflowActions++;
+}
+
+/* Fires while the overflow button's menu tracks: note its items, then
+   click elsewhere to close it. */
+- (void) inspectOverflowMenu: (NSTimer *)timer
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSWindow *window;
+
+  ASSIGN (QuirkProbeOverflowShown, @"");
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSMenuView *menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([window contentView], [NSMenuView class]);
+
+      if ([window isVisible] && menuView != nil && [menuView isHorizontal] == NO)
+        {
+          NSMutableArray *titles = [NSMutableArray array];
+          NSEnumerator *items = [[[menuView menu] itemArray] objectEnumerator];
+          NSMenuItem *item;
+
+          while ((item = [items nextObject]) != nil)
+            {
+              [titles addObject: [item title]];
+            }
+          ASSIGN (QuirkProbeOverflowShown, [titles componentsJoinedByString: @", "]);
+        }
+    }
+  [GSCurrentServer () setMouseLocation: [_controlsWindow convertBaseToScreen: NSMakePoint (850, 20)]
+                              onScreen: [[_controlsWindow screen] screenNumber]];
+  [self after: 0.2 perform: @selector(clickOffMenuBar:) mode: NSEventTrackingRunLoopMode];
+}
+
+/* A window too narrow for its menu bar (#25): the titles that don't fit
+   fold into an overflow button at the bar's end, ☰ stays first, a click on
+   the button shows the folded menus, and their key equivalents still
+   work. Widened again, the bar is as it was. */
+- (void) checkMenuBarOverflow
+{
+  NSMenu *mainMenu = [NSApp mainMenu];
+  NSString *name = [[NSProcessInfo processInfo] processName];
+  NSMenu *appMenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: name]);
+  NSMenuItem *appItem = AUTORELEASE ([[NSMenuItem alloc] initWithTitle: name action: NULL keyEquivalent: @""]);
+  NSArray *titles = [NSArray arrayWithObjects: @"Edit", @"View", @"Navigate", @"Window", @"Overflow Tools", nil];
+  NSMutableArray *added = [NSMutableArray array];
+  NSMutableArray *wideRects = [NSMutableArray array];
+  NSMutableArray *folded = [NSMutableArray array];
+  NSMutableArray *shownTitles = [NSMutableArray array];
+  NSWindow *window;
+  NSMenuView *menuView;
+  NSRect frame = NSMakeRect (60, 60, 720, 120);
+  NSRect overflow, wideOverflow, bounds, wideFrame;
+  NSMenu *overflowMenu;
+  NSEvent *key;
+  NSUInteger i, count;
+  NSUInteger actionsBefore = QuirkProbeOverflowActions;
+  BOOL keyHandled;
+  BOOL layoutOK = YES;
+  BOOL submenusOK = YES;
+  BOOL restored = YES;
+  NSInteger hit;
+  QuirkProbeInk ink;
+  NSString *narrowDetail, *widenDetail;
+
+  if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
+    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    {
+      [self skip: @"menubar-overflow" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
+      [self skip: @"menubar-overflow-widens-back" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
+      [self skip: @"menubar-overflow-click" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
+      return;
+    }
+  if ([NSMenuView instancesRespondToSelector: @selector(gnomeThemeOverflowRect)] == NO)
+    {
+      [self fail: @"menubar-overflow" detail: @"the theme has no menu bar overflow"];
+      return;
+    }
+
+  [appMenu addItemWithTitle: @"Info" action: NULL keyEquivalent: @""];
+  [appItem setSubmenu: appMenu];
+  [mainMenu insertItem: appItem atIndex: 0];
+  for (i = 0; i < [titles count]; i++)
+    {
+      NSMenu *submenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: [titles objectAtIndex: i]]);
+      NSMenuItem *item = (NSMenuItem *)[mainMenu addItemWithTitle: [titles objectAtIndex: i]
+                                                           action: NULL
+                                                    keyEquivalent: @""];
+
+      if (i == [titles count] - 1)
+        {
+          [[submenu addItemWithTitle: @"Overflow Action" action: @selector(overflowAction:) keyEquivalent: @"j"]
+            setTarget: self];
+        }
+      else
+        {
+          [submenu addItemWithTitle: @"Item" action: NULL keyEquivalent: @""];
+        }
+      [mainMenu setSubmenu: submenu forItem: item];
+      [added addObject: item];
+    }
+
+  window = [self windowWithFrame: frame title: @"Menu Bar Overflow"];
+  if ([window menu] == nil)
+    {
+      [[GSTheme theme] setMenu: mainMenu forWindow: window];
+    }
+  [window orderFront: nil];
+  menuView = (NSMenuView *)QuirkProbeFindViewOfClass ([[window contentView] superview], [NSMenuView class]);
+  if (menuView == nil || [menuView isHorizontal] == NO)
+    {
+      [self fail: @"menubar-overflow" detail: @"no menu bar in the window"];
+      [window orderOut: nil];
+      [mainMenu removeItem: appItem];
+      for (i = 0; i < [added count]; i++)
+        {
+          [mainMenu removeItem: [added objectAtIndex: i]];
+        }
+      return;
+    }
+  [menuView sizeToFit];
+  [window display];
+  count = [mainMenu numberOfItems];
+  for (i = 0; i < count; i++)
+    {
+      [wideRects addObject: NSStringFromRect ([menuView rectOfItemAtIndex: i])];
+    }
+  wideOverflow = [menuView gnomeThemeOverflowRect];
+  wideFrame = [window frame];
+  [self saveWindow: window named: @"menubar-overflow-wide"];
+
+  /* Narrow: ☰, then the titles that fit, then the button. */
+  [window setFrame: NSMakeRect (NSMinX ([window frame]), NSMinY ([window frame]), 240, NSHeight ([window frame]))
+           display: YES];
+  bounds = [menuView bounds];
+  overflow = [menuView gnomeThemeOverflowRect];
+  for (i = 0; i < count; i++)
+    {
+      NSRect rect = [menuView rectOfItemAtIndex: i];
+
+      if (NSWidth (rect) == 0.0)
+        {
+          [folded addObject: [[mainMenu itemAtIndex: i] title]];
+        }
+      else if ([folded count] > 0 || NSMaxX (rect) > NSMinX (overflow) || NSMinX (rect) < NSMinX (bounds))
+        {
+          /* A shown title after a folded one, or one reaching the button. */
+          layoutOK = NO;
+        }
+    }
+  overflowMenu = [menuView gnomeThemeOverflowMenu];
+  for (i = 0; i < (NSUInteger)[overflowMenu numberOfItems]; i++)
+    {
+      NSMenuItem *item = (NSMenuItem *)[overflowMenu itemAtIndex: i];
+
+      [shownTitles addObject: [item title]];
+      if ([item hasSubmenu] == NO || [[item submenu] numberOfItems] == 0)
+        {
+          submenusOK = NO;
+        }
+    }
+  hit = [menuView indexOfItemAtPoint: NSMakePoint (NSMidX (overflow), NSMidY (overflow))];
+  [window display];
+  {
+    NSBitmapImageRep *rep = QuirkProbeRender (menuView);
+    CGFloat scale = [rep pixelsWide] / NSWidth (bounds);
+    NSRect area = NSMakeRect (NSMinX (overflow) * scale,
+                              ([menuView isFlipped] ? NSMinY (overflow) : NSHeight (bounds) - NSMaxY (overflow)) * scale,
+                              NSWidth (overflow) * scale, NSHeight (overflow) * scale);
+
+    ink = QuirkProbeMeasureIn (rep, QuirkProbeIsTextInk, area);
+  }
+  key = [NSEvent keyEventWithType: NSKeyDown
+                         location: NSZeroPoint
+                    modifierFlags: NSCommandKeyMask
+                        timestamp: 0
+                     windowNumber: [window windowNumber]
+                          context: nil
+                       characters: @"j"
+      charactersIgnoringModifiers: @"j"
+                        isARepeat: NO
+                          keyCode: 0];
+  keyHandled = [mainMenu performKeyEquivalent: key];
+  [self saveWindow: window named: @"menubar-overflow-narrow"];
+
+  narrowDetail = [NSString stringWithFormat: @"bar %gpt wide: ☰ at x %g, overflow button at x %g-%g (ink %lu px), "
+    @"folded: %@, its menu: %@, a click on it hits item %ld, the folded Overflow Tools' Cmd-J %@ (%lu action)",
+    NSWidth (bounds), NSMinX ([menuView rectOfItemAtIndex: 0]), NSMinX (overflow), NSMaxX (overflow),
+    (unsigned long)ink.count, [folded componentsJoinedByString: @", "], [shownTitles componentsJoinedByString: @", "],
+    (long)hit, keyHandled ? @"handled" : @"not handled",
+    (unsigned long)(QuirkProbeOverflowActions - actionsBefore)];
+  if (NSIsEmptyRect (wideOverflow) && NSIsEmptyRect (overflow) == NO && NSMaxX (overflow) <= NSMaxX (bounds)
+    && layoutOK && submenusOK && [folded count] > 0 && [folded isEqualToArray: shownTitles]
+    && [folded containsObject: name] == NO && NSMinX ([menuView rectOfItemAtIndex: 0]) < 20
+    && hit == -1 && ink.count > 0 && keyHandled && QuirkProbeOverflowActions == actionsBefore + 1)
+    {
+      [self pass: @"menubar-overflow" detail: narrowDetail];
+    }
+  else
+    {
+      [self fail: @"menubar-overflow" detail: narrowDetail];
+    }
+
+  /* A click on the button shows the folded menus; a click elsewhere
+     closes them. Moves the pointer, so only on the probe's own display. */
+  if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeOwnsDisplay"] == NO)
+    {
+      [self skip: @"menubar-overflow-click" detail: @"moves the pointer: only on the probe's own Xvfb"];
+    }
+  else
+    {
+      NSRect button = [menuView convertRect: overflow toView: nil];
+      NSPoint point = NSMakePoint (NSMidX (button), NSMidY (button));
+      NSEvent *down = [NSEvent mouseEventWithType: NSLeftMouseDown location: point modifierFlags: 0
+                                        timestamp: 0 windowNumber: [window windowNumber] context: nil
+                                      eventNumber: 0 clickCount: 1 pressure: 1];
+      NSEvent *up = [NSEvent mouseEventWithType: NSLeftMouseUp location: point modifierFlags: 0
+                                      timestamp: 0 windowNumber: [window windowNumber] context: nil
+                                    eventNumber: 0 clickCount: 1 pressure: 0];
+      NSString *afterClose;
+      NSString *expected = [shownTitles componentsJoinedByString: @", "];
+      NSString *detail;
+
+      ASSIGN (QuirkProbeOverflowShown, @"");
+      [GSCurrentServer () setMouseLocation: [window convertBaseToScreen: point]
+                                  onScreen: [[window screen] screenNumber]];
+      [self after: 0.3 perform: @selector(inspectOverflowMenu:) mode: NSEventTrackingRunLoopMode];
+      [NSApp postEvent: up atStart: NO];
+      [menuView mouseDown: down];
+      afterClose = QuirkProbeVisibleMenus ();
+      detail = [NSString stringWithFormat: @"0.3s after a click on the overflow button: showing \"%@\"; "
+        @"after a click elsewhere: \"%@\"", QuirkProbeOverflowShown, afterClose];
+      if ([expected length] > 0 && [QuirkProbeOverflowShown isEqualToString: expected] && [afterClose length] == 0)
+        {
+          [self pass: @"menubar-overflow-click" detail: detail];
+        }
+      else
+        {
+          [self fail: @"menubar-overflow-click" detail: detail];
+        }
+    }
+
+  /* Wide again: the bar as it was, ☰ back at the end. */
+  [window setFrame: wideFrame display: YES];
+  for (i = 0; i < count; i++)
+    {
+      if ([[wideRects objectAtIndex: i] isEqualToString: NSStringFromRect ([menuView rectOfItemAtIndex: i])] == NO)
+        {
+          restored = NO;
+        }
+    }
+  widenDetail = [NSString stringWithFormat: @"widened back to %g: rects %@, ☰ at x %g of %g, overflow button %@",
+    NSWidth ([menuView bounds]), restored ? @"as before" : @"changed",
+    NSMinX ([menuView rectOfItemAtIndex: 0]), NSWidth ([menuView bounds]),
+    NSIsEmptyRect ([menuView gnomeThemeOverflowRect]) ? @"gone" : @"still there"];
+  if (restored && NSIsEmptyRect ([menuView gnomeThemeOverflowRect])
+    && NSMaxX ([menuView rectOfItemAtIndex: 0]) > NSWidth ([menuView bounds]) - 20)
+    {
+      [self pass: @"menubar-overflow-widens-back" detail: widenDetail];
+    }
+  else
+    {
+      [self fail: @"menubar-overflow-widens-back" detail: widenDetail];
+    }
+
+  [window orderOut: nil];
+  [mainMenu removeItem: appItem];
+  for (i = 0; i < [added count]; i++)
+    {
+      [mainMenu removeItem: [added objectAtIndex: i]];
+    }
+}
+
 /* A Cocoa-style main menu: an untitled first item holding the application
    menu. The theme names it after the app (so it becomes the ☰ menu instead
    of a blank item) and leaves out Hide, Hide Others and Show All. */
@@ -4682,6 +4968,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkSegmentedSelection];
   [self checkMenuSeparatorAndShortcut];
   [self checkApplicationMenuPosition];
+  [self checkMenuBarOverflow];
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
   [self checkMetricsMode];
