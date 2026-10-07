@@ -33,6 +33,7 @@ QuirkProbe_OBJC_FILES = \
 	main.m \
 	QuirkProbe.m \
 	QuirkProbeFileChooser.m \
+	QuirkProbePrintDialog.m \
 	QuirkProbeMenuTiming.m \
 	QuirkProbeScrollerDrag.m \
 	QuirkProbeContextMenu.m \

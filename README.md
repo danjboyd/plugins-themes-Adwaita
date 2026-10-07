@@ -49,8 +49,9 @@ What changes: libadwaita's header bar, with the window's toolbar in it and
 GNOME's window buttons; its buttons, entries, switches, check boxes and
 pop-ups; menus as popovers with the primary ☰ menu; overlay scrollbars;
 GNOME's fonts, dark style and high contrast; GNOME's file chooser for open
-and save panels. All taken on GNOME Shell 48 (X11) with libs-gui and
-libs-back built with the patches below; how each shot was made is in
+and save panels, and its print dialog. All taken on GNOME Shell 48 (X11)
+with libs-gui and libs-back built with the patches below; how each shot was
+made is in
 [`Docs/Screenshots/README.md`](Docs/Screenshots/README.md).
 
 ## Status and requirements
@@ -92,7 +93,7 @@ windows, menus and tool tips have square corners and no shadow.
   overlay scrollbars, the window buttons' layout and the title bar's
   double-click action.
 - **Dialogs:** alerts attached to the window they interrupt, without a bar,
-  and GNOME's file chooser for open and save panels.
+  GNOME's file chooser for open and save panels, and GNOME's print dialog.
 - **Window types** as GTK sets them, so the window manager and compositor
   treat menus, tool tips, drag images and dialogs as they do GTK's.
 - **Metrics per window:** windows built in code at GNOME's sizes, windows
@@ -276,6 +277,22 @@ GNUstep's panels. The chooser picks files or folders, not both: an open
 panel that allows both (GNUstep's default) picks files. Like GNUstep's
 panels, sheets block until the chooser closes; meanwhile the app redraws
 but takes no input.
+
+The print panel is GNOME's print dialog, asked for through the portal
+(`org.freedesktop.portal.Print`) for the app's window, as for a GTK app.
+The dialog's copies, pages, scale, paper, orientation and margins go into
+the operation's `NSPrintInfo`; the document is drawn to PDF (or PostScript,
+when the dialog prints to a PostScript file) and handed to the portal,
+which prints it as the dialog was set (the printer chosen there, or Print
+to File); GNUstep's Save, Preview and Fax buttons give way to the dialog's.
+Landscape pages are drawn landscape, as GTK draws them. GNUstep draws one
+range of pages: of several ranges, from the first page to the last. The
+panel stays GNUstep's own when it has an accessory view or accessory
+controllers, or when there is no portal, and
+`GnomeThemeNativePrintDialog NO` keeps it. Page Setup (`NSPageLayout`)
+stays GNUstep's: the portal has no dialog of its own for it (its print
+dialog has a Page Setup tab). `make check-print-dialog` checks it against
+a stand-in portal.
 
 High contrast follows GNOME's accessibility setting
 (`org.gnome.desktop.a11y.interface high-contrast`), as libadwaita does: the
@@ -469,6 +486,7 @@ you work on):
 - `make check-wms`: the header bar's checks under GNOME Shell, KWin, Xfwm4
   and Openbox with picom.
 - `make check-file-chooser`: open and save panels against a stand-in portal.
+- `make check-print-dialog`: the print dialog against a stand-in portal.
 - `make check-nib-metrics`: per-window metrics for nib and Gorm windows.
 - `make check-menu-timing`, `make check-scroller-drag`,
   `make check-context-menu`: menu sizing time, overlay scroller drags and
