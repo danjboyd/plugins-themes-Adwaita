@@ -25,11 +25,11 @@
 # on that display only.
 #
 # The session runs without gvfs (GIO_USE_VFS=local, no FUSE mount, no
-# volume monitors). With gvfs it mounts whatever devices are plugged in
-# (a phone, a camera) under its runtime directory, and a recursive delete
-# of the scratch directory would reach into them. Cleanup also stops every
-# process of the session, unmounts anything left, and deletes without
-# crossing into another file system.
+# volume monitors, and a bus that can't start them). With gvfs it mounts
+# whatever devices are plugged in (a phone, a camera) under its runtime
+# directory, and a recursive delete of the scratch directory would reach
+# into them. Cleanup also stops every process of the session, unmounts
+# anything left, and deletes without crossing into another file system.
 #
 # Checked: Mutter may move, maximise, minimise and close the window
 # (_MOTIF_WM_HINTS, _NET_WM_ALLOWED_ACTIONS); a double-click on the bar has
@@ -240,8 +240,20 @@ if [ "$WM" != mutter ]; then
   "$WORK/desktop" &
   PIDS+=($!)
 fi
+# The session's bus can start only these services. With the standard
+# service directories any client could start gvfs and its volume monitors
+# (the phone, which is this machine's network, among them), Evolution's
+# data servers or the document portal's FUSE mount, and did:
+# GIO_USE_VFS and friends only stop clients that read them.
+mkdir -p "$WORK/dbus/services"
+for svc in org.a11y.Bus org.xfce.Xfconf; do
+  [ -e "/usr/share/dbus-1/services/$svc.service" ] \
+    && ln -sf "/usr/share/dbus-1/services/$svc.service" "$WORK/dbus/services/"
+done
+sed "s|<standard_session_servicedirs */>|<servicedir>$WORK/dbus/services</servicedir>|" \
+  /usr/share/dbus-1/session.conf >"$WORK/dbus/session.conf"
 # shellcheck disable=SC2086
-session dbus-run-session -- $WM_COMMAND >"$WORK/wm.log" 2>&1 &
+session dbus-run-session --config-file="$WORK/dbus/session.conf" -- $WM_COMMAND >"$WORK/wm.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 60); do
   xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id" && break
