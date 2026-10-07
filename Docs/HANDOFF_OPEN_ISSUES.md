@@ -1,96 +1,50 @@
-# Handoff: the open issues (2026-10-05)
+# Handoff: the open issues (2026-10-07)
 
-Every open item in the theme now has a GitHub issue (#12–#29 on
-danjboyd/plugins-themes-Adwaita). This document is for picking them up in a
-fresh session: the issues, the order to take them in, how to build and
+For picking up the theme's open work in a fresh session: where things
+stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
 
 ## Where things stand
 
-- **2026-10-07:** #20 pushed and closed. #29: drafts 2, 4 and 11 (new:
-  NSScroller's knob without arrows) are ready for Dan's review; 12 and 13
-  (the font crash, NSSwitch) are fixed on master, nothing to file. #13:
-  review packet for libs-back 0002 (`57d54d4`, standalone on master). #14:
-  the KWin restore size was libs-back's order of hints and margin, fixed
-  in series commit 0004 (`251a975`) and the `-csd` tree; the installed
-  libs-back package needs a rebuild to get it. Tiling and the window menu
-  are still untested.
+- **Released:** 0.1.0-alpha6 (tag `0.1.0-alpha6`, `506069c`), installed for
+  Dan's user. Since alpha5: per-window metrics (#24), the menu bar's
+  overflow menu (#25), text at the font's own size (#23), context menus at
+  the pointer (#20), the first button no longer loading eight images
+  (#50), tiling and window menu checks under four window managers (#14),
+  the header bar documented as the default (#12), and the README's
+  side-by-side screenshots (#49). Release steps: `.internal/RELEASING.md`
+  (local only, not in git).
+- **Header bar by default:** the theme's `GSThemeDomain` asks for it; it
+  takes a libs-gui with the patch in `Docs/upstream-patches/libs-gui/`.
+- **Upstream (#13):** libs-back patch 1 is libs-back#244 (no reply yet).
+  Patch 2 has a review packet (`Docs/upstream-patches/review/libs-back-0002.md`,
+  standalone `25affcd` on branch `x11-window-types`), waiting for Dan.
+  The series in `~/git/gnustep/libs-back-series` is `dbfbe53`, `7ac2405`,
+  `8589356`, `129aefc`, `9160d53` (2026-10-07). Packets for 3–5 and the
+  libs-gui patch: in progress or in `review/`.
+- **Upstream reports (#29):** drafts 2, 4 and 11 in `Docs/upstream-issues/`
+  are ready for Dan's review; 12 and 13 are fixed on master (nothing to
+  file); 10 is filed as GNOME/mutter#5106 (#44).
+- **All suites pass** (2026-10-07): `make check-quirks` (7 configurations,
+  0 failures), `check-file-chooser`, `check-mutter`, `check-nib-metrics`,
+  `check-menu-timing`, `check-context-menu`, `check-scroller-drag`, and
+  `check-wms` under GNOME Shell, KWin, Xfwm4 and Openbox.
 
-- `99dc18c` and `df659ea` (docs, tests and the exported libs-back patch
-  for issues fixed on 2026-10-02) are pushed.
-- #15 is done (2026-10-05) in the theme and the libs-back patch, not yet
-  pushed or installed: the theme types windows as GTK does, and the patch
-  (item 5 of `Docs/PROPOSAL_LIBS_BACK_CSD.md`) does most of it itself.
-- Later on 2026-10-05, committed but not yet pushed or installed: #22
-  (alerts attached to their window), #21 (translucent tool tips), #19
-  (15px menus with libadwaita's popover shadow, a new part of the
-  libs-back patch), #18 (high contrast as current GNOME) and #17 (overlay
-  scrollbars).
-- Also done on 2026-10-05 (pushed and installed): #33 (toolbar item
-  views that act on the release, in the header bar), #31 (a document
-  window's title is its file's name), #30 (the toolbar-in-the-bar setting
-  for all apps, applied live) and #32 (template images tinted). #34 (a
-  toolbar hide/show crash) reproduces with GNUstep's own theme too: not
-  the theme's; see the issue. #14 has its first results (`make check-wms`).
-- #40 (open and save panels as GNOME's file chooser, through the portal;
-  replaces libs-OpenSave in the apps) committed and installed 2026-10-05,
-  not pushed:
-  `Source/Adapters/GnomeThemeFileChooser.m`, checked by
-  `make check-file-chooser` (a stand-in portal on a private bus).
-- 2026-10-06, committed, not pushed or installed: NSDocument's Save As
-  through the chooser (now a check: the name the document set rather than
-  the last file chosen, and the extension of the type picked in the
-  chooser); #43 (in the header bar, the window still moves while the
-  chooser is open; checked with the header bar too). #44 (the chooser not
-  attached to its window) is Mutter's: it attaches a Wayland dialog only
-  if it has its parent when mapped, and an X11 parent always comes later.
-  The report is drafted, not filed:
-  `Docs/upstream-issues/10-mutter-late-transient-not-attached.md`, with
-  the two checks to run on the desktop first.
-- The installed theme (`~/GNUstep/Library/Themes/Adwaita.theme`) matches
-  `86fefbe`. Nothing in the theme binary has changed since.
-- The header bar is done through phase 3 (`Docs/HANDOFF_HEADER_BAR.md`).
-  The shadow and rounded corners need the patched libs-back (below).
-- All suites pass: `make check-quirks` (7 configurations),
-  `make check-mutter`, `make check-mutter-shadow` (14 checks), and the
-  QuirkProbe run against libs-gui master.
+## The open issues
 
-## The issues
-
-**Decided on 2026-10-05** (each issue has a comment saying so):
-
-| # | Issue | Decision |
+| # | Issue | State |
 |---|---|---|
-| 12 | Header bar as the default | Stays opt-in; revisit once #14 has been through the other window managers |
-| 13 | Send the patches upstream | **Under way** (2026-10-06): AI question answered (GNUstep's policy, followed by `Docs/UPSTREAM_POLICY.md`); no FSF assignment unless a maintainer asks, as GNUstep has already accepted Dan's code. Each patch goes after Dan's sign-off |
-| 14 | Other window managers | Approved and under way: KWin, Xfwm4, Openbox and picom are installed (picom's autostart is off for Dan's user); `make check-wms` |
-| 16 | Pop-ups: open on the press or the release | Keep the press; closed |
+| 13 | Send the libs-back and libs-gui patches upstream | Under way, one item at a time after Dan's sign-off (`Docs/UPSTREAM_POLICY.md`) |
+| 29 | Report the remaining upstream issues | Drafts 2, 4, 11 ready for review |
+| 23 | Text width against GTK | Now 1.4% narrower; matching exactly needs libs-gui to round text-derived sizes. Candidate to close |
+| 26 | Gorm's inspectors cramped at GNOME's metrics | #24's per-window metrics could draw Gorm's design windows at GNOME's sizes; deferred until Dan has talked to Gorm's maintainer |
+| 44 | File chooser not attached under Mutter | Waits on GNOME/mutter#5106 |
+| 28 | Remove workarounds when upstream fixes land | A checklist; look again when GNUstep releases |
 
-**Theme work, ready to start** (label `enhancement`/`bug`), in the
-suggested order:
-
-| # | Issue | Size | Notes |
-|---|---|---|---|
-| 18 | High contrast as current GNOME does it | M | Settings + palette; clear target (libadwaita's HC stylesheet) |
-| 21 | Tool tips translucent with a compositor | S | Alpha is already there; paint 80% black |
-| 20 | Context menus just below the pointer | S | Measure GTK 4's offset first |
-| 19 | Menus: 15px corners and a shadow | M | Corners are easy; the shadow needs the libs-back patch extended |
-| 17 | Overlay scrollbars | L | The biggest visible gap; NSTrackingArea isn't wired, `-tile` changes |
-| 22 | Alerts without a title bar | M | Easier with the header bar |
-| 25 | Menu bars in narrow windows | M | Overflow menu |
-| 24 | Compact metrics per window | M | Design question: how to tell nib windows apart |
-| 27 | Gorm's CustomView palette item | S | Find Gorm's class first |
-| 23 | Text 5% wider than GTK's | ? | Investigation; may be libs-back or fonts |
-
-**Upstream** (label `upstream`): #26 (Gorm's inspectors, deferred until
-Dan talks to Gorm's maintainer), #28 (workarounds to remove, a checklist),
-#29 (drafts 2 and 4 to file, plus two new findings: libs-gui master's
-`NSTextAlignment` renumbering and libs-back's flaky `pdfps.m`). File
-upstream reports only when Dan says so, spaced out.
-
-Close an issue from the commit that fixes it ("Fixes #n") once Dan has
-asked for the push.
+File upstream reports only when Dan says so, spaced out. Close an issue
+from the commit that fixes it ("Fixes #n") once Dan has asked for the
+push.
 
 ## Working with Dan
 
@@ -143,6 +97,7 @@ make check-quirks         # QuirkProbe, 7 configurations, private Xvfb
 make check-file-chooser   # open/save panels against a stand-in portal
 make check-mutter         # GNOME Shell (X11) on a private Xvfb, stock libs
 make check-mutter-shadow  # the same against the patched libs-gui/libs-back
+make check-wms            # the header bar under GNOME Shell, KWin, Xfwm4, Openbox
 ```
 
 - **Don't filter build output with `grep error`.** GNUstep's headers print
@@ -173,7 +128,7 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
 
 ## The patched libraries
 
-- **The upstream series (2026-10-06):** `~/git/gnustep/libs-back-series`
+- **The upstream series (2026-10-06, updated 2026-10-07):** `~/git/gnustep/libs-back-series`
   (branch `ai-policy/csd-series`) and `~/git/gnustep/libs-gui-series`
   (branch `ai-policy/theme-backend-defaults`), git worktrees of the two
   repositories below, committed on current master. These are now what is
@@ -191,8 +146,10 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
 - **After any patch change:** change the commit it belongs to in the
   series (with its ChangeLog entry and test), check that every commit
   still builds and passes on its own, re-export with
-  `git format-patch -o Docs/upstream-patches/libs-back origin/master` (or
-  `libs-gui`), and update `Docs/upstream-patches/README.md`.
+  `git format-patch -o Docs/upstream-patches/libs-back 9731f15` (the
+  series' base; or `libs-gui`), and update `Docs/upstream-patches/README.md`.
+  A patch sent on its own is a branch on current master (as
+  `x11-window-types` for patch 2), exported to `libs-back-standalone/`.
 - **libs-back's own tests load the installed backend** unless the config
   points elsewhere. Make a GNUstep.conf copy whose
   `GNUSTEP_USER_DIR_LIBRARY` is a directory holding
@@ -202,8 +159,9 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
   tests then load the installed backend (check with `LD_DEBUG=files`). Then run, on a
   private Xvfb:
   `GNUSTEP_CONFIG_FILE=<that> gnustep-tests .` in `libs-back-csd/Tests`.
-  Expected: 307 passed, with `cairo/pdfps.m` sometimes aborting (it does on
-  the clean backend too; #29).
+  `cairo/pdfps.m` aborts against the installed libs-gui snapshot: its
+  font roles keep the backend's names unretained, fixed on gui master by
+  8a092cfa7 (`Docs/upstream-issues/12-…`); against gui master it runs.
 - **Comparing with a clean backend:** check out the commit before the one
   under test in the series worktree, build it, and run that commit's
   test: the counts that fail are in each commit message and in
