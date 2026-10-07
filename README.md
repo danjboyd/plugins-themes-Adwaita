@@ -246,13 +246,11 @@ Its answer wins over the title, both ways, so this also covers other
 auxiliary windows and titles in other languages. Key equivalents still
 work in a window without the menu bar: GNUstep sends them to the main menu.
 
-### Header bar (in development)
+### Header bar
 
-With `GSX11HandlesWindowDecorations NO` (a user default, for example
-`defaults write NSGlobalDomain GSX11HandlesWindowDecorations NO`), GNUstep
-draws the window decorations instead of the window manager, and this theme
-draws them as libadwaita's header bar: one 46pt row with the bold title
-centred, round window buttons in the order of GNOME's `button-layout`, and
+By default GNUstep draws the window decorations instead of the window
+manager, and this theme draws them as libadwaita's header bar: one 46pt
+row with the bold title centred, round window buttons in the order of GNOME's `button-layout`, and
 the primary menu's ☰ before them. Drag the bar to move the window; resize
 from any edge or corner; double-click the bar for GNOME's
 `action-double-click-titlebar` action (maximise by default); right-click it
@@ -262,17 +260,38 @@ windows: under Mutter that brings snapping, tiling, dragging past the
 screen's edge, Super-drag and Mutter's own window menu. Without a window
 manager that supports it, the header bar does these itself. It follows the
 scale factor (`GSScaleFactor`), mirrors in right-to-left languages, and has
-libadwaita's high contrast details. Alerts have no bar, as GNOME's. The
-theme can't set the flag itself: GNUstep's backend reads it before any theme
-loads.
+libadwaita's high contrast details. Alerts have no bar, as GNOME's.
+
+The theme asks for this in its `GSThemeDomain`
+(`GSBackHandlesWindowDecorations = NO`). GNUstep's backend reads that
+setting before any theme loads, so it takes a libs-gui that looks it up in
+the theme first: the `+csd` builds in the apt repo, which the theme's
+package depends on, or a libs-gui with the patch in
+`Docs/upstream-patches/libs-gui/`. With a stock libs-gui, turn the header
+bar on yourself:
+
+```
+defaults write NSGlobalDomain GSX11HandlesWindowDecorations NO
+```
+
+To keep the window manager's title bar instead, for all apps or for one
+(by its defaults domain, here TextEdit's):
+
+```
+defaults write NSGlobalDomain GSBackHandlesWindowDecorations YES
+defaults write TextEdit GSBackHandlesWindowDecorations YES
+```
+
+A user's `GSBackHandlesWindowDecorations` or `GSX11HandlesWindowDecorations`
+always wins over the theme's.
 
 With `GnomeThemeHeaderBarToolbar` (above) the window's toolbar goes in the
 bar's row.
 
-Not yet with the installed GNUstep: the window's shadow, its rounded
-corners and resizing from the shadow. These need the libs-back and
-libs-gui patches in `Docs/upstream-patches/` (see its README and
-`Docs/PROPOSAL_LIBS_BACK_CSD.md`). The installed backend already gives
+The window's shadow, its rounded corners and resizing from the shadow need
+the `+csd` libs-back (recommended by the theme's package) or the libs-back
+and libs-gui patches in `Docs/upstream-patches/` (see its README and
+`Docs/PROPOSAL_LIBS_BACK_CSD.md`). A stock backend already gives
 windows an alpha channel with the header bar, so under a compositor menus
 and tool tips are rounded and tool tips translucent, as libadwaita's.
 
