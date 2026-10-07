@@ -574,10 +574,18 @@ GnomeThemeResolveEntryColors(GnomeTheme *theme,
       fillColor = GnomeThemeBlend (fillColor, windowFill, 0.14);
     }
 
+  /* High contrast outlines entries, as libadwaita does (the foreground at
+     50%); a focused one has its accent ring instead. */
+  borderColor = GnomeThemePaletteColor (theme, @"GnomeThemeOutlineColor", nil);
+  lineWidth = (borderColor != nil) ? 1.0 : 0.0;
   if (enabled == NO)
     {
       fillColor = GnomeThemePaletteColor (theme, @"GnomeThemeButtonDisabledColor",
                                           GnomeThemeBlend (fillColor, windowFill, 0.42));
+      if (borderColor != nil)
+        {
+          borderColor = GnomeThemeBlend (borderColor, windowFill, 0.6);
+        }
     }
   else if (focused)
     {
@@ -1906,6 +1914,12 @@ GnomeThemeDrawTabLabel(NSString *label,
                                                  GnomeThemeBlend (baseFill, borderBase, 0.34));
   NSColor *disabledFill = GnomeThemePaletteColor (self, @"GnomeThemeButtonDisabledColor",
                                                   GnomeThemeBlend (baseFill, backgroundFill, 0.5));
+  NSColor *outlineColor = GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil);
+  NSColor *disabledOutline = (outlineColor != nil)
+    ? GnomeThemeBlend (outlineColor,
+                       GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]),
+                       0.6)
+    : nil;
   NSRect buttonRect = NSInsetRect (frame, 0.5, 0.5);
   CGFloat radius = MIN (10.0, floor (buttonRect.size.height / 2.0));
   NSString *keyEquivalent = nil;
@@ -1923,15 +1937,18 @@ GnomeThemeDrawTabLabel(NSString *label,
       isDefaultButton = ([[view window] defaultButtonCell] == cell);
     }
 
+  /* libadwaita's buttons have no outline; high contrast gives them one,
+     the foreground at 50% (40% opacity disabled), but not the accent
+     ones. */
   if (popupButton)
     {
       fillColor = buttonFill;
-      strokeColor = GnomeThemeBlend (borderBase, fillColor, 0.82);
+      strokeColor = outlineColor;
 
       if (disabled)
         {
           fillColor = disabledFill;
-          strokeColor = GnomeThemeBlend (strokeColor, backgroundFill, 0.64);
+          strokeColor = disabledOutline;
         }
       else if (highlighted)
         {
@@ -1941,30 +1958,28 @@ GnomeThemeDrawTabLabel(NSString *label,
   else if (disabled)
     {
       fillColor = disabledFill;
-      strokeColor = GnomeThemeBlend (borderBase, backgroundFill, 0.62);
+      strokeColor = disabledOutline;
     }
   else if (highlighted || momentaryPressed)
     {
       if (isDefaultButton)
         {
           fillColor = GnomeThemeBlend (accentFill, [NSColor blackColor], 0.18);
-          strokeColor = GnomeThemeBlend (accentFill, borderBase, 0.3);
         }
       else
         {
           fillColor = pressedFill;
-          strokeColor = GnomeThemeBlend (borderBase, fillColor, 0.28);
+          strokeColor = outlineColor;
         }
     }
   else if (isDefaultButton || persistentAccentSelection)
     {
       fillColor = accentFill;
-      strokeColor = GnomeThemeBlend (accentFill, borderBase, 0.28);
     }
   else
     {
       fillColor = buttonFill;
-      strokeColor = GnomeThemeBlend (borderBase, fillColor, 0.62);
+      strokeColor = outlineColor;
     }
 
   GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, fillColor, strokeColor, 1.0);
@@ -2070,7 +2085,9 @@ GnomeThemeDrawTabLabel(NSString *label,
   (void)style;
   (void)controlView;
 
-  borderColor = GnomeThemeBlend (borderColor, baseFill, 0.42);
+  /* Linked buttons have no outline or separators in libadwaita; high
+     contrast outlines them and separates them with the foreground at 50%. */
+  borderColor = GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil);
   /* libadwaita's linked buttons: a button's colour, and when checked the
      foreground at 30% over the window, so the selected segment stands out
      darker in the light palette and lighter in the dark one
@@ -2089,7 +2106,10 @@ GnomeThemeDrawTabLabel(NSString *label,
   if (disabled)
     {
       segmentFill = GnomeThemeBlend (segmentFill, windowFill, 0.5);
-      borderColor = GnomeThemeBlend (borderColor, baseFill, 0.5);
+      if (borderColor != nil)
+        {
+          borderColor = GnomeThemeBlend (borderColor, windowFill, 0.6);
+        }
     }
 
   if (roundedLeft == NO)
@@ -2105,6 +2125,10 @@ GnomeThemeDrawTabLabel(NSString *label,
   path = GnomeThemeSegmentedControlPath (drawRect, radius, roundedLeft, roundedRight);
   [segmentFill set];
   [path fill];
+  if (borderColor == nil)
+    {
+      return;
+    }
   [borderColor set];
   [path setLineWidth: 1.0];
   [path stroke];
@@ -2211,11 +2235,12 @@ GnomeThemeDrawTabLabel(NSString *label,
   CGFloat radius = floor (drawRect.size.height / 2.0);
 
   (void)rect;
+  /* High contrast outlines the trough (the foreground at 50%). */
   GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (drawRect, 0.5, 0.5),
                                       radius,
                                       trackFill,
-                                      nil,
-                                      0.0);
+                                      GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil),
+                                      1.0);
   return drawRect;
 }
 
@@ -2305,11 +2330,19 @@ GnomeThemeDrawTabLabel(NSString *label,
         }
     }
 
-  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (trackRect, 0.0, 0.0),
-                                      thickness / 2.0,
-                                      trackFill,
-                                      nil,
-                                      0.0);
+  /* High contrast outlines the trough (the foreground at 50%). */
+  if (GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil) != nil)
+    {
+      GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (trackRect, 0.5, 0.5),
+                                          thickness / 2.0 - 0.5,
+                                          trackFill,
+                                          GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil),
+                                          1.0);
+    }
+  else
+    {
+      GnomeThemeFillAndStrokeRoundedRect (trackRect, thickness / 2.0, trackFill, nil, 0.0);
+    }
 
   if (fillRect.size.width > 0.0 && fillRect.size.height > 0.0)
     {
@@ -2569,20 +2602,24 @@ GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
                                                                                 @"windowBackgroundColor",
                                                                                 [NSColor windowBackgroundColor]),
                                                                0.10));
-  NSColor *strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                           @"controlShadowColor",
-                                                           [NSColor controlShadowColor]),
-                                          baseFill,
-                                          0.76);
+  /* No outline, as libadwaita's; high contrast's 50% one. */
+  NSColor *strokeColor = GnomeThemePaletteColor (self, @"GnomeThemeOutlineColor", nil);
   NSColor *separatorColor = GnomeThemePaletteColor (self, @"GnomeThemeSeparatorColor",
-                                                    GnomeThemeBlend (strokeColor, baseFill, 0.72));
+                                                    GnomeThemeBlend (GnomeThemeColor (self,
+                                                                                      @"controlShadowColor",
+                                                                                      [NSColor controlShadowColor]),
+                                                                     baseFill,
+                                                                     0.8));
   NSBezierPath *path = GnomeThemeStepperPath (frame);
 
   [baseFill set];
   [path fill];
-  [strokeColor set];
-  [path setLineWidth: 1.0];
-  [path stroke];
+  if (strokeColor != nil)
+    {
+      [strokeColor set];
+      [path setLineWidth: 1.0];
+      [path stroke];
+    }
 
   [separatorColor set];
   if (GnomeThemeStepperIsVertical (frame))

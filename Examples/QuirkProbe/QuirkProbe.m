@@ -4776,8 +4776,9 @@ QuirkProbeHex(const NSUInteger rgb[3])
 /* libadwaita 1.7's control colours, measured from its reference app on the
    same display (Reference/AdwaitaDemo), in the palette the run uses (light
    or dark by the window colour, high contrast from -ProbeHighContrast):
-   the window, and a button (the foreground at 10% over it)
-   (plugins-themes-Adwaita#60). */
+   the window and a button (the foreground at 10% over it, #60), the
+   default button's accent (#55), an unchecked radio's and check box's
+   ring (#57) and a button's outline (#61). */
 - (void) checkControlColors
 {
   BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
@@ -4793,7 +4794,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
   NSView *frameView;
   NSBitmapImageRep *rep;
   NSUInteger windowRGB[3], buttonRGB[3], defaultRGB[3], titleRGB[3] = { 0, 0, 0 };
-  NSUInteger radioRGB[3] = { 0, 0, 0 }, checkRGB[3] = { 0, 0, 0 };
+  NSUInteger radioRGB[3] = { 0, 0, 0 }, checkRGB[3] = { 0, 0, 0 }, edgeRGB[3];
   long radioStep = -1, checkStep = -1;
   unsigned int ring;
   NSRect inWindow;
@@ -4821,6 +4822,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
                      (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
   QUIRK_PROBE_SAMPLE (secondary, -10, 17, windowRGB);
   QUIRK_PROBE_SAMPLE (secondary, 60, 17, buttonRGB);
+  QUIRK_PROBE_SAMPLE (secondary, 60, 0, edgeRGB);
   QUIRK_PROBE_SAMPLE (defaultButton, 8, 17, defaultRGB);
   /* The title's brightest pixel along the button's middle. */
   for (x = 20; x < 100; x++)
@@ -4899,6 +4901,38 @@ QuirkProbeHex(const NSUInteger rgb[3])
     {
       [self fail: @"control-colors-unchecked-indicators" detail: detail];
     }
+
+  /* A button's top edge: no outline in libadwaita's normal styles (the edge
+     pixel is between the window and the fill; the light palette's used to
+     be a #dfdfdf line), and in high contrast its 1px outline, the
+     foreground at 50% (#61). */
+  {
+    unsigned int outline = dark ? 0x919193 : 0x969699;
+    BOOL between = YES;
+    int i;
+
+    for (i = 0; i < 3; i++)
+      {
+        NSUInteger low = MIN (windowRGB[i], buttonRGB[i]);
+        NSUInteger high = MAX (windowRGB[i], buttonRGB[i]);
+
+        if (edgeRGB[i] + 1 < low || edgeRGB[i] > high + 1)
+          {
+            between = NO;
+          }
+      }
+    detail = [NSString stringWithFormat: @"%@: button edge %@ (want %@)", style, QuirkProbeHex (edgeRGB),
+      highContrast ? [NSString stringWithFormat: @"#%06x, the outline", outline]
+                   : @"between the window and the fill"];
+    if (highContrast ? QuirkProbeNear (edgeRGB, outline, 8) : between)
+      {
+        [self pass: @"control-colors-outline" detail: detail];
+      }
+    else
+      {
+        [self fail: @"control-colors-outline" detail: detail];
+      }
+  }
 }
 
 /* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
