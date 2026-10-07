@@ -2750,6 +2750,43 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* A pop-up button's chevron is libadwaita's pan-down: about 10x7 with a
+   2px stroke, in the text colour, and nothing else at that end (GNUstep's
+   was 6x4 and faint, after a divider; plugins-themes-Adwaita#59). */
+- (void) checkPopUpChevron
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 70) title: @"Probe Chevron"];
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 18, 200, 34)
+                                                                pullsDown: NO]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk ink;
+  NSInteger width;
+  NSString *detail;
+
+  [popUp addItemWithTitle: @"x"];
+  [[window contentView] addSubview: popUp];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (popUp);
+  width = [rep pixelsWide];
+  QuirkProbePixelAt (rep, width - 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (width - 40, 0, 36, [rep pixelsHigh]));
+  QuirkProbeInkBackground = 750;
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"ink %ldx%ld at the right end (want about 10x7)", (long)ink.width, (long)ink.height];
+  if (ink.count > 0 && ink.width >= 9 && ink.width <= 11 && ink.height >= 5 && ink.height <= 8)
+    {
+      [self pass: @"popup-chevron" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-chevron" detail: detail];
+    }
+}
+
 /* A focused push button, as in OneDriveServiceManager's Resync panel, where
    Cancel is the first key view. As in GTK, the ring shows only after a key
    press. It runs along the button's edge: not around the title (where NSCell
@@ -4938,6 +4975,124 @@ QuirkProbeHex(const NSUInteger rgb[3])
 /* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
    the knob at the end, a neutral track when off with the knob at the start
    (plugins-themes-Adwaita#35). */
+/* The slider's knob as libadwaita's: 20px with its outline and shadow,
+   and lighter than the trough in any palette (the dark palette's knob
+   was the window's colour and vanished; plugins-themes-Adwaita#56). */
+- (void) checkSliderKnob
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 80) title: @"Probe Slider"];
+  NSSlider *slider = AUTORELEASE ([[NSSlider alloc] initWithFrame: NSMakeRect (20, 20, 200, 30)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect knob;
+  NSUInteger centre[3], trough[3], background[3], pixel[3];
+  NSInteger x, y, top = -1, bottom = -1, backgroundSum, frameHeight;
+  NSString *detail;
+
+  [slider setMinValue: 0.0];
+  [slider setMaxValue: 100.0];
+  [slider setDoubleValue: 30.0];
+  [[window contentView] addSubview: slider];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+  frameHeight = (NSInteger)NSHeight ([frameView bounds]);
+  knob = [slider convertRect: [[slider cell] knobRectFlipped: [slider isFlipped]] toView: nil];
+  x = (NSInteger)floor (NSMidX (knob));
+  y = frameHeight - (NSInteger)floor (NSMidY (knob)) - 1;
+  QuirkProbePixelAt (rep, x, y, centre);
+  /* The trough to the right of the knob: the slider is at 30%. */
+  QuirkProbePixelAt (rep, x + 60, y, trough);
+  QuirkProbePixelAt (rep, x, y - 20, background);
+  backgroundSum = (NSInteger)(background[0] + background[1] + background[2]);
+  for (y = frameHeight - (NSInteger)floor (NSMidY (knob)) - 16; y <= frameHeight - (NSInteger)floor (NSMidY (knob)) + 16; y++)
+    {
+      QuirkProbePixelAt (rep, x, y, pixel);
+      if (labs ((NSInteger)(pixel[0] + pixel[1] + pixel[2]) - backgroundSum) > 12)
+        {
+          if (top < 0)
+            {
+              top = y;
+            }
+          bottom = y;
+        }
+    }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"knob %ldpx high with its outline and shadow, centre %lu/%lu/%lu, trough %lu/%lu/%lu, window %lu/%lu/%lu",
+    (long)(top >= 0 ? bottom - top + 1 : 0),
+    (unsigned long)centre[0], (unsigned long)centre[1], (unsigned long)centre[2],
+    (unsigned long)trough[0], (unsigned long)trough[1], (unsigned long)trough[2],
+    (unsigned long)background[0], (unsigned long)background[1], (unsigned long)background[2]];
+  if (top >= 0 && bottom - top + 1 >= 20 && bottom - top + 1 <= 24
+      && centre[0] + centre[1] + centre[2] >= trough[0] + trough[1] + trough[2] + 60)
+    {
+      [self pass: @"slider-knob" detail: detail];
+    }
+  else
+    {
+      [self fail: @"slider-knob" detail: detail];
+    }
+}
+
+/* A text view's scroll view draws libadwaita's frame: one 1px line at its
+   edge and rounded corners, where GNUstep's bezel drew two dark lines and
+   square corners (plugins-themes-Adwaita#58). */
+- (void) checkScrollViewFrame
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 160) title: @"Probe Frame"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (20, 20, 220, 120)]);
+  NSTextView *textView = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 200, 300)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect inWindow;
+  NSUInteger corner[3], outside[3], inside[3], pixel[3];
+  NSInteger left, top, x, y, lines = 0, insideSum;
+  NSString *detail;
+
+  [scrollView setBorderType: NSBezelBorder];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setDocumentView: textView];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+  inWindow = [scrollView convertRect: [scrollView bounds] toView: nil];
+  left = (NSInteger)NSMinX (inWindow);
+  top = (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow));
+  QuirkProbePixelAt (rep, left, top, corner);
+  QuirkProbePixelAt (rep, left - 3, top - 3, outside);
+  x = left + (NSInteger)NSWidth (inWindow) / 3;
+  QuirkProbePixelAt (rep, x, top + 8, inside);
+  insideSum = (NSInteger)(inside[0] + inside[1] + inside[2]);
+  /* The rows at the top edge that aren't the content's colour. */
+  for (y = top; y < top + 5; y++)
+    {
+      QuirkProbePixelAt (rep, x, y, pixel);
+      if (labs ((NSInteger)(pixel[0] + pixel[1] + pixel[2]) - insideSum) > 15)
+        {
+          lines++;
+        }
+    }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%ld line(s) at the top edge; corner %lu/%lu/%lu, window %lu/%lu/%lu, content %lu/%lu/%lu",
+    (long)lines, (unsigned long)corner[0], (unsigned long)corner[1], (unsigned long)corner[2],
+    (unsigned long)outside[0], (unsigned long)outside[1], (unsigned long)outside[2],
+    (unsigned long)inside[0], (unsigned long)inside[1], (unsigned long)inside[2]];
+  if (lines == 1
+      && labs ((NSInteger)(corner[0] + corner[1] + corner[2]) - (NSInteger)(outside[0] + outside[1] + outside[2])) <= 12)
+    {
+      [self pass: @"scroll-view-frame" detail: detail];
+    }
+  else
+    {
+      [self fail: @"scroll-view-frame" detail: detail];
+    }
+}
+
 - (void) checkSwitch
 {
   Class switchClass = NSClassFromString (@"NSSwitch");
@@ -5058,12 +5213,33 @@ QuirkProbeHex(const NSUInteger rgb[3])
                                                              fromView: scrollView]];
   inkRest = QuirkProbeMeasure (QuirkProbeRender (scroller), QuirkProbeIsInk).count;
 
-  [document scrollPoint: NSMakePoint (0, 300)];
-  [window display];
-  hitShown = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
-                                                              fromView: scrollView]];
-  QuirkProbeInkBackground = 750;
-  inkShown = QuirkProbeMeasure (QuirkProbeRender (scrollView), QuirkProbeIsInk).count;
+  {
+    /* The slider shown: pixels in the scroller's strip that change from
+       the scroll view at rest. (Counting ink over the whole scroll view
+       counted its bezel, plugins-themes-Adwaita#58.) */
+    NSBitmapImageRep *before = QuirkProbeRender (scrollView), *after;
+    NSInteger x, y;
+    NSUInteger a[3], b[3];
+
+    [document scrollPoint: NSMakePoint (0, 300)];
+    [window display];
+    hitShown = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
+                                                                fromView: scrollView]];
+    after = QuirkProbeRender (scrollView);
+    inkShown = 0;
+    for (y = (NSInteger)NSMinY (strip); y < (NSInteger)NSMaxY (strip); y++)
+      {
+        for (x = (NSInteger)NSMinX (strip); x < (NSInteger)NSMaxX (strip); x++)
+          {
+            QuirkProbePixelAt (before, x, y, a);
+            QuirkProbePixelAt (after, x, y, b);
+            if (labs ((NSInteger)(a[0] + a[1] + a[2]) - (NSInteger)(b[0] + b[1] + b[2])) > 30)
+              {
+                inkShown++;
+              }
+          }
+      }
+  }
 
   [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 1.6]];
   hitFaded = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
@@ -5248,6 +5424,9 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkControlColors];
+  [self checkSliderKnob];
+  [self checkScrollViewFrame];
+  [self checkPopUpChevron];
       [self finish];
       return;
     }
@@ -5303,6 +5482,9 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkControlColors];
+  [self checkSliderKnob];
+  [self checkScrollViewFrame];
+  [self checkPopUpChevron];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

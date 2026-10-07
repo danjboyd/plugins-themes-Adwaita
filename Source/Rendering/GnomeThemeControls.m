@@ -489,26 +489,22 @@ GnomeThemeDrawFocusRing(GnomeTheme *theme, NSRect rect, CGFloat radius)
   GnomeThemeFillAndStrokeRoundedRect (rect, radius, nil, focusColor, 2.5);
 }
 
+/* libadwaita's pan-down-symbolic as pop-ups and combo boxes show it: 10px
+   wide and about 7px high with its 2px stroke (#59). */
 static void
 GnomeThemeDrawPopupChevron(NSRect rect, NSColor *color, BOOL flipped)
 {
   NSBezierPath *path = [NSBezierPath bezierPath];
-  NSPoint center = NSMakePoint (NSMidX (rect), NSMidY (rect));
-  CGFloat halfWidth = MIN (rect.size.width, rect.size.height) * 0.13;
-  CGFloat halfHeight = halfWidth * 0.68;
+  NSPoint center = NSMakePoint (floor (NSMidX (rect)), floor (NSMidY (rect)));
+  CGFloat halfWidth = 4.0;
+  CGFloat halfHeight = 2.25;
   CGFloat topY = center.y + (flipped ? -halfHeight : halfHeight);
   CGFloat bottomY = center.y + (flipped ? halfHeight : -halfHeight);
-
-  if (halfWidth < 2.5)
-    {
-      halfWidth = 2.5;
-      halfHeight = 1.8;
-    }
 
   [path moveToPoint: NSMakePoint (center.x - halfWidth, topY)];
   [path lineToPoint: NSMakePoint (center.x, bottomY)];
   [path lineToPoint: NSMakePoint (center.x + halfWidth, topY)];
-  [path setLineWidth: 1.35];
+  [path setLineWidth: 2.0];
   [path setLineCapStyle: NSRoundLineCapStyle];
   [path setLineJoinStyle: NSRoundLineJoinStyle];
   [color set];
@@ -680,47 +676,68 @@ GnomeThemeButtonCellUsesCancelImage(NSButtonCell *cell)
   return GnomeThemeImageHasName ([cell image], @"GSStop");
 }
 
+/* libadwaita's system-search-symbolic in a 16px square: a lens 12px
+   across with a 1.5px stroke at the top left, its handle to the bottom
+   right (#59). The search field is flipped: y grows down. */
 static void
 GnomeThemeDrawSearchGlyph(NSRect rect, NSColor *color)
 {
   NSBezierPath *path = [NSBezierPath bezierPath];
-  CGFloat diameter = MIN (rect.size.width, rect.size.height) - 6.0;
-  NSRect lensRect = GnomeThemeCenteredRect (rect, diameter, diameter);
-  CGFloat handleLength = MAX (3.0, diameter * 0.34);
+  NSRect icon = GnomeThemeCenteredRect (rect, 16.0, 16.0);
+  NSRect lens = NSMakeRect (floor (NSMinX (icon)) + 1.75, floor (NSMinY (icon)) + 1.75, 10.5, 10.5);
 
-  lensRect.origin.x -= 1.0;
-  lensRect.origin.y += 0.5;
-  [path appendBezierPathWithOvalInRect: NSInsetRect (lensRect, 1.0, 1.0)];
-  [path moveToPoint: NSMakePoint (NSMaxX (lensRect) - 1.5, NSMaxY (lensRect) - 1.5)];
-  [path lineToPoint: NSMakePoint (NSMaxX (lensRect) + handleLength - 1.5,
-                                  NSMaxY (lensRect) + handleLength - 1.5)];
-  [path setLineWidth: 1.8];
+  [path appendBezierPathWithOvalInRect: lens];
+  [path moveToPoint: NSMakePoint (NSMaxX (lens) - 1.25, NSMaxY (lens) - 1.25)];
+  [path lineToPoint: NSMakePoint (NSMinX (icon) + 14.5, NSMinY (icon) + 14.5)];
+  [path setLineWidth: 1.5];
   [path setLineCapStyle: NSRoundLineCapStyle];
   [path setLineJoinStyle: NSRoundLineJoinStyle];
   [color set];
   [path stroke];
 }
 
+/* libadwaita's edit-clear-symbolic in a 16px square: a backspace key
+   pointing left, 16x12, filled, with an x cut out of its body (#59). The
+   cut is a cross outline appended to the key's outline and filled
+   even-odd, so whatever is behind shows through it. */
 static void
 GnomeThemeDrawCancelGlyph(NSRect rect, NSColor *fillColor, NSColor *markColor)
 {
-  NSRect circleRect = GnomeThemeCenteredRect (rect, 14.0, 14.0);
-  NSBezierPath *circle = [NSBezierPath bezierPathWithOvalInRect: circleRect];
-  NSBezierPath *mark = [NSBezierPath bezierPath];
-  CGFloat inset = 4.4;
+  NSRect icon = GnomeThemeCenteredRect (rect, 16.0, 16.0);
+  CGFloat left = floor (NSMinX (icon)), top = floor (NSMinY (icon)) + 2.0;
+  NSBezierPath *path = [NSBezierPath bezierPath];
+  NSPoint centre = NSMakePoint (left + 10.0, top + 6.0);
+  /* The x: a plus outline (arms 1.75px wide, 6.5px across) turned 45 degrees. */
+  CGFloat h = 0.875, l = 3.25;
+  CGFloat plus[12][2] = { { h, l }, { h, h }, { l, h }, { l, -h }, { h, -h }, { h, -l },
+                          { -h, -l }, { -h, -h }, { -l, -h }, { -l, h }, { -h, h }, { -h, l } };
+  int i;
 
+  (void)markColor;
+  [path moveToPoint: NSMakePoint (left, top + 6.0)];
+  [path lineToPoint: NSMakePoint (left + 4.5, top)];
+  [path lineToPoint: NSMakePoint (left + 16.0, top)];
+  [path lineToPoint: NSMakePoint (left + 16.0, top + 12.0)];
+  [path lineToPoint: NSMakePoint (left + 4.5, top + 12.0)];
+  [path closePath];
+  for (i = 0; i < 12; i++)
+    {
+      NSPoint p = NSMakePoint (centre.x + (plus[i][0] - plus[i][1]) * M_SQRT1_2,
+                               centre.y + (plus[i][0] + plus[i][1]) * M_SQRT1_2);
+
+      if (i == 0)
+        {
+          [path moveToPoint: p];
+        }
+      else
+        {
+          [path lineToPoint: p];
+        }
+    }
+  [path closePath];
+  [path setWindingRule: NSEvenOddWindingRule];
   [fillColor set];
-  [circle fill];
-
-  [mark moveToPoint: NSMakePoint (NSMinX (circleRect) + inset, NSMinY (circleRect) + inset)];
-  [mark lineToPoint: NSMakePoint (NSMaxX (circleRect) - inset, NSMaxY (circleRect) - inset)];
-  [mark moveToPoint: NSMakePoint (NSMinX (circleRect) + inset, NSMaxY (circleRect) - inset)];
-  [mark lineToPoint: NSMakePoint (NSMaxX (circleRect) - inset, NSMinY (circleRect) + inset)];
-  [mark setLineWidth: 1.6];
-  [mark setLineCapStyle: NSRoundLineCapStyle];
-  [mark setLineJoinStyle: NSRoundLineJoinStyle];
-  [markColor set];
-  [mark stroke];
+  [path fill];
 }
 
 static NSString *
@@ -999,12 +1016,13 @@ GnomeThemeSegmentIndexAtPoint(NSSegmentedCell *cell,
   return NSNotFound;
 }
 
+/* libadwaita's list-remove/add-symbolic: 10px across, 2px strokes (#59).
+   On a pixel boundary, so the 2px strokes stay sharp. */
 static void
 GnomeThemeDrawStepperGlyph(NSRect rect, BOOL increment, NSColor *color)
 {
-  CGFloat span = floor (MIN (rect.size.width, rect.size.height) * 0.28);
-  /* On a pixel's centre, so the strokes stay sharp. */
-  NSPoint center = NSMakePoint (floor (NSMidX (rect)) + 0.5, floor (NSMidY (rect)) + 0.5);
+  CGFloat span = 5.0;
+  NSPoint center = NSMakePoint (floor (NSMidX (rect)), floor (NSMidY (rect)));
   NSBezierPath *path = [NSBezierPath bezierPath];
 
   [path moveToPoint: NSMakePoint (center.x - span, center.y)];
@@ -1016,8 +1034,8 @@ GnomeThemeDrawStepperGlyph(NSRect rect, BOOL increment, NSColor *color)
       [path lineToPoint: NSMakePoint (center.x, center.y + span)];
     }
 
-  [path setLineWidth: 1.5];
-  [path setLineCapStyle: NSRoundLineCapStyle];
+  [path setLineWidth: 2.0];
+  [path setLineCapStyle: NSButtLineCapStyle];
   [color set];
   [path stroke];
 }
@@ -2279,7 +2297,9 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   NSSliderCell *sliderCell = (NSSliderCell *)cell;
   BOOL horizontal = (rect.size.width >= rect.size.height);
-  CGFloat thickness = 6.0;
+  /* libadwaita's trough: 4px, the text colour at 15% over the window
+     background (#dddddd light, #434346 dark) (#56). */
+  CGFloat thickness = 4.0;
   CGFloat margin = 11.0;
   CGFloat fraction = 0.0;
   NSRect trackRect = rect;
@@ -2354,6 +2374,11 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
+/* libadwaita's slider knob: 20px, light in both styles (sliderKnobColor),
+   with a faint outline and a soft shadow below it (measured from
+   libadwaita 1.7: about 10% black round the edge, 20% just under it,
+   fading over 3px). A knob in textBackgroundColor vanished on the dark
+   palette's trough (#56). */
 - (void) drawKnobInCell: (NSCell *)cell
 {
   NSSliderCell *sliderCell = (NSSliderCell *)cell;
@@ -2361,18 +2386,17 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSRect knobRect = [sliderCell knobRectFlipped: [controlView isFlipped]];
   BOOL enabled = [cell isEnabled];
   BOOL focused = GnomeThemeViewShowsFocusRing (controlView) && enabled;
-  NSColor *fillColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                         @"textBackgroundColor",
-                                                         [NSColor textBackgroundColor]),
-                                        [NSColor controlBackgroundColor],
-                                        0.1);
-  NSColor *strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                           @"controlShadowColor",
-                                                           [NSColor controlShadowColor]),
-                                          fillColor,
-                                          0.24);
-  CGFloat knobSize = 16.0;
+  /* Not a system colour: the palette's own key (-colorNamed:state: reads
+     GSTheme's extra colours, not the palette). */
+  NSColor *fillColor = [[self colors] colorWithKey: @"sliderKnobColor"];
+  NSColor *black = [NSColor blackColor];
+  CGFloat knobSize = 20.0;
+  CGFloat down = [controlView isFlipped] ? 1.0 : -1.0;
 
+  if (fillColor == nil)
+    {
+      fillColor = [NSColor whiteColor];
+    }
   knobRect = GnomeThemeCenteredRect (knobRect, knobSize, knobSize);
   if (controlView != nil)
     {
@@ -2381,31 +2405,90 @@ GnomeThemeDrawTabLabel(NSString *label,
 
   if (enabled == NO)
     {
-      fillColor = GnomeThemeBlend (fillColor, [NSColor controlBackgroundColor], 0.35);
-      strokeColor = GnomeThemeBlend (strokeColor, [NSColor controlBackgroundColor], 0.35);
+      fillColor = GnomeThemeBlend (fillColor,
+                                   GnomeThemeColor (self, @"windowBackgroundColor",
+                                                    [NSColor windowBackgroundColor]),
+                                   0.5);
     }
+
+  /* The shadow below the knob: two wider, fainter discs. */
+  [[black colorWithAlphaComponent: 0.06] set];
+  [[NSBezierPath bezierPathWithOvalInRect:
+     NSOffsetRect (NSInsetRect (knobRect, -1.5, -1.5), 0.0, 1.5 * down)] fill];
+  [[black colorWithAlphaComponent: 0.1] set];
+  [[NSBezierPath bezierPathWithOvalInRect:
+     NSOffsetRect (NSInsetRect (knobRect, -0.5, -0.5), 0.0, 1.0 * down)] fill];
 
   if (focused)
     {
-      strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                      @"highlightColor",
-                                                      [NSColor highlightColor]),
-                                     strokeColor,
-                                     0.35);
+      GnomeThemeDrawFocusRing (self, NSInsetRect (knobRect, -2.0, -2.0), knobSize / 2.0 + 2.0);
     }
 
   GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (knobRect, 0.5, 0.5),
                                       knobSize / 2.0,
                                       fillColor,
-                                      strokeColor,
-                                      focused ? 1.4 : 1.0);
+                                      [black colorWithAlphaComponent: 0.1],
+                                      1.0);
+}
+
+BOOL
+GnomeThemeScrollViewHasFrame(NSScrollView *scrollView)
+{
+  return [scrollView borderType] != NSNoBorder
+    && [[scrollView documentView] isKindOfClass: [NSTableView class]] == NO;
+}
+
+/* libadwaita's frame round a text view or other scrolled content: a 1px
+   border, the text colour at 15% over the view's background (40% in high
+   contrast, as measured), with 8px corners; GNUstep's bezel (two dark lines top and
+   left, square corners) looked like a sunken Windows 9x field (#58). The
+   scroll view draws before its content, so the corners can't clip it:
+   the radius is at most what keeps the content's square corners inside
+   the border, from the inset the content and scrollers actually have
+   (4px with overlay scrollers, see -tile; GNUstep's 2px otherwise). */
+static void
+GnomeThemeDrawScrollViewFrame(GnomeTheme *theme, NSScrollView *scrollView)
+{
+  NSRect bounds = [scrollView bounds];
+  NSRect used = [[scrollView contentView] frame];
+  NSArray *subviews = [scrollView subviews];
+  NSEnumerator *enumerator = [subviews objectEnumerator];
+  NSView *subview;
+  id document = [scrollView documentView];
+  NSColor *text = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
+  NSColor *fill = GnomeThemeColor (theme, @"textBackgroundColor", [NSColor textBackgroundColor]);
+  NSColor *border;
+  CGFloat inset, radius;
+
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if ([subview isKindOfClass: [NSScroller class]] && [subview isHidden] == NO)
+        {
+          used = NSUnionRect (used, [subview frame]);
+        }
+    }
+  inset = MIN (MIN (NSMinX (used) - NSMinX (bounds), NSMinY (used) - NSMinY (bounds)),
+               MIN (NSMaxX (bounds) - NSMaxX (used), NSMaxY (bounds) - NSMaxY (used)));
+  /* The largest radius whose 1px border's inner edge passes outside the
+     content's corner, inset px in: (r + 0.5 - inset) * sqrt 2 <= r - 0.5. */
+  radius = floor (((inset - 0.5) * M_SQRT2 - 0.5) / (M_SQRT2 - 1.0));
+  radius = MAX (0.0, MIN (8.0, radius));
+
+  if ([document respondsToSelector: @selector(drawsBackground)]
+      && [document respondsToSelector: @selector(backgroundColor)]
+      && [document drawsBackground] && [document backgroundColor] != nil)
+    {
+      fill = [document backgroundColor];
+    }
+  border = GnomeThemeBlend (fill, text, [[theme settings] highContrastEnabled] ? 0.4 : 0.15);
+  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (bounds, 0.5, 0.5), radius, fill, border, 1.0);
 }
 
 /* Scroll views holding a table or outline view get no bezel and no line
    between the content and the scrollers (see -drawBorderType:frame:view:):
    the space GNUstep leaves for them is filled with the table's background,
-   so the list reads as one plain area. Everything else keeps GNUstep's
-   drawing. */
+   so the list reads as one plain area. Other scroll views with a border
+   get libadwaita's frame; without one, GNUstep's drawing (none). */
 - (void) drawScrollViewRect: (NSRect)rect
                      inView: (NSView *)view
 {
@@ -2419,6 +2502,11 @@ GnomeThemeDrawTabLabel(NSString *label,
       if ([documentView isKindOfClass: [NSTableView class]])
         {
           tableView = documentView;
+        }
+      else if (GnomeThemeScrollViewHasFrame ((NSScrollView *)view))
+        {
+          GnomeThemeDrawScrollViewFrame (self, (NSScrollView *)view);
+          return;
         }
     }
   if (tableView == nil)
@@ -2745,27 +2833,15 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 {
   GnomeTheme *theme = GnomeThemeActiveTheme ();
   NSRect buttonRect = GnomeThemeComboBoxButtonRect (cellFrame);
-  NSColor *buttonFill = GnomeThemeBlend (GnomeThemeColor (theme,
-                                                          @"controlColor",
-                                                          [NSColor controlColor]),
-                                         GnomeThemeColor (theme,
-                                                          @"windowBackgroundColor",
-                                                          [NSColor windowBackgroundColor]),
-                                         0.12);
-  NSColor *separatorColor = GnomeThemeBlend (GnomeThemeColor (theme,
-                                                              @"controlShadowColor",
-                                                              [NSColor controlShadowColor]),
-                                             buttonFill,
-                                             0.8);
-  NSColor *arrowColor = GnomeThemeBlend ([NSColor controlTextColor],
-                                         [NSColor controlBackgroundColor],
-                                         0.16);
+  /* libadwaita's drop-down: the chevron in the text colour, with no
+     divider before it (#59). */
+  NSColor *arrowColor = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
 
   (void)cell;
-  [separatorColor set];
-  [NSBezierPath strokeLineFromPoint: NSMakePoint (NSMinX (buttonRect) + 0.5, NSMinY (buttonRect) + 8.0)
-                            toPoint: NSMakePoint (NSMinX (buttonRect) + 0.5, NSMaxY (buttonRect) - 8.0)];
-
+  if ([cell isEnabled] == NO)
+    {
+      arrowColor = GnomeThemeColor (theme, @"disabledControlTextColor", [NSColor disabledControlTextColor]);
+    }
   GnomeThemeDrawPopupChevron (NSInsetRect (buttonRect, 6.0, 6.0),
                               arrowColor,
                               [controlView isFlipped]);
@@ -3163,10 +3239,12 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
                                                   controlView);
 }
 
+/* libadwaita's search entry: 16px icons 8px in from each end, the text
+   from 32px in (#59). */
 - (NSRect) _overrideNSSearchFieldCellMethod_searchButtonRectForBounds: (NSRect)rect
 {
-  CGFloat iconSize = MIN (22.0, MAX (18.0, floor (rect.size.height * 0.58)));
-  CGFloat leftInset = 9.0;
+  CGFloat iconSize = 16.0;
+  CGFloat leftInset = 8.0;
   NSRect iconRect = NSMakeRect (NSMinX (rect) + leftInset,
                                 NSMidY (rect) - (iconSize / 2.0),
                                 iconSize,
@@ -3177,8 +3255,8 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
 - (NSRect) _overrideNSSearchFieldCellMethod_cancelButtonRectForBounds: (NSRect)rect
 {
-  CGFloat iconSize = MIN (22.0, MAX (18.0, floor (rect.size.height * 0.58)));
-  CGFloat rightInset = 9.0;
+  CGFloat iconSize = 16.0;
+  CGFloat rightInset = 8.0;
   NSRect iconRect = NSMakeRect (NSMaxX (rect) - rightInset - iconSize,
                                 NSMidY (rect) - (iconSize / 2.0),
                                 iconSize,
@@ -3189,8 +3267,9 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
 - (NSRect) _overrideNSSearchFieldCellMethod_searchTextRectForBounds: (NSRect)rect
 {
-  CGFloat leftInset = 38.0;
-  CGFloat rightInset = 36.0;
+  /* The title rect adds 13px: the text starts 32px in, after the icon. */
+  CGFloat leftInset = 19.0;
+  CGFloat rightInset = 19.0;
   NSRect textRect = rect;
 
   textRect.origin.x += leftInset;
@@ -4379,11 +4458,16 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
                                                  enabled ? @"controlTextColor" : @"disabledControlTextColor",
                                                  enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]);
 
-          glyphColor = GnomeThemeBlend (glyphColor,
-                                        GnomeThemeColor (theme,
-                                                         @"controlShadowColor",
-                                                         [NSColor controlShadowColor]),
-                                        cancelButton ? 0.24 : 0.42);
+          /* libadwaita dims an entry's icons: the text colour at 70% over
+             the background (#59); full strength while pressed. */
+          if (([cell isHighlighted] && enabled) == NO)
+            {
+              glyphColor = GnomeThemeBlend (glyphColor,
+                                            GnomeThemeColor (theme,
+                                                             @"windowBackgroundColor",
+                                                             [NSColor windowBackgroundColor]),
+                                            0.3);
+            }
 
           if (searchButton)
             {
@@ -4391,32 +4475,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
             }
           else
             {
-              NSColor *circleFill = GnomeThemeBlend (GnomeThemeColor (theme,
-                                                                      @"controlShadowColor",
-                                                                      [NSColor controlShadowColor]),
-                                                     GnomeThemeColor (theme,
-                                                                      @"windowBackgroundColor",
-                                                                      [NSColor windowBackgroundColor]),
-                                                     0.28);
-
-              if ([cell isHighlighted] && enabled)
-                {
-                  circleFill = GnomeThemeBlend (circleFill, [NSColor blackColor], 0.12);
-                }
-              if (enabled == NO)
-                {
-                  circleFill = GnomeThemeBlend (circleFill,
-                                                GnomeThemeColor (theme,
-                                                                 @"windowBackgroundColor",
-                                                                 [NSColor windowBackgroundColor]),
-                                                0.35);
-                }
-
-              GnomeThemeDrawCancelGlyph (cellFrame,
-                                         circleFill,
-                                         GnomeThemeColor (theme,
-                                                          @"selectedControlTextColor",
-                                                          [NSColor whiteColor]));
+              GnomeThemeDrawCancelGlyph (cellFrame, glyphColor, nil);
             }
           return;
         }

@@ -108,6 +108,9 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
      background. */
   [colors setColor: GnomeThemeColorFromHex (@"#323232") forKey: @"toolTipColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
+  /* libadwaita's slider knob: white over the trough, also in high
+     contrast (#56). */
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"sliderKnobColor"];
 }
 
 static void
@@ -165,6 +168,9 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#585858") forKey: @"quaternaryLabelColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#070707") forKey: @"toolTipColor"];
   [colors setColor: [NSColor whiteColor] forKey: @"toolTipTextColor"];
+  /* libadwaita's dark slider knob, a light grey: the knob stays visible
+     on the dark trough (#56). */
+  [colors setColor: GnomeThemeColorFromHex (@"#d2d2d3") forKey: @"sliderKnobColor"];
 }
 
 /* libadwaita's high contrast keeps the light or dark palette and makes
