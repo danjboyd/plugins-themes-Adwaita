@@ -1,8 +1,8 @@
-From 46dc8b27774b53a45b85dc65cedb7206326686c3 Mon Sep 17 00:00:00 2001
+From fd508976ce0a3dace81dbd9f7542e14b721bdcf9 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:30:32 -0500
-Subject: [PATCH 4/5] x11, cairo: window shadows and rounded corners for
- windows the gui decorates
+Subject: [PATCH] x11, cairo: window shadows and rounded corners for windows
+ the gui decorates
 
 When the gui draws a window's decorations (GSBackHandlesWindowDecorations
 or GSX11HandlesWindowDecorations NO), as a theme drawing GNOME's header
@@ -86,19 +86,23 @@ the argument domain, for the test process only.
   against libs-gui master; with a libs-gui older than 8a092cfa7
   (libs-gui#816), the test process aborts before its first check
   (-[GSCInlineString copy] sent to a deallocated instance: the font
-  roles kept the backend's default font names unretained), which
-  windowtype.m also works around.
+  roles kept the backend's default font names unretained).
 
 Not covered by these tests: the frame being held back while the margin
 settles, the _GTK_EDGE_CONSTRAINTS (tiled) case, and the OpenGL view's
-placement.  Outside libs-back, a GNOME Shell (Mutter 48, X11) on a
-private Xvfb was run against this series by the Adwaita theme's own
-check (make check-mutter-shadow in plugins-themes-Adwaita), which passed:
-among its 16 checks, one resize reaches the gui on a maximize and two on
-the restore, the margin is gone while maximized and back after, and a
-press 12 pixels outside the window resizes it while one 13 pixels out
-reaches the window behind.  The same checks under KWin 6.3.6, Xfwm4 4.20.0
-and Openbox 3.6.1 with picom 12.5 (make check-wms) passed too.
+placement.
+
+Outside libs-back, the Adwaita theme's own check under GNOME Shell 48.7
+(X11, on a private Xvfb; make check-mutter-shadow in
+plugins-themes-Adwaita) was run against libs-back master with this
+change and the previous one, and libs-gui master with its theme-defaults
+patch.  18 of its 19 checks pass, among them: one resize reaches the gui
+on a maximize and two on the restore, the margin is gone while maximized
+or tiled and back after, and a press 12 pixels outside the window
+resizes it while one 13 pixels out reaches the window behind.  The 19th
+is a menu's shadow, which the next change adds.  With the rest of the
+series this belongs to, the same checks passed under KWin 6.3.6, Xfwm4
+4.20.0 and Openbox 3.6.1 with picom 12.5 (make check-wms).
 
 AI assistance: this change, its tests and this description were written
 with Claude (Anthropic's Claude Code).
@@ -124,7 +128,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 Tests/x11/shadowmargin.m
 
 diff --git a/ChangeLog b/ChangeLog
-index 562c2cf..4b6d759 100644
+index 505f965..0450d7b 100644
 --- a/ChangeLog
 +++ b/ChangeLog
 @@ -1,3 +1,81 @@
@@ -971,18 +975,18 @@ index c98ecb3..93ac1e8 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 77513be..fcbda5b 100644
+index a442fb1..2e1c6fc 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -468,6 +468,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -455,6 +455,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+                      : (unsigned int) style : (Window) win;
  - (void) _setSupportedWMProtocols: (gswindow_device_t *) window;
  - (unsigned long *) _getExtents: (Window)win;
- - (void) _setWindowType: (gswindow_device_t *)window;
 +- (BOOL) _checkWMSupports: (Atom)feature;
  @end
  
  @implementation XGServer (WindowOps)
-@@ -523,7 +524,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -510,7 +511,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	x;
    float	t, b, l, r;
  
@@ -991,7 +995,7 @@ index 77513be..fcbda5b 100644
  
    x.size.width = o.size.width - l - r;
    x.size.height = o.size.height - t - b;
-@@ -567,11 +568,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -554,11 +555,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (NSRect) _XWinRectToOSWinRect: (NSRect)x for: (void*)window
  {
    gswindow_device_t	*win = (gswindow_device_t*)window;
@@ -1004,7 +1008,7 @@ index 77513be..fcbda5b 100644
    o.size.width = x.size.width;
    o.size.height = x.size.height;
    o.origin.x = x.origin.x + l;
-@@ -594,7 +594,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -581,7 +581,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	o;
    float	t, b, l, r;
  
@@ -1013,7 +1017,7 @@ index 77513be..fcbda5b 100644
    o = x;
    o.origin.y = xScreenSize.height - x.origin.y;
    o.origin.y = o.origin.y - x.size.height - b;
-@@ -607,6 +607,56 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -594,6 +594,56 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -1070,7 +1074,7 @@ index 77513be..fcbda5b 100644
  /*
   * A 32-bit visual with an alpha channel, and a colormap for it, for windows
   * that show what is behind them where the gui leaves them transparent.
-@@ -668,14 +718,27 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -655,14 +705,27 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
  
  /*
   * Whether a compositing manager runs on the default screen: it owns the
@@ -1100,7 +1104,7 @@ index 77513be..fcbda5b 100644
  }
  
  /*
-@@ -692,6 +755,58 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -679,6 +742,58 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
      && argb_visual(dpy, defScreen, &visual, &cmap);
  }
  
@@ -1159,7 +1163,7 @@ index 77513be..fcbda5b 100644
  /*
   * A borderless window (menus, tool tips) gets an alpha channel when
   * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-@@ -712,6 +827,163 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -699,6 +814,163 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
    return [self _compositorShowsAlpha];
  }
  
@@ -1323,7 +1327,7 @@ index 77513be..fcbda5b 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2170,6 +2442,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2157,6 +2429,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
@@ -1347,7 +1351,7 @@ index 77513be..fcbda5b 100644
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2196,13 +2485,13 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2183,13 +2472,13 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
  
    window->xwn_attrs.override_redirect = False;
  
@@ -1364,7 +1368,7 @@ index 77513be..fcbda5b 100644
        argb_visual(dpy, defScreen, &visual, &cmap);
        window->depth = 32;
        window->xwn_attrs.colormap = cmap;
-@@ -2244,6 +2533,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2231,6 +2520,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1373,7 +1377,7 @@ index 77513be..fcbda5b 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2988,8 +3279,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2975,8 +3266,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
      }
  #endif
  
@@ -1383,7 +1387,7 @@ index 77513be..fcbda5b 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3641,6 +3931,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3622,6 +3912,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1397,7 +1401,7 @@ index 77513be..fcbda5b 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -4121,8 +4418,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -4066,8 +4363,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  

@@ -14,11 +14,25 @@ gnustep-dev on 2026-07-14).
 send without it, as GNUstep has already accepted his code, and to deal
 with it if a maintainer raises it.
 
-**Patch 2 on its own:** sent as its own pull request, patch 2 is
-`25affcd` on branch `x11-window-types`, on master `23fbe39`
-(`libs-back-standalone/`; review packet `review/libs-back-0002.md`). It
-corrects two statements that runs disproved on 2026-10-07 (Mutter focus,
-Openbox's types); the series has the same corrections.
+**What would be sent, one pull request each** (in `libs-back-standalone/`
+and the libs-back repository of `~/git/gnustep/libs-back-series`; review
+packets in `review/`, each with the hash to sign off on):
+
+| Patch | Branch | Commit | On | Packet |
+|---|---|---|---|---|
+| libs-back 2 | `x11-window-types` | `25affcd` | master `23fbe39` | `review/libs-back-0002.md` |
+| libs-back 3 | `x11-borderless-alpha` | `b94dc1b` | master `23fbe39` | `review/libs-back-0003.md` |
+| libs-back 4 | `x11-window-shadows` | `fd50897` | patch 3 | `review/libs-back-0004.md` |
+| libs-back 5 | `x11-popover-shadows` | `0c7dc1f` | patch 4 | `review/libs-back-0005.md` |
+| libs-gui 1 | `ai-policy/theme-backend-defaults` | `bd5a983` | master `549f639` (current) | `review/libs-gui-0001.md` |
+
+2 and 3 stand alone; 4 can only be sent once 3 is merged, and 5 once 4
+is. Each differs from its series commit only by what isn't under it (the
+ChangeLog entries of the patches before it, and patch 2's method
+declaration next to patch 4's) and by corrections that runs disproved:
+patch 2's Mutter and Openbox statements, and patch 4's note on which
+libs-gui aborts its drawing test and on the GNOME Shell check (see each
+packet).
 
 ## The series
 
@@ -64,6 +78,10 @@ corrections (its code comment, ChangeLog and message on Openbox's types,
 and the message's Mutter sentence), so the series is now `dbfbe53` (1,
 unchanged), `7ac2405`, `8589356`, `129aefc` and `9160d53`. Patches 3–5
 differ from the previous ones only by those lines, carried forward.
+Later the same day patch 4's message got the standalone version's
+correction on which libs-gui aborts `shadowdrawing.m` (a libs-gui older
+than `8a092cfa7`, not 0.32): the series is now `dbfbe53`, `7ac2405`,
+`8589356`, `46dc8b2` and `fd6e241`, with the same trees as before.
 
 **libs-gui** (`libs-gui/`), against master `549f63913`, branch
 `ai-policy/theme-backend-defaults` in `~/git/gnustep/libs-gui-series`:
@@ -72,9 +90,11 @@ differ from the previous ones only by those lines, carried forward.
 |---|---|---|---|
 | 1 | Let a theme turn GNUstep-drawn window decorations on | `Tests/gui/GSTheme/backendDefaults.m` | doesn't run / 11 pass |
 
-The whole libs-gui suite: 4800 passed against 4789 on master, and the
-same 33 failed tests, 5 failed builds and 2 aborted files on both: they
-are in master already, and the patch adds none.
+The whole libs-gui suite (2026-10-07): 4829 passed against 4819 on
+master, and the same 33 failed tests, 2 aborted files and 1 dashed hope
+on both: they are in master already, and the patch adds none (one
+NSDataLink pasteboard check failed only while both suites ran at once;
+run alone it passes on both).
 
 ## How the series meets the policy
 
@@ -152,7 +172,8 @@ a config file others can write (it says so on stderr, which
 `gnustep-tests` hides) and the tests then load the installed backend.
 `LD_DEBUG=files` on a test binary shows which bundle it loaded.
 
-- `x11/shadowdrawing.m` was run against libs-gui master. With libs-gui
-  0.32 the process aborts in the gui before the first check
-  (`-[GSCInlineString copy]` sent to a deallocated instance while the
-  window is made), as `x11/windowtype.m`'s comment describes.
+- `x11/shadowdrawing.m` was run against libs-gui master. With a libs-gui
+  older than `8a092cfa7` (libs-gui#816) the process aborts before the
+  first check (`-[GSCInlineString copy]` sent to a deallocated instance),
+  and so does `cairo/pdfps.m`: the font roles kept the backend's default
+  font names unretained (`Docs/upstream-issues/12-…`).

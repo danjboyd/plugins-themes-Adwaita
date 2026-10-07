@@ -1,7 +1,7 @@
-From fd6e241d822c0fa7906c65c62575d65af19cf6e3 Mon Sep 17 00:00:00 2001
+From 0c7dc1f0fc0bbdb53d029c8927c6201a227481fb Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:33:53 -0500
-Subject: [PATCH 5/5] x11, cairo: popover shadows for menus, when a theme asks
+Subject: [PATCH] x11, cairo: popover shadows for menus, when a theme asks
 
 GNOME's menus are popovers: rounded, with a soft shadow of their own,
 fainter and shorter than a window's.  A theme that draws GNUstep's menus
@@ -51,7 +51,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  6 files changed, 216 insertions(+), 14 deletions(-)
 
 diff --git a/ChangeLog b/ChangeLog
-index 4b6d759..a875239 100644
+index 0450d7b..0638a62 100644
 --- a/ChangeLog
 +++ b/ChangeLog
 @@ -1,3 +1,28 @@
@@ -207,10 +207,10 @@ index e334283..71b82dc 100644
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index fcbda5b..4f3277e 100644
+index 2e1c6fc..f152119 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -633,6 +633,17 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -620,6 +620,17 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
   */
  static const int shadowMargin[4] = { 30, 30, 24, 36 };
  
@@ -228,7 +228,7 @@ index fcbda5b..4f3277e 100644
  /* How far outside the visible edge a resizable window takes presses, for
   * resizing from the shadow (GTK 4 under Mutter: 12 pixels).
   */
-@@ -807,6 +818,34 @@ static int compositorRunning = -1;
+@@ -794,6 +805,34 @@ static int compositorRunning = -1;
    return [self _compositorShowsAlpha];
  }
  
@@ -263,7 +263,7 @@ index fcbda5b..4f3277e 100644
  /*
   * A borderless window (menus, tool tips) gets an alpha channel when
   * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-@@ -886,7 +925,7 @@ static int compositorRunning = -1;
+@@ -873,7 +912,7 @@ static int compositorRunning = -1;
      }
    for (i = 0; i < 4; i++)
      {
@@ -272,7 +272,7 @@ index fcbda5b..4f3277e 100644
  
        if (win->shadow[i] != wanted)
  	{
-@@ -2443,21 +2482,24 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2430,21 +2469,24 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
    /* A non-retained window has no backing store to keep its shadow in. */
