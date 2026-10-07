@@ -62,6 +62,17 @@
 # started again: the window drops its margin without one and gets it back.
 # (plugins-themes-Adwaita#14)
 #
+# Under each window manager, also: half-screen tiling (Super+Left, or a
+# drag to the edge under KWin; Openbox has none) fills the left half of
+# the work area, with no margin where the window manager announces the
+# tiling (_GTK_EDGE_CONSTRAINTS: Mutter) and with it otherwise, and
+# untiling gives the size back; and the window menu, opened by a
+# right-click on the bar (the window manager's, or the theme's own under
+# Openbox), maximises the window from its Maximize. The screen is
+# 1600x1000, so that ThemeDemo (762pt wide at least) fits half of it.
+#
+# MUTTER_CHECK_DISPLAYS="first last" sets the X displays tried (120 150).
+#
 # ThemeDemo runs with its menu bar (-GnomeThemeMenuStyle menubar), whatever
 # the user's own defaults say: the checks press its titles.
 #
@@ -150,11 +161,13 @@ if [ "$BUILD" = YES ]; then
     || { echo "build failed" >&2; exit 1; }
 fi
 
-for n in $(seq 120 150); do
+# MUTTER_CHECK_DISPLAYS ("first last") sets the displays to try.
+read -r FIRST_DISPLAY LAST_DISPLAY <<<"${MUTTER_CHECK_DISPLAYS:-120 150}"
+for n in $(seq "$FIRST_DISPLAY" "$LAST_DISPLAY"); do
   [ ! -e "/tmp/.X11-unix/X$n" ] && [ ! -e "/tmp/.X$n-lock" ] && break
 done
 export DISPLAY=":$n"
-Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp +extension GLX +extension RANDR >/dev/null 2>&1 &
+Xvfb "$DISPLAY" -screen 0 1600x1000x24 -nolisten tcp +extension GLX +extension RANDR >/dev/null 2>&1 &
 PIDS+=($!)
 sleep 1
 
@@ -585,11 +598,151 @@ if [ "$MARGIN" = YES ]; then
   fi
 fi
 
-# A drag on the bar, 350px to the left: Mutter moves the window, past the
-# screen's edge.
+# The work area (x y width height): where the window manager tiles. KWin
+# doesn't publish _NET_WORKAREA; with no panels it is the whole screen.
+workarea() {
+  local area
+  area="$(xprop -root _NET_WORKAREA 2>/dev/null | sed -n 's/.*= //p' | tr -d , | awk 'NF >= 4 {print $1, $2, $3, $4}')"
+  if [ -z "$area" ]; then
+    area="$(xwininfo -root | awk '/Width:/ {w=$2} /Height:/ {h=$2} END {print 0, 0, w, h}')"
+  fi
+  echo "$area"
+}
+
+# Half-screen tiling: Super+Left under Mutter and Xfwm4 (its shortcut set
+# in the session's own xfconf, as Xfce's settings would), a drag of the
+# bar to the screen's left edge under KWin (its quick tiling: its
+# shortcuts need kglobalaccel, which this session doesn't run). Tiled,
+# the visible window fills the left half of the work area. Mutter
+# announces the tiling (_GTK_EDGE_CONSTRAINTS), and the window then has
+# no margin and square corners, as when maximised; KWin and Xfwm4 don't,
+# so the margin stays and the window manager places the visible part by
+# it (_GTK_FRAME_EXTENTS). Untiled, the window gets its size back (and,
+# from the keyboard, its place). Openbox has no tiling.
+# (plugins-themes-Adwaita#14)
+tile() { # left|untile
+  case "$WM" in
+    mutter|xfwm4) xdotool key super+Left; sleep 2 ;;
+    kwin)
+      read -r PX PY <<<"$(bar_point)"
+      xdotool mousemove "$PX" "$PY"; sleep 0.3; xdotool mousedown 1; sleep 0.3
+      if [ "$1" = left ]; then
+        for i in $(seq 1 20); do xdotool mousemove $((PX - PX * i / 20)) $((PY + (500 - PY) * i / 20)); sleep 0.03; done
+        xdotool mousemove 0 500; sleep 1
+      else
+        for _ in $(seq 1 20); do xdotool mousemove_relative -- 15 10; sleep 0.03; done
+        sleep 0.5
+      fi
+      xdotool mouseup 1; sleep 2 ;;
+  esac
+}
+if [ "$WM" = openbox ]; then
+  report SKIP "$NAME-tile" "Openbox has no tiling"
+else
+  if [ "$WM" = xfwm4 ]; then
+    XFWM_PID="$(session_pids | while read -r p; do
+      tr '\0' '\n' <"/proc/$p/cmdline" 2>/dev/null | head -1 | grep -qE '(^|/)xfwm4$' && echo "$p"; done | head -1)"
+    DBUS_SESSION_BUS_ADDRESS="$(tr '\0' '\n' <"/proc/$XFWM_PID/environ" 2>/dev/null | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')" \
+      xfconf-query -c xfce4-keyboard-shortcuts -p '/xfwm4/custom/<Super>Left' -n -t string -s tile_left_key
+    sleep 1
+  fi
+  UNTILED="$(visible)"
+  UNTILED_EXTENTS="$(extents)"
+  read -r WX WY WW WH <<<"$(workarea)"
+  tile left
+  TILED="$(visible)"
+  TILED_EXTENTS="$(extents)"
+  read -r VX VY VW VH <<<"$TILED"
+  CORNER="$(pixel "$VX" "$VY")"
+  DETAIL="$UNTILED -> $TILED (left half of the work area: $WX $WY $((WW / 2)) $WH), frame extents $TILED_EXTENTS, top left corner r+g+b $CORNER"
+  if xprop -root _NET_SUPPORTED | grep -q _GTK_EDGE_CONSTRAINTS; then
+    WANT_EXTENTS="0 0 0 0"
+  else
+    WANT_EXTENTS="$UNTILED_EXTENTS"
+  fi
+  if [ "$TILED" = "$WX $WY $((WW / 2)) $WH" ] && [ "$TILED_EXTENTS" = "$WANT_EXTENTS" ] \
+    && { [ "$MARGIN" = NO ] || [ "$WANT_EXTENTS" != "0 0 0 0" ] || [ "$CORNER" -ge 700 ]; }; then
+    report PASS "$NAME-tile" "$DETAIL"
+  else
+    report FAIL "$NAME-tile" "$DETAIL (want frame extents $WANT_EXTENTS)"
+  fi
+
+  tile untile
+  AGAIN="$(visible)"
+  AGAIN_EXTENTS="$(extents)"
+  DETAIL="$TILED -> $AGAIN (was $UNTILED), frame extents $AGAIN_EXTENTS"
+  # KWin's untiling is a drag: the window moves with it.
+  if [ "$WM" = kwin ]; then
+    SAME="$([ "$(echo "$AGAIN" | cut -d' ' -f3-)" = "$(echo "$UNTILED" | cut -d' ' -f3-)" ] && echo YES)"
+  else
+    SAME="$([ "$AGAIN" = "$UNTILED" ] && echo YES)"
+  fi
+  if [ "$SAME" = YES ] && [ "$AGAIN_EXTENTS" = "$UNTILED_EXTENTS" ]; then
+    report PASS "$NAME-untile" "$DETAIL"
+  else
+    report FAIL "$NAME-untile" "$DETAIL"
+  fi
+fi
+
+# The window menu: a right-click on the bar opens the window manager's
+# (_GTK_SHOW_WINDOW_MENU: Mutter, KWin, Xfwm4), or the theme's own where
+# the window manager has none to show (Openbox). Its Maximize maximises
+# the window; a double-click on the bar restores it. The menus differ:
+# where Maximize is, from the pointer, comes from screenshots of each.
+# (plugins-themes-Adwaita#14)
+read -r VX VY VW VH <<<"$(visible)"
+xdotool mousemove $((VX + VW - 40)) $((VY + VH - 40)) click 1
+sleep 0.5
+read -r PX PY <<<"$(bar_point)"
+xdotool mousemove "$PX" "$PY"; sleep 0.5
+import -window root -crop 160x120+$((PX + 10))+$((PY + 5)) "$WORK/menu-before.png" 2>/dev/null
+BEFORE_MENU="$(geometry)"
+xdotool click 3
+sleep 1.5
+import -window root -crop 160x120+$((PX + 10))+$((PY + 5)) "$WORK/menu-after.png" 2>/dev/null
+CHANGED="$(compare -metric AE -fuzz 5% "$WORK/menu-before.png" "$WORK/menu-after.png" null: 2>&1 | cut -d' ' -f1)"
+if xprop -root _NET_SUPPORTED | grep -q _GTK_SHOW_WINDOW_MENU; then
+  WHOSE="$WM's"
+else
+  WHOSE="the theme's"
+fi
+case "$WM" in
+  mutter) MAXIMIZE_AT="66 106" ;;
+  xfwm4) MAXIMIZE_AT="58 17" ;;
+  openbox) MAXIMIZE_AT="59 53" ;;
+esac
+if [ "$WM" = kwin ]; then
+  # A click from xdotool on KWin's menu item does nothing here (the menu
+  # stays open); its mnemonic does: Ma&ximize.
+  xdotool key x
+else
+  read -r MDX MDY <<<"$MAXIMIZE_AT"
+  xdotool mousemove $((PX + MDX)) $((PY + MDY)); sleep 0.5; xdotool click 1
+fi
+sleep 1.5
+STATE="$(xprop -id "$WINDOW" _NET_WM_STATE)"
+MENU_MAXIMISED="$(geometry)"
+DETAIL="$WHOSE menu: ${CHANGED:-?} of 19200 pixels changed by it; Maximize: $BEFORE_MENU -> $MENU_MAXIMISED"
+if [ "${CHANGED:-0}" -ge 2000 ] 2>/dev/null && echo "$STATE" | grep -q MAXIMIZED_VERT && echo "$STATE" | grep -q MAXIMIZED_HORZ; then
+  report PASS "$NAME-window-menu" "$DETAIL"
+else
+  report FAIL "$NAME-window-menu" "$DETAIL; $STATE"
+fi
+if echo "$STATE" | grep -q MAXIMIZED; then
+  read -r PX PY <<<"$(bar_point)"
+  xdotool mousemove "$PX" "$PY" click --repeat 2 --delay 120 1
+  sleep 1.5
+else
+  xdotool key Escape; sleep 0.5
+fi
+AFTER="$(geometry)"
+
+# A drag on the bar to near the screen's left edge: Mutter moves the
+# window, past the edge.
 read -r VX VY VW VH <<<"$(visible)"
 xdotool mousemove "$((VX + 130))" "$((VY + 20))"; sleep 0.3; xdotool mousedown 1; sleep 0.2
-for _ in $(seq 1 35); do xdotool mousemove_relative -- -10 0; sleep 0.02; done
+# To 30px from the screen's edge, however far right the window starts.
+for _ in $(seq 1 $(((VX + 100) / 10))); do xdotool mousemove_relative -- -10 0; sleep 0.02; done
 sleep 0.3; xdotool mouseup 1; sleep 1
 MOVED="$(geometry)"
 read -r VX VY VW VH <<<"$(visible)"
