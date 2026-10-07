@@ -5,7 +5,7 @@
 The README's side-by-side shots. Taken 2026-10-07 (MarkdownViewer and
 ScreenshotTool retaken the same day with the primary menu) on a private Xvfb with
 GNOME Shell 48.7 (X11) as the window manager, never on a real desktop, with
-the installed `+csd` libraries (gui 0.32.0-5+csd2, back 0.32.0-6+csd3), the
+libs-gui and libs-back built with the patches in `Docs/upstream-patches/`, the
 theme built from this repository (0.1.0-alpha5 plus `main`), light style,
 Cantarell 11 and empty GNUstep user defaults, so nothing a user set reaches
 either side. Each app ran once per theme, by `-GSTheme GNUstep` or

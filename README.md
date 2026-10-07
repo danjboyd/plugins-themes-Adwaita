@@ -49,8 +49,8 @@ What changes: libadwaita's header bar, with the window's toolbar in it and
 GNOME's window buttons; its buttons, entries, switches, check boxes and
 pop-ups; menus as popovers with the primary ☰ menu; overlay scrollbars;
 GNOME's fonts, dark style and high contrast; GNOME's file chooser for open
-and save panels. All taken on GNOME Shell 48 (X11) with the `+csd`
-libraries below; how each shot was made is in
+and save panels. All taken on GNOME Shell 48 (X11) with libs-gui and
+libs-back built with the patches below; how each shot was made is in
 [`Docs/Screenshots/README.md`](Docs/Screenshots/README.md).
 
 ## Status and requirements
@@ -66,11 +66,10 @@ yet** (see [`Docs/upstream-patches/README.md`](Docs/upstream-patches/README.md))
 - **libs-gui:** letting a theme turn on GNUstep-drawn window decorations,
   which is how the header bar becomes the default.
 
-The `+csd` builds of libs-gui and libs-back in our apt repo carry these
-patches; the theme's package depends on that libs-gui and recommends that
-libs-back. With stock GNUstep 0.32 the theme still works, but the header bar
-has to be turned on by hand ([below](#header-bar)), and windows have square
-corners and no shadow.
+Until they are released, build libs-gui and libs-back with the patches in
+`Docs/upstream-patches/`. With stock GNUstep 0.32 the theme still works, but
+the header bar has to be turned on by hand ([below](#header-bar)), and
+windows, menus and tool tips have square corners and no shadow.
 
 ## Controls reference
 
@@ -325,8 +324,7 @@ libadwaita's high contrast details. Alerts have no bar, as GNOME's.
 The theme asks for this in its `GSThemeDomain`
 (`GSBackHandlesWindowDecorations = NO`). GNUstep's backend reads that
 setting before any theme loads, so it takes a libs-gui that looks it up in
-the theme first: the `+csd` builds in the apt repo, which the theme's
-package depends on, or a libs-gui with the patch in
+the theme first: a libs-gui with the patch in
 `Docs/upstream-patches/libs-gui/`. With a stock libs-gui, turn the header
 bar on yourself:
 
@@ -348,12 +346,10 @@ always wins over the theme's.
 With `GnomeThemeHeaderBarToolbar` (above) the window's toolbar goes in the
 bar's row.
 
-The window's shadow, its rounded corners and resizing from the shadow need
-the `+csd` libs-back (recommended by the theme's package) or the libs-back
-and libs-gui patches in `Docs/upstream-patches/` (see its README and
-`Docs/PROPOSAL_LIBS_BACK_CSD.md`). A stock backend already gives
-windows an alpha channel with the header bar, so under a compositor menus
-and tool tips are rounded and tool tips translucent, as libadwaita's.
+The window's shadow, its rounded corners and resizing from the shadow, and
+rounded, translucent menus and tool tips under a compositor, need a
+libs-back with the patches in `Docs/upstream-patches/` (see its README and
+`Docs/PROPOSAL_LIBS_BACK_CSD.md`).
 
 `make check-mutter` checks the header bar with Mutter as the window manager:
 GNOME Shell on a private Xvfb display, with its own D-Bus session and no
