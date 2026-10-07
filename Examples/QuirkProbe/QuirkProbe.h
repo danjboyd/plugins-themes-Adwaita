@@ -66,6 +66,11 @@
 - (void) checkFileChooser;
 @end
 
+/* -ProbeOnly print-dialog (QuirkProbePrintDialog.m). */
+@interface QuirkProbe (PrintDialog)
+- (void) checkPrintDialog;
+@end
+
 @interface QuirkProbe (MenuTiming)
 - (void) checkMenuTiming;
 @end

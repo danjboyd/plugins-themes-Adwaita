@@ -5440,6 +5440,11 @@ QuirkProbeHex(const NSUInteger rgb[3])
       [self checkFileChooser];
       return;
     }
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"print-dialog"])
+    {
+      [self checkPrintDialog];
+      return;
+    }
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"menu-timing"])
     {
       [self checkMenuTiming];

@@ -62,6 +62,7 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeHeaderBar.m \
 	Source/Adapters/GnomeThemeWindowManager.m \
 	Source/Adapters/GnomeThemeFileChooser.m \
+	Source/Adapters/GnomeThemePrintDialog.m \
 	Source/Rendering/GnomeThemeMenusAndData.m \
 	Source/Rendering/GnomeThemeWindowTypes.m \
 	Source/Rendering/GnomeThemeSymbolicImages.m \
@@ -74,7 +75,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -111,6 +112,11 @@ check-text-scaling:
 # on a private session bus, and GNUstep's panels without one.
 check-file-chooser:
 	bash Tests/Scripts/run-file-chooser-check.sh
+
+# The print panel as GNOME's print dialog, against a stand-in portal on a
+# private session bus, and GNUstep's panel without one.
+check-print-dialog:
+	bash Tests/Scripts/run-print-dialog-check.sh
 
 # The CPU time to fill and size a 1,500-item pop-up menu, against GNUstep's theme
 # in the same process (#46).
