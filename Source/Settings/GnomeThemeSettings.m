@@ -22,6 +22,7 @@
 
 #import <AppKit/AppKit.h>
 #import <gio/gio.h>
+#include <string.h>
 
 static NSString *GnomeThemeDefaultInterfaceFontName = @"Cantarell";
 static NSString *GnomeThemeDefaultMonospaceFontName = @"Monospace";
@@ -253,6 +254,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   GnomeThemeColorScheme colorScheme = GnomeThemeColorSchemeDefault;
   BOOL highContrast = NO;
   BOOL overlayScrolling = YES;
+  NSInteger fontHintStyle = 2;
   NSString *gtkThemeName = @"Adwaita";
   CGFloat fontScale = GnomeThemeResolvedFontScale ();
 
@@ -284,6 +286,27 @@ GnomeThemeResolveFont(NSString *preferredName,
           if (value != NULL)
             {
               gtkThemeName = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
+
+      if (g_settings_schema_has_key (schema, "font-hinting"))
+        {
+          gchar *value = g_settings_get_string (settings, "font-hinting");
+          if (value != NULL)
+            {
+              if (strcmp (value, "none") == 0)
+                {
+                  fontHintStyle = 1;
+                }
+              else if (strcmp (value, "medium") == 0)
+                {
+                  fontHintStyle = 3;
+                }
+              else if (strcmp (value, "full") == 0)
+                {
+                  fontHintStyle = 4;
+                }
               g_free (value);
             }
         }
@@ -397,6 +420,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   _colorScheme = colorScheme;
   _highContrast = highContrast;
   _overlayScrolling = overlayScrolling;
+  _fontHintStyle = fontHintStyle;
 
   [self reloadWindowManagerPreferences];
 }
@@ -527,6 +551,11 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (BOOL) overlayScrollingEnabled
 {
   return _overlayScrolling;
+}
+
+- (NSInteger) fontHintStyle
+{
+  return _fontHintStyle;
 }
 
 - (NSFont *) interfaceFont
