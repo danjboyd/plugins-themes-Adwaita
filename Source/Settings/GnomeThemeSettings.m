@@ -32,8 +32,11 @@ static CGFloat GnomeThemeDefaultFontScale = (96.0 / 72.0);
 /* GNUstep's default NSFontSize, which Gorm and nib layouts were made at. */
 static CGFloat GnomeThemeCompactInterfaceFontSize = 12.0;
 
+/* Whether the app's metrics are compact, and whether its windows loaded
+   from a nib or Gorm file get compact metrics of their own
+   (*followsWindows). */
 static BOOL
-GnomeThemeWantsCompactMetrics(void)
+GnomeThemeWantsCompactMetrics(BOOL *followsWindows)
 {
   NSDictionary *info = [[NSBundle mainBundle] infoDictionary];
   NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMetrics"];
@@ -41,9 +44,12 @@ GnomeThemeWantsCompactMetrics(void)
   NSEnumerator *enumerator;
   NSString *key;
 
+  *followsWindows = NO;
   /* The user's default, then the app's own choice in its Info.plist (an
      app laid out in Gorm for GNOME's metrics declares "gnome"), then the
-     main nib test. */
+     main nib test. "compact" and "gnome" apply to every window; "auto",
+     like no choice, lets windows from nib or Gorm files keep the metrics
+     they were laid out at. */
   if (choice == nil && [declared isKindOfClass: [NSString class]])
     {
       choice = declared;
@@ -67,6 +73,9 @@ GnomeThemeWantsCompactMetrics(void)
           return YES;
         }
     }
+  /* An app built in code: GNOME's metrics, but the windows it loads from
+     nib or Gorm files (its own, or libs-gui's panels) compact. */
+  *followsWindows = YES;
   return NO;
 }
 
@@ -362,15 +371,14 @@ GnomeThemeResolveFont(NSString *preferredName,
   fontSize *= fontScale;
   monoSize *= fontScale;
 
-  _compactMetrics = GnomeThemeWantsCompactMetrics ();
+  /* GNUstep's size, still following GnomeFontScale. */
+  _compactInterfaceFontSize = GnomeThemeCompactInterfaceFontSize * (fontScale / GnomeThemeDefaultFontScale);
+  _compactMetrics = GnomeThemeWantsCompactMetrics (&_metricsFollowWindows);
   if (_compactMetrics)
     {
-      /* GNUstep's size, still following GnomeFontScale; the monospace font
-         keeps its size relative to the interface font. */
-      CGFloat compact = GnomeThemeCompactInterfaceFontSize * (fontScale / GnomeThemeDefaultFontScale);
-
-      monoSize *= compact / fontSize;
-      fontSize = compact;
+      /* The monospace font keeps its size relative to the interface font. */
+      monoSize *= _compactInterfaceFontSize / fontSize;
+      fontSize = _compactInterfaceFontSize;
     }
 
   /* Current GNOME: an accessibility setting, with the light or dark
@@ -521,6 +529,16 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (BOOL) compactMetrics
 {
   return _compactMetrics;
+}
+
+- (BOOL) metricsFollowWindows
+{
+  return _metricsFollowWindows;
+}
+
+- (CGFloat) compactInterfaceFontSize
+{
+  return _compactInterfaceFontSize;
 }
 
 - (NSString *) monospaceFontName

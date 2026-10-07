@@ -27,7 +27,12 @@
 
 - (void) reloadFromSettings: (GnomeThemeSettings *)settings
 {
-  CGFloat base = [settings interfaceFontSize];
+  [self reloadFromSettings: settings compact: [settings compactMetrics]];
+}
+
+- (void) reloadFromSettings: (GnomeThemeSettings *)settings compact: (BOOL)compact
+{
+  CGFloat base = compact ? [settings compactInterfaceFontSize] : [settings interfaceFontSize];
 
   if (base <= 0.0)
     {
@@ -50,7 +55,7 @@
   _tableRowHeight = ceil (MAX (34.0, base + 19.0));
   _indicatorMinimumSize = 18.0;
   _emphasizesButtonTitles = YES;
-  _compact = [settings compactMetrics];
+  _compact = compact;
 
   /* Compact metrics fit layouts made at GNUstep's: no minimum tab height
      (GSTheme's own), GNUstep's button margins, regular-weight button titles

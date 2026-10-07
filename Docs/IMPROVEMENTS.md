@@ -46,6 +46,7 @@ it was found. Compare against the libadwaita reference with
 | Menu bar titles were about 37px apart; GTK's are about 20px | about 22px, so narrow windows (Gorm's document window) fit their menus |
 | GNOME apps have no menu bar | `GnomeThemeMenuStyle = primary` (a user default, or the app's Info.plist) turns it into GNOME's main menu button: at the end of the toolbar when the window shows one (the toolbar is narrowed for it), otherwise alone in a slim bar; it shows a copy of the main menu (the menus, then the application menu's items) right-aligned under the button, rebuilt each time it opens |
 | An app laid out in Gorm for GNOME's metrics would get compact metrics (it has a main nib) | apps can declare `GnomeThemeMetrics` in their Info.plist; the user's default still wins |
+| Compact metrics were per app: a code-built app's Gorm or nib windows (its own, libs-gui's panels) came out cramped at GNOME's metrics ([#24](https://github.com/danjboyd/plugins-themes-Adwaita/issues/24)) | with no choice made (or `auto`), windows loaded from a nib or Gorm file get compact metrics of their own: their controls' fonts at GNUstep's size, GNUstep's margins, indicators and tab height; the app's other windows, menus and fonts keep GNOME's. `gnome` or `compact` still applies to every window, so a code-built app whose Gorm files were made for GNOME's metrics (with `Palettes/Adwaita`) declares `gnome` |
 | Gorm's palettes make controls at GNUstep's sizes (22pt buttons) | `Palettes/Adwaita`: a Gorm palette of controls at GNOME's sizes, with fonts left at the system font's default size so they follow the app's metrics (checked: archived at 12pt in a compact process, read back at 14.7pt in a GNOME one) |
 | The header bar was drawn at 1× with a scale factor (`GSScaleFactor 2`: a 23pt bar), and the content sat 1pt off (gap at the left and bottom) | offsets and the minimum width are in device pixels, scaled by the factor; `-[GSWindowDecorationView layout]` places the content from an origin `+contentRectForFrameRect:styleMask:` leaves unscaled (a GNUstep bug that also shifts its own title bar), which the header bar corrects |
 | In Arabic, Hebrew and other right-to-left languages the header bar kept its left-to-right order | mirrored as GTK mirrors it (checked against a GTK render): button-layout's start at the right, close outermost at the left, ☰ to the right of the buttons; the direction comes from the first preferred language (`NSForceRightToLeftWritingDirection` forces it) |
@@ -112,9 +113,6 @@ spacing) are in the Fixed table. Still different from GNOME:
 Found putting Gorm through its paces (its palettes, inspectors and document
 window, compared with the GNUstep theme). Still open:
 
-- **Compact metrics are per app.** ([#24](https://github.com/danjboyd/plugins-themes-Adwaita/issues/24)) A code-built app that also loads Gorm
-  or nib windows gets GNOME's metrics for all of them; it can set
-  `GnomeThemeMetrics` to `compact`.
 - **Menu bars in very narrow windows** ([#25](https://github.com/danjboyd/plugins-themes-Adwaita/issues/25)) can still run past the edge; ☰ stays
   first so the application menu is always reachable.
 - **Designing for GNOME's metrics in Gorm** ([#26](https://github.com/danjboyd/plugins-themes-Adwaita/issues/26)) means running Gorm with

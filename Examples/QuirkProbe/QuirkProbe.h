@@ -74,6 +74,11 @@
 - (void) checkScrollerDrag;
 @end
 
+/* -ProbeOnly nib-metrics, and in the full run (QuirkProbeNibMetrics.m). */
+@interface QuirkProbe (NibMetrics)
+- (void) checkNibMetrics;
+@end
+
 @interface QuirkProbe (ContextMenu)
 - (void) checkContextMenu;
 - (void) showContextMenuDemo;

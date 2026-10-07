@@ -1605,7 +1605,7 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   /* Set directly: -setRowHeight: tiles, and the table isn't built yet. */
   if (theme != nil && rowHeight != NULL && spacing != NULL)
     {
-      *(CGFloat *)((char *)self + ivar_getOffset (rowHeight)) = [[theme metrics] tableRowHeight];
+      *(CGFloat *)((char *)self + ivar_getOffset (rowHeight)) = [[theme metricsForView: (NSView *)self] tableRowHeight];
       *(NSSize *)((char *)self + ivar_getOffset (spacing)) = NSMakeSize (0.0, 0.0);
     }
 }

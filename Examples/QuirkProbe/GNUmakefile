@@ -35,7 +35,8 @@ QuirkProbe_OBJC_FILES = \
 	QuirkProbeFileChooser.m \
 	QuirkProbeMenuTiming.m \
 	QuirkProbeScrollerDrag.m \
-	QuirkProbeContextMenu.m
+	QuirkProbeContextMenu.m \
+	QuirkProbeNibMetrics.m
 
 QuirkProbe_HEADER_FILES = \
 	QuirkProbe.h

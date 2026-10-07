@@ -65,7 +65,8 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeMenusAndData.m \
 	Source/Rendering/GnomeThemeWindowTypes.m \
 	Source/Rendering/GnomeThemeSymbolicImages.m \
-	Source/Rendering/GnomeThemeOverlayScrollers.m
+	Source/Rendering/GnomeThemeOverlayScrollers.m \
+	Source/Rendering/GnomeThemeNibMetrics.m
 
 -include GNUmakefile.preamble
 
@@ -73,7 +74,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-nib-metrics check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -92,6 +93,13 @@ check-quirks:
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# Metrics per window (#24): check-quirks checks a window loaded from a Gorm
+# file with no choice made; these give every window GNOME's metrics, then
+# compact ones.
+check-nib-metrics:
+	QUIRK_PROBE_ARGS="-GnomeThemeMetrics gnome -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-GnomeThemeMetrics compact -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # Open and save panels as GNOME's file chooser, against a stand-in portal
 # on a private session bus, and GNUstep's panels without one.
