@@ -554,9 +554,11 @@ GnomeThemeResolveEntryColors(GnomeTheme *theme,
   NSColor *shadowColor = GnomeThemeColor (theme,
                                           @"controlShadowColor",
                                           [NSColor controlShadowColor]);
+  /* The focused entry's ring is the accent as text (libadwaita's
+     accent_color), not the fills' accent. */
   NSColor *accentColor = GnomeThemeColor (theme,
-                                          @"selectedControlColor",
-                                          [NSColor selectedControlColor]);
+                                          @"highlightColor",
+                                          [NSColor highlightColor]);
   /* libadwaita's entries are its buttons' colour, half opacity disabled. */
   NSColor *fillColor = GnomeThemePaletteColor (theme, @"GnomeThemeButtonColor",
                                                GnomeThemeBlend (controlFill, windowFill, 0.10));
@@ -2353,8 +2355,8 @@ GnomeThemeDrawTabLabel(NSString *label,
   if (focused)
     {
       strokeColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                      @"selectedControlColor",
-                                                      [NSColor selectedControlColor]),
+                                                      @"highlightColor",
+                                                      [NSColor highlightColor]),
                                      strokeColor,
                                      0.35);
     }

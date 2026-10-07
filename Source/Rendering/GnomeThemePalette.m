@@ -122,8 +122,11 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"controlDarkShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"controlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#9a9a9a") forKey: @"disabledControlTextColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"selectedControlColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#0f1720") forKey: @"selectedControlTextColor"];
+  /* Fills are libadwaita's accent_bg_color with white accent_fg_color, as
+     in the light palette; #78aeed (accent_color) is for accent text, links
+     and focus rings (highlightColor, keyboardFocusIndicatorColor). */
+  [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"selectedControlColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"selectedControlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#4f7cb8") forKey: @"alternateSelectedControlColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"alternateSelectedControlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d4f66") forKey: @"secondarySelectedControlColor"];

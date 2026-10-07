@@ -1930,9 +1930,11 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     }
   else
     {
+      /* The accent as text (accent_color): fills' darker accent would be
+         faint on a dark menu. */
       color = GnomeThemePhase67Color (theme,
-                                      @"selectedControlColor",
-                                      [NSColor selectedControlColor]);
+                                      @"highlightColor",
+                                      [NSColor highlightColor]);
     }
 
   if (state == NSMixedState)

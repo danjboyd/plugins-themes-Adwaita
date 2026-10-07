@@ -4787,14 +4787,19 @@ QuirkProbeHex(const NSUInteger rgb[3])
                          : (highContrast ? @"high contrast" : @"light");
   NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 120) title: @"Probe Control Colours"];
   NSButton *secondary = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 70, 120, 34)]);
+  NSButton *defaultButton = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (170, 70, 120, 34)]);
   NSView *frameView;
   NSBitmapImageRep *rep;
-  NSUInteger windowRGB[3], buttonRGB[3];
+  NSUInteger windowRGB[3], buttonRGB[3], defaultRGB[3], titleRGB[3] = { 0, 0, 0 };
   NSRect inWindow;
   NSString *detail;
+  NSInteger x;
 
   [secondary setTitle: @""];
+  [defaultButton setTitle: @"Default"];
+  [defaultButton setKeyEquivalent: @"\r"];
   [[window contentView] addSubview: secondary];
+  [[window contentView] addSubview: defaultButton];
   [window orderFront: nil];
   [window display];
   frameView = [[window contentView] superview];
@@ -4805,6 +4810,18 @@ QuirkProbeHex(const NSUInteger rgb[3])
                      (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
   QUIRK_PROBE_SAMPLE (secondary, -10, 17, windowRGB);
   QUIRK_PROBE_SAMPLE (secondary, 60, 17, buttonRGB);
+  QUIRK_PROBE_SAMPLE (defaultButton, 8, 17, defaultRGB);
+  /* The title's brightest pixel along the button's middle. */
+  for (x = 20; x < 100; x++)
+    {
+      NSUInteger rgb[3];
+
+      QUIRK_PROBE_SAMPLE (defaultButton, x, 17, rgb);
+      if (rgb[0] + rgb[1] + rgb[2] > titleRGB[0] + titleRGB[1] + titleRGB[2])
+        {
+          titleRGB[0] = rgb[0]; titleRGB[1] = rgb[1]; titleRGB[2] = rgb[2];
+        }
+    }
 #undef QUIRK_PROBE_SAMPLE
   [window orderOut: nil];
 
@@ -4819,6 +4836,20 @@ QuirkProbeHex(const NSUInteger rgb[3])
   else
     {
       [self fail: @"control-colors-window-button" detail: detail];
+    }
+
+  /* The default button is libadwaita's suggested action in every palette:
+     accent_bg_color #3584e4 with a white title (plugins-themes-Adwaita#55). */
+  detail = [NSString stringWithFormat: @"%@: fill %@ (want #3584e4), title's brightest pixel %@ (want white)",
+    style, QuirkProbeHex (defaultRGB), QuirkProbeHex (titleRGB)];
+  if (QuirkProbeNear (defaultRGB, 0x3584e4, 1)
+    && titleRGB[0] >= 240 && titleRGB[1] >= 240 && titleRGB[2] >= 240)
+    {
+      [self pass: @"control-colors-default-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-default-button" detail: detail];
     }
 }
 
