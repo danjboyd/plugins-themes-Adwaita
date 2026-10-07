@@ -1,4 +1,4 @@
-From 4ed1272f7c6d50eb59f727b443dee3dfeba28049 Mon Sep 17 00:00:00 2001
+From 251a97531f77ef9119a5518c412e446fc4bb4524 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:30:32 -0500
 Subject: [PATCH 4/5] x11, cairo: window shadows and rounded corners for
@@ -29,6 +29,15 @@ window maximized, fullscreen or tiled, and while no compositing manager
 runs (XFixes tells when one starts or stops).  Margin, radius and band
 are in points and grow with GSScaleFactor.
 
+The minimum and maximum size hints are for the X window, so they include
+the margin and follow it, as GTK's do.  The window manager fits the X
+window to a new margin keeping the visible part's size, so a margin that
+grows is set before the larger hints, and one that shrinks after the
+smaller ones: otherwise the window manager holds the window, in between,
+at a minimum meant for the other margin.  (With the hints first, KWin 6.3
+restored a maximized window to its minimum size plus the margin, 20
+pixels larger each way than before.)
+
 When the margin changes on a maximize or restore, the window manager
 usually configures the window for the old margin first, so the gui would
 see three resizes for one maximize; the frame is held back until the
@@ -54,14 +63,17 @@ the argument domain, for the test process only.
 - Tests/x11/shadowmargin.m works with the display server alone and
   reads back what the window manager is told: _GTK_FRAME_EXTENTS, the
   depth and size of the X window and its input shape, as exact values.
-  It plays a maximize and a restore by setting _NET_WM_STATE, stops and
-  restarts the compositing manager, sets a program resize, and repeats
-  with GSScaleFactor 2.  Negative cases guard against the margin
+  It plays a maximize and a restore by setting _NET_WM_STATE (and, with
+  a minimum size set, checks that the size hints change before
+  _GTK_FRAME_EXTENTS on the maximize and after it on the restore), stops
+  and restarts the compositing manager, sets a program resize, and
+  repeats with GSScaleFactor 2.  Negative cases guard against the margin
   appearing where it must not: without the default, for a non-retained
   or borderless window, for a window made with no compositing manager,
   and under a window manager without _GTK_FRAME_EXTENTS.  Without this
-  change the 12 positive checks fail and the 5 negative ones pass; with
-  it all 17 pass.
+  change the 14 positive checks fail and the 5 negative ones pass; with
+  it all 19 pass.  With the hints set before the margin, as first
+  written, the restore's order check fails and the other 18 pass.
 - Tests/x11/shadowdrawing.m makes a real NSWindow and reads the alpha of
   its X window's pixels back: the contents opaque, the top corners
   rounded off, about 19% black beside the window fading to nearly
@@ -84,36 +96,37 @@ check (make check-mutter-shadow in plugins-themes-Adwaita), which passed:
 among its 16 checks, one resize reaches the gui on a maximize and two on
 the restore, the margin is gone while maximized and back after, and a
 press 12 pixels outside the window resizes it while one 13 pixels out
-reaches the window behind.
+reaches the window behind.  The same checks under KWin 6.3.6, Xfwm4 4.20.0
+and Openbox 3.6.1 with picom 12.5 (make check-wms) passed too.
 
 AI assistance: this change, its tests and this description were written
 with Claude (Anthropic's Claude Code).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- ChangeLog                            |  75 ++++++
+ ChangeLog                            |  78 ++++++
  Headers/cairo/XGCairoModernSurface.h |   3 +
  Headers/x11/XGGeneric.h              |   7 +-
  Headers/x11/XGServer.h               |   1 +
- Headers/x11/XGServerWindow.h         |  29 +++
- Source/cairo/XGCairoModernSurface.m  | 295 +++++++++++++++++++++-
- Source/x11/XGGLContext.m             |  28 ++-
+ Headers/x11/XGServerWindow.h         |  29 ++
+ Source/cairo/XGCairoModernSurface.m  | 295 ++++++++++++++++++-
+ Source/x11/XGGLContext.m             |  28 +-
  Source/x11/XGServer.m                |  26 ++
- Source/x11/XGServerEvent.m           | 159 +++++++++++-
- Source/x11/XGServerWindow.m          | 312 ++++++++++++++++++++++-
- Tests/x11/FakeCSDWindowManager.h     | 145 +++++++++++
- Tests/x11/shadowdrawing.m            | 229 +++++++++++++++++
- Tests/x11/shadowmargin.m             | 357 +++++++++++++++++++++++++++
- 13 files changed, 1641 insertions(+), 25 deletions(-)
+ Source/x11/XGServerEvent.m           | 159 ++++++++++-
+ Source/x11/XGServerWindow.m          | 322 ++++++++++++++++++++-
+ Tests/x11/FakeCSDWindowManager.h     | 145 ++++++++++
+ Tests/x11/shadowdrawing.m            | 229 +++++++++++++++
+ Tests/x11/shadowmargin.m             | 404 +++++++++++++++++++++++++++
+ 13 files changed, 1701 insertions(+), 25 deletions(-)
  create mode 100644 Tests/x11/FakeCSDWindowManager.h
  create mode 100644 Tests/x11/shadowdrawing.m
  create mode 100644 Tests/x11/shadowmargin.m
 
 diff --git a/ChangeLog b/ChangeLog
-index 9a09d01..82f769c 100644
+index 9a09d01..292ecce 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,78 @@
+@@ -1,3 +1,81 @@
 +2026-10-06 Daniel Boyd <danieljboyd@icloud.com>
 +
 +	Window shadows and rounded corners for windows whose decorations the
@@ -139,7 +152,10 @@ index 9a09d01..82f769c 100644
 +	(-_updateShadowSizeOf:): New.  No margin while the window manager
 +	has the window maximized, fullscreen or tiled (_NET_WM_STATE,
 +	_GTK_EDGE_CONSTRAINTS) or no compositing manager runs; move the
-+	minimum and maximum size hints with the margin.
++	minimum and maximum size hints with the margin.  A margin that grows
++	is set before the larger hints, one that shrinks after the smaller
++	ones, so the window manager, which keeps the visible part's size,
++	never holds the window at the other margin's minimum.
 +	(-_updateShadowOf:): New.  Set _GTK_FRAME_EXTENTS to the margin, and
 +	an input shape of the visible part and, for a resizable window, a
 +	12 pixel band round it, which the gui uses to resize.
@@ -954,7 +970,7 @@ index c98ecb3..93ac1e8 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 12fc835..3a0d8c9 100644
+index 12fc835..7aa84ba 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -468,6 +468,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
@@ -1142,7 +1158,7 @@ index 12fc835..3a0d8c9 100644
  /*
   * A borderless window (menus, tool tips) gets an alpha channel when
   * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-@@ -712,6 +827,153 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -712,6 +827,163 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
    return [self _compositorShowsAlpha];
  }
  
@@ -1226,6 +1242,16 @@ index 12fc835..3a0d8c9 100644
 +     restore a maximized window to the old minimum plus the margin. */
 +  if (changed && (win->siz_hints.flags & (PMinSize | PMaxSize)))
 +    {
++      /* A margin that grows goes to the window manager before the larger
++	 minimum, one that shrinks after the smaller one: the window
++	 manager fits the X window to the margin, keeping the visible
++	 part's size, and in between it would hold the window at the
++	 minimum. (KWin, restoring a window to the visible size it had,
++	 grew it to the larger minimum and then by the margin.) */
++      if (dw > 0 || dh > 0)
++	{
++	  [self _updateShadowOf: win];
++	}
 +      if (win->siz_hints.flags & PMinSize)
 +	{
 +	  win->siz_hints.min_width += dw;
@@ -1296,7 +1322,7 @@ index 12fc835..3a0d8c9 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2170,6 +2432,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2170,6 +2442,23 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
@@ -1320,7 +1346,7 @@ index 12fc835..3a0d8c9 100644
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2196,13 +2475,13 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2196,13 +2485,13 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
  
    window->xwn_attrs.override_redirect = False;
  
@@ -1337,7 +1363,7 @@ index 12fc835..3a0d8c9 100644
        argb_visual(dpy, defScreen, &visual, &cmap);
        window->depth = 32;
        window->xwn_attrs.colormap = cmap;
-@@ -2244,6 +2523,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2244,6 +2533,8 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1346,7 +1372,7 @@ index 12fc835..3a0d8c9 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2988,8 +3269,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
+@@ -2988,8 +3279,7 @@ _wmTestErrorHandler(Display *display, XErrorEvent *event)
      }
  #endif
  
@@ -1356,7 +1382,7 @@ index 12fc835..3a0d8c9 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3641,6 +3921,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3641,6 +3931,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1370,7 +1396,7 @@ index 12fc835..3a0d8c9 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -4120,8 +4407,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -4120,8 +4417,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  
@@ -1768,10 +1794,10 @@ index 0000000..234bf32
 +#endif
 diff --git a/Tests/x11/shadowmargin.m b/Tests/x11/shadowmargin.m
 new file mode 100644
-index 0000000..7b0e122
+index 0000000..8904847
 --- /dev/null
 +++ b/Tests/x11/shadowmargin.m
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,404 @@
 +/* The shadow margin of windows the gui decorates (GSBackWindowShadows):
 + * a transparent margin round the frame with a 32-bit visual,
 + * _GTK_FRAME_EXTENTS telling the window manager where the window is, an
@@ -1917,6 +1943,35 @@ index 0000000..7b0e122
 +  return result;
 +}
 +
++/* Which changed first, the size hints or _GTK_FRAME_EXTENTS, among the
++   PropertyNotify events dpy has had since the last call: "hints",
++   "extents" or "neither". */
++static NSString *
++firstChange(Display *dpy)
++{
++  Atom		extents = XInternAtom(dpy, "_GTK_FRAME_EXTENTS", False);
++  NSString	*first = nil;
++  XEvent	e;
++
++  syncServer(dpy);
++  while (XPending(dpy) > 0)
++    {
++      XNextEvent(dpy, &e);
++      if (first == nil && e.type == PropertyNotify)
++	{
++	  if (e.xproperty.atom == XA_WM_NORMAL_HINTS)
++	    {
++	      first = @"hints";
++	    }
++	  else if (e.xproperty.atom == extents)
++	    {
++	      first = @"extents";
++	    }
++	}
++    }
++  return first == nil ? @"neither" : first;
++}
++
 +static void
 +setMaximized(Display *dpy, Window w, BOOL maximized)
 +{
@@ -2029,6 +2084,24 @@ index 0000000..7b0e122
 +  spin();
 +  PASS_EQUAL(frameExtents(dpy, xwin), @"30 30 24 36",
 +    "the margin comes back when the window is restored");
++
++  /* The minimum size includes the margin.  The window manager fits the X
++     window to a new margin, keeping the visible part's size, so it must
++     never hold the window at a minimum meant for the other margin: the
++     smaller minimum comes before the margin goes, and the margin comes
++     back before the larger minimum. */
++  [srv setminsize: NSMakeSize(300, 200) : win];
++  XSelectInput(dpy, xwin, PropertyChangeMask);
++  firstChange(dpy);
++  setMaximized(dpy, xwin, YES);
++  spin();
++  PASS_EQUAL(firstChange(dpy), @"hints",
++    "on a maximize the smaller minimum comes before the margin goes");
++  setMaximized(dpy, xwin, NO);
++  spin();
++  PASS_EQUAL(firstChange(dpy), @"extents",
++    "on a restore the margin comes back before the larger minimum");
++  XSelectInput(dpy, xwin, NoEventMask);
 +
 +  fakeCompositorStop(dpy, compositor);
 +  spin();

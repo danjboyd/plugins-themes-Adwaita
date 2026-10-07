@@ -14,6 +14,12 @@ gnustep-dev on 2026-07-14).
 send without it, as GNUstep has already accepted his code, and to deal
 with it if a maintainer raises it.
 
+**Patch 2 on its own:** sent as its own pull request, patch 2 is
+`57d54d4` on branch `x11-window-types`, on master `23fbe39`
+(`libs-back-standalone/`; review packet `review/libs-back-0002.md`). It
+corrects two statements that runs disproved on 2026-10-07 (Mutter focus,
+Openbox's types); the series commit `2a7e6cb` still needs the same fixes.
+
 ## The series
 
 Made with `git format-patch`; apply with `git am`. Each commit has its own
@@ -29,15 +35,29 @@ many checks fail without the change, and what isn't covered.
 | 1 | Keep the window manager functions of windows the gui decorates (Motif hints; a bug fix) | `Tests/x11/motifhints.m` | 3 of 5 fail / 5 pass |
 | 2 | Type menus, tool tips, drag images and modal panels as GTK does | `Tests/x11/windowtype.m` | 4 of 5 fail / 5 pass |
 | 3 | An alpha channel for borderless windows, when a theme asks | `Tests/x11/borderlessalpha.m` | 1 of 4 fails / 4 pass |
-| 4 | Window shadows and rounded corners for windows the gui decorates | `Tests/x11/shadowmargin.m`, `Tests/x11/shadowdrawing.m` | 12 of 17 fail, drawing can't run / 17 and 8 pass |
-| 5 | Popover shadows for menus, when a theme asks | the same two tests, extended | the popover checks fail / 21 and 14 pass |
+| 4 | Window shadows and rounded corners for windows the gui decorates | `Tests/x11/shadowmargin.m`, `Tests/x11/shadowdrawing.m` | 14 of 19 fail, drawing can't run / 19 and 8 pass |
+| 5 | Popover shadows for menus, when a theme asks | the same two tests, extended | the popover checks fail / 23 and 14 pass |
 
 1 and 2 stand alone; 4 needs 3 (the 32-bit visual), and 5 needs 4.
 Every commit was built and its `x11` tests run on their own (54, 59, 63,
-88 and 98 passing, none failing). The whole libs-back suite: 335 passed,
-none failed, at the end of the series, against 286 on master; the 49 more
-are the new checks. `make check-mutter-shadow` (GNOME Shell 48.7 on a
-private Xvfb) passes all 16 of its checks against the series.
+90 and 100 passing, none failing). The whole libs-back suite: 337 passed,
+none failed, at the end of the series, against 286 on master; the 51 more
+are the new checks. Against the series, the theme's window manager checks
+pass under GNOME Shell 48.7 (`make check-mutter-shadow`, 16 checks), KWin
+6.3.6 (16), Xfwm4 4.20.0 (17) and Openbox 3.6.1 with picom 12.5 (10)
+(`make check-wms` with the shadow libraries; one KWin check is skipped:
+its compositor can't be stopped from the test session).
+
+**Changed since 2026-10-06 (2026-10-07, plugins-themes-Adwaita#14):**
+patches 4 and 5 (now `251a975` and `1d6dfb3`); 1–3 are unchanged, byte
+for byte. Patch 4 sets a margin that grows before the larger size hints,
+and one that shrinks after the smaller ones. With the hints first, KWin
+restored a maximized window 20 pixels larger each way: it held the
+restored window at the new minimum, which includes the margin, and then
+grew it by the margin. `shadowmargin.m` gains two checks of that order;
+the restore's fails with the patch as it was. Patch 5's message has the
+new count only. Upstream master has moved on to `23fbe39` since the
+series was made; all five patches still apply to it with `git am`.
 
 **libs-gui** (`libs-gui/`), against master `549f63913`, branch
 `ai-policy/theme-backend-defaults` in `~/git/gnustep/libs-gui-series`:
@@ -95,6 +115,8 @@ Changes made while preparing the series (beyond splitting it):
   had no test of their own; the drag image's window type had none either.
 - The shadow template cache is a small struct instead of macros over
   parallel arrays.
+- **libs-back, found under KWin** (2026-10-07, #14): the order of the
+  margin and the size hints, above.
 
 ## Before sending: Dan's part
 
@@ -119,7 +141,10 @@ directory. The x11 tests fork their own stand-in window manager and
 compositing manager, so they need a display with neither: a private Xvfb.
 Point a copy of `GNUstep.conf` at an empty defaults directory and, for
 libs-back, at a user Library whose `Bundles/libgnustep-back-032.bundle`
-links to the bundle under test.
+links to the bundle under test. Make the copy mode 600: libs-base ignores
+a config file others can write (it says so on stderr, which
+`gnustep-tests` hides) and the tests then load the installed backend.
+`LD_DEBUG=files` on a test binary shows which bundle it loaded.
 
 - `x11/shadowdrawing.m` was run against libs-gui master. With libs-gui
   0.32 the process aborts in the gui before the first check

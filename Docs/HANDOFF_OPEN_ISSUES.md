@@ -8,6 +8,15 @@ code pointers; read it before starting.
 
 ## Where things stand
 
+- **2026-10-07:** #20 pushed and closed. #29: drafts 2, 4 and 11 (new:
+  NSScroller's knob without arrows) are ready for Dan's review; 12 and 13
+  (the font crash, NSSwitch) are fixed on master, nothing to file. #13:
+  review packet for libs-back 0002 (`57d54d4`, standalone on master). #14:
+  the KWin restore size was libs-back's order of hints and margin, fixed
+  in series commit 0004 (`251a975`) and the `-csd` tree; the installed
+  libs-back package needs a rebuild to get it. Tiling and the window menu
+  are still untested.
+
 - `99dc18c` and `df659ea` (docs, tests and the exported libs-back patch
   for issues fixed on 2026-10-02) are pushed.
 - #15 is done (2026-10-05) in the theme and the libs-back patch, not yet
@@ -188,7 +197,9 @@ make check-mutter-shadow  # the same against the patched libs-gui/libs-back
   points elsewhere. Make a GNUstep.conf copy whose
   `GNUSTEP_USER_DIR_LIBRARY` is a directory holding
   `Bundles/libgnustep-back-032.bundle` (a symlink to the bundle under
-  test) and whose `GNUSTEP_USER_DEFAULTS_DIR` is empty. Then run, on a
+  test) and whose `GNUSTEP_USER_DEFAULTS_DIR` is empty. `chmod 600` it:
+  libs-base silently ignores a config file others can write, and the
+  tests then load the installed backend (check with `LD_DEBUG=files`). Then run, on a
   private Xvfb:
   `GNUSTEP_CONFIG_FILE=<that> gnustep-tests .` in `libs-back-csd/Tests`.
   Expected: 307 passed, with `cairo/pdfps.m` sometimes aborting (it does on
