@@ -1232,6 +1232,64 @@ objectValueForTableColumn: (NSTableColumn *)column
     }
 }
 
+/* GNOME's text-scaling-factor (Large Text; -ProbeTextScale is what the run
+   set in the probe's GSettings): the interface and monospace fonts are
+   Cantarell 11 and Noto Sans Mono 11 at 96 dpi times the factor, the menu
+   rows follow the larger text, and compact metrics (windows laid out at
+   GNUstep's sizes) keep GNUstep's 12pt (#53). */
+- (void) checkTextScaling
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  CGFloat factor = [defaults floatForKey: @"ProbeTextScale"];
+  CGFloat expected;
+  NSFont *font = [NSFont systemFontOfSize: 0];
+  NSFont *fixed = [NSFont userFixedPitchFontOfSize: 0];
+  CGFloat menuItem = [defaults floatForKey: @"GSMenuItemHeight"];
+  CGFloat compactSize = -1.0;
+  id theme = [GSTheme theme];
+  id settings = nil;
+  NSString *detail;
+  BOOL ok;
+
+  if (factor <= 0.0)
+    {
+      factor = 1.0;
+    }
+  expected = 11.0 * 96.0 / 72.0 * factor;
+  if ([theme respondsToSelector: @selector(settings)])
+    {
+      settings = [theme performSelector: @selector(settings)];
+    }
+  if ([settings respondsToSelector: @selector(compactInterfaceFontSize)])
+    {
+      CGFloat (*sizeIMP)(id, SEL) = (CGFloat (*)(id, SEL))[settings methodForSelector: @selector(compactInterfaceFontSize)];
+
+      compactSize = sizeIMP (settings, @selector(compactInterfaceFontSize));
+    }
+  if (font == nil || [[font familyName] isEqualToString: @"Cantarell"] == NO)
+    {
+      [self skip: @"text-scaling" detail: [NSString stringWithFormat:
+        @"needs Cantarell (have %@)", [font fontName]]];
+      return;
+    }
+  ok = (fabs ([font pointSize] - expected) < 0.01
+    && fixed != nil && fabs ([fixed pointSize] - expected) < 0.01
+    && fabs (menuItem - ceil (MAX (32.0, expected + 19.0))) < 0.5
+    && fabs (compactSize - 12.0) < 0.01);
+  detail = [NSString stringWithFormat:
+    @"factor %.2f: interface %.3f, monospace %@ %.3f (want %.3f); menu item %.0f (want %.0f); compact %.3f (want 12)",
+    factor, [font pointSize], [fixed familyName], [fixed pointSize], expected,
+    menuItem, ceil (MAX (32.0, expected + 19.0)), compactSize];
+  if (ok)
+    {
+      [self pass: @"text-scaling" detail: detail];
+    }
+  else
+    {
+      [self fail: @"text-scaling" detail: detail];
+    }
+}
+
 /* +imageNamed: calls for the images the theme classifies buttons by,
    counted while -checkImageFreeButton runs (#50). */
 static IMP QuirkProbeImageNamedIMP = NULL;
@@ -5037,6 +5095,14 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self showContextMenuDemo];
       return;
     }
+  /* -ProbeOnly text-scaling, for the runs with GNOME's Large Text
+     (make check-text-scaling). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"text-scaling"])
+    {
+      [self checkTextScaling];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly nib-metrics, for the runs with -GnomeThemeMetrics set
      (make check-nib-metrics). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"nib-metrics"])
@@ -5068,6 +5134,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self saveWindow: _tableWindow named: @"tables"];
   [self checkThemeDomain];
   [self checkTextWidth];
+  [self checkTextScaling];
   [self checkImageFreeButton];
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];

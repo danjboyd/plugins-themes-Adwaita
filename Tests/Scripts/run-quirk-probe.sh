@@ -104,7 +104,9 @@ fi
 if [ -n "$USE_DISPLAY" ]; then
   export DISPLAY="$USE_DISPLAY"
 else
-  for n in $(seq 90 120); do
+  # QUIRK_PROBE_DISPLAYS ("first last") sets the displays to try.
+  read -r FIRST_DISPLAY LAST_DISPLAY <<<"${QUIRK_PROBE_DISPLAYS:-90 120}"
+  for n in $(seq "$FIRST_DISPLAY" "$LAST_DISPLAY"); do
     if [ ! -e "/tmp/.X11-unix/X$n" ] && [ ! -e "/tmp/.X$n-lock" ]; then
       break
     fi
@@ -140,6 +142,7 @@ color-scheme='$COLOR_SCHEME'
 gtk-theme='$GTK_THEME_NAME'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'
+text-scaling-factor=${QUIRK_PROBE_TEXT_SCALE:-1.0}
 
 [org/gnome/desktop/a11y/interface]
 high-contrast=$HIGH_CONTRAST
@@ -174,6 +177,9 @@ fi
 if [ "$HIGH_CONTRAST" = true ]; then
   PROBE_ARGS+=(-ProbeHighContrast YES)
 fi
+# GNOME's Large Text for the run (QUIRK_PROBE_TEXT_SCALE=1.25), and what
+# the text-scaling check expects.
+PROBE_ARGS+=(-ProbeTextScale "${QUIRK_PROBE_TEXT_SCALE:-1.0}")
 if [ -n "$OUTPUT" ]; then
   mkdir -p "$OUTPUT"
   PROBE_ARGS+=(-ProbeOutput "$(cd "$OUTPUT" && pwd)")

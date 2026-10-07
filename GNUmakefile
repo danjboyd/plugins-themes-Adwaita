@@ -74,7 +74,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-file-chooser check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -100,6 +100,12 @@ check-quirks:
 check-nib-metrics:
 	QUIRK_PROBE_ARGS="-GnomeThemeMetrics gnome -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GnomeThemeMetrics compact -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# GNOME's Large Text (#53): fonts and metrics at text-scaling-factor 1.25
+# and 2.0; check-quirks checks 1.0.
+check-text-scaling:
+	QUIRK_PROBE_TEXT_SCALE=1.25 QUIRK_PROBE_ARGS="-ProbeOnly text-scaling" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_TEXT_SCALE=2.0 QUIRK_PROBE_ARGS="-ProbeOnly text-scaling" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # Open and save panels as GNOME's file chooser, against a stand-in portal
 # on a private session bus, and GNUstep's panels without one.
