@@ -4748,6 +4748,193 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
     }
 }
 
+/* Whether a pixel is within `tolerance` of an expected colour (0xRRGGBB),
+   in every channel. */
+static BOOL
+QuirkProbeNear(const NSUInteger rgb[3], unsigned int expected, NSUInteger tolerance)
+{
+  long want[3] = { (expected >> 16) & 0xff, (expected >> 8) & 0xff, expected & 0xff };
+  int i;
+
+  for (i = 0; i < 3; i++)
+    {
+      if (labs ((long)rgb[i] - want[i]) > (long)tolerance)
+        {
+          return NO;
+        }
+    }
+  return YES;
+}
+
+static NSString *
+QuirkProbeHex(const NSUInteger rgb[3])
+{
+  return [NSString stringWithFormat: @"#%02lx%02lx%02lx",
+    (unsigned long)rgb[0], (unsigned long)rgb[1], (unsigned long)rgb[2]];
+}
+
+/* libadwaita 1.7's control colours, measured from its reference app on the
+   same display (Reference/AdwaitaDemo), in the palette the run uses (light
+   or dark by the window colour, high contrast from -ProbeHighContrast):
+   the window and a button (the foreground at 10% over it, #60), the
+   default button's accent (#55), an unchecked radio's and check box's
+   ring (#57) and a button's outline (#61). */
+- (void) checkControlColors
+{
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  NSString *style = dark ? (highContrast ? @"high contrast dark" : @"dark")
+                         : (highContrast ? @"high contrast" : @"light");
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 120) title: @"Probe Control Colours"];
+  NSButton *secondary = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 70, 120, 34)]);
+  NSButton *defaultButton = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (170, 70, 120, 34)]);
+  NSButton *radio = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 120, 24)]);
+  NSButton *checkBox = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (170, 20, 120, 24)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], buttonRGB[3], defaultRGB[3], titleRGB[3] = { 0, 0, 0 };
+  NSUInteger radioRGB[3] = { 0, 0, 0 }, checkRGB[3] = { 0, 0, 0 }, edgeRGB[3];
+  long radioStep = -1, checkStep = -1;
+  unsigned int ring;
+  NSRect inWindow;
+  NSString *detail;
+  NSInteger x;
+
+  [secondary setTitle: @""];
+  [defaultButton setTitle: @"Default"];
+  [defaultButton setKeyEquivalent: @"\r"];
+  [radio setButtonType: NSRadioButton];
+  [radio setTitle: @""];
+  [checkBox setButtonType: NSSwitchButton];
+  [checkBox setTitle: @""];
+  [[window contentView] addSubview: secondary];
+  [[window contentView] addSubview: defaultButton];
+  [[window contentView] addSubview: radio];
+  [[window contentView] addSubview: checkBox];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+#define QUIRK_PROBE_SAMPLE(view, dx, dy, rgb) \
+  inWindow = [view convertRect: [view bounds] toView: nil]; \
+  QuirkProbePixelAt (rep, (NSInteger)(NSMinX (inWindow) + (dx)), \
+                     (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
+  QUIRK_PROBE_SAMPLE (secondary, -10, 17, windowRGB);
+  QUIRK_PROBE_SAMPLE (secondary, 60, 17, buttonRGB);
+  QUIRK_PROBE_SAMPLE (secondary, 60, 0, edgeRGB);
+  QUIRK_PROBE_SAMPLE (defaultButton, 8, 17, defaultRGB);
+  /* The title's brightest pixel along the button's middle. */
+  for (x = 20; x < 100; x++)
+    {
+      NSUInteger rgb[3];
+
+      QUIRK_PROBE_SAMPLE (defaultButton, x, 17, rgb);
+      if (rgb[0] + rgb[1] + rgb[2] > titleRGB[0] + titleRGB[1] + titleRGB[2])
+        {
+          titleRGB[0] = rgb[0]; titleRGB[1] = rgb[1]; titleRGB[2] = rgb[2];
+        }
+    }
+  /* An unchecked indicator's ring: the pixel along its middle row that is
+     furthest from the window. */
+  for (x = 0; x < 30; x++)
+    {
+      NSUInteger rgb[3];
+      long step;
+
+      QUIRK_PROBE_SAMPLE (radio, x, 12, rgb);
+      step = labs ((long)rgb[0] - (long)windowRGB[0]) + labs ((long)rgb[1] - (long)windowRGB[1])
+        + labs ((long)rgb[2] - (long)windowRGB[2]);
+      if (step > radioStep)
+        {
+          radioStep = step; radioRGB[0] = rgb[0]; radioRGB[1] = rgb[1]; radioRGB[2] = rgb[2];
+        }
+      QUIRK_PROBE_SAMPLE (checkBox, x, 12, rgb);
+      step = labs ((long)rgb[0] - (long)windowRGB[0]) + labs ((long)rgb[1] - (long)windowRGB[1])
+        + labs ((long)rgb[2] - (long)windowRGB[2]);
+      if (step > checkStep)
+        {
+          checkStep = step; checkRGB[0] = rgb[0]; checkRGB[1] = rgb[1]; checkRGB[2] = rgb[2];
+        }
+    }
+#undef QUIRK_PROBE_SAMPLE
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%@: window %@ (want %s), button %@ (want %s)", style,
+    QuirkProbeHex (windowRGB), dark ? "#222226" : "#fafafb",
+    QuirkProbeHex (buttonRGB), dark ? "#38383b" : "#e6e6e7"];
+  if (QuirkProbeNear (windowRGB, dark ? 0x222226 : 0xfafafb, 1)
+    && QuirkProbeNear (buttonRGB, dark ? 0x38383b : 0xe6e6e7, 1))
+    {
+      [self pass: @"control-colors-window-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-window-button" detail: detail];
+    }
+
+  /* The default button is libadwaita's suggested action in every palette:
+     accent_bg_color #3584e4 with a white title (plugins-themes-Adwaita#55). */
+  detail = [NSString stringWithFormat: @"%@: fill %@ (want #3584e4), title's brightest pixel %@ (want white)",
+    style, QuirkProbeHex (defaultRGB), QuirkProbeHex (titleRGB)];
+  if (QuirkProbeNear (defaultRGB, 0x3584e4, 1)
+    && titleRGB[0] >= 240 && titleRGB[1] >= 240 && titleRGB[2] >= 240)
+    {
+      [self pass: @"control-colors-default-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-default-button" detail: detail];
+    }
+
+  /* An unchecked radio and check box show libadwaita's ring: the
+     foreground at 15% over the window, 50% in high contrast. In the dark
+     palette they used to be the window's own colour (#57). */
+  ring = dark ? (highContrast ? 0x919193 : 0x434346) : (highContrast ? 0x969699 : 0xdddddd);
+  detail = [NSString stringWithFormat: @"%@: radio ring %@, check box ring %@ (want #%06x)",
+    style, QuirkProbeHex (radioRGB), QuirkProbeHex (checkRGB), ring];
+  if (QuirkProbeNear (radioRGB, ring, 6) && QuirkProbeNear (checkRGB, ring, 6))
+    {
+      [self pass: @"control-colors-unchecked-indicators" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-unchecked-indicators" detail: detail];
+    }
+
+  /* A button's top edge: no outline in libadwaita's normal styles (the edge
+     pixel is between the window and the fill; the light palette's used to
+     be a #dfdfdf line), and in high contrast its 1px outline, the
+     foreground at 50% (#61). */
+  {
+    unsigned int outline = dark ? 0x919193 : 0x969699;
+    BOOL between = YES;
+    int i;
+
+    for (i = 0; i < 3; i++)
+      {
+        NSUInteger low = MIN (windowRGB[i], buttonRGB[i]);
+        NSUInteger high = MAX (windowRGB[i], buttonRGB[i]);
+
+        if (edgeRGB[i] + 1 < low || edgeRGB[i] > high + 1)
+          {
+            between = NO;
+          }
+      }
+    detail = [NSString stringWithFormat: @"%@: button edge %@ (want %@)", style, QuirkProbeHex (edgeRGB),
+      highContrast ? [NSString stringWithFormat: @"#%06x, the outline", outline]
+                   : @"between the window and the fill"];
+    if (highContrast ? QuirkProbeNear (edgeRGB, outline, 8) : between)
+      {
+        [self pass: @"control-colors-outline" detail: detail];
+      }
+    else
+      {
+        [self fail: @"control-colors-outline" detail: detail];
+      }
+  }
+}
+
 /* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
    the knob at the end, a neutral track when off with the knob at the start
    (plugins-themes-Adwaita#35). */
@@ -5060,6 +5247,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkControlColors];
       [self finish];
       return;
     }
@@ -5114,6 +5302,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkControlColors];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

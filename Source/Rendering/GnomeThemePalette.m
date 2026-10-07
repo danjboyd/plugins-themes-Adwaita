@@ -49,7 +49,8 @@ GnomeThemeColorFromHex(NSString *hex)
 static void
 GnomeThemePopulateLightPalette(NSColorList *colors)
 {
-  [colors setColor: GnomeThemeColorFromHex (@"#fafafa") forKey: @"windowBackgroundColor"];
+  /* libadwaita 1.7's window_bg_color, with its slight blue. */
+  [colors setColor: GnomeThemeColorFromHex (@"#fafafb") forKey: @"windowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"controlBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ebebeb") forKey: @"controlColor"];
   /* The light edges of 3D bevels (GNUstep's grooves and bezels, as in Gorm's
@@ -77,7 +78,7 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#d6d6d6") forKey: @"menuBarBorderColor"];
   /* Toolbars sit on the window background, like a GNOME header bar, with a
      light bottom edge (GSTheme's fallback is dark grey). */
-  [colors setColor: GnomeThemeColorFromHex (@"#fafafa") forKey: @"toolbarBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#fafafb") forKey: @"toolbarBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#e6e6e6") forKey: @"toolbarBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#d6d6d6") forKey: @"menuBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#c7c7c7") forKey: @"scrollBarColor"];
@@ -112,7 +113,7 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
 static void
 GnomeThemePopulateDarkPalette(NSColorList *colors)
 {
-  [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"windowBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"windowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#303030") forKey: @"controlBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3a3a3a") forKey: @"controlColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#484848") forKey: @"controlHighlightColor"];
@@ -121,22 +122,26 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"controlDarkShadowColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"controlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#9a9a9a") forKey: @"disabledControlTextColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"selectedControlColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#0f1720") forKey: @"selectedControlTextColor"];
+  /* Fills are libadwaita's accent_bg_color with white accent_fg_color, as
+     in the light palette; #78aeed (accent_color) is for accent text, links
+     and focus rings (highlightColor, keyboardFocusIndicatorColor). */
+  [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"selectedControlColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"selectedControlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#4f7cb8") forKey: @"alternateSelectedControlColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"alternateSelectedControlTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d4f66") forKey: @"secondarySelectedControlColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#36393d") forKey: @"selectedInactiveColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"textBackgroundColor"];
+  /* libadwaita's view_bg_color: text views and other content. */
+  [colors setColor: GnomeThemeColorFromHex (@"#1d1d20") forKey: @"textBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f5f5f5") forKey: @"textColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#4f7cb8") forKey: @"selectedMenuItemColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"selectedMenuItemTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#2b2b2b") forKey: @"menuBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#2b2b2b") forKey: @"menuItemBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#4a4a4a") forKey: @"menuSeparatorColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"menuBarBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"menuBarBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"menuBarBorderColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"toolbarBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"toolbarBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1a1a1a") forKey: @"toolbarBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"menuBorderColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#525252") forKey: @"scrollBarColor"];
@@ -145,7 +150,7 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"gridColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#355278") forKey: @"highlightedTableRowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"highlightedTableRowTextColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#242424") forKey: @"rowBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"rowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#2b2b2b") forKey: @"alternateRowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"highlightColor"];
@@ -197,14 +202,59 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
   [colors setColor: [background blendedColorWithFraction: 0.5 ofColor: text] forKey: @"quaternaryLabelColor"];
 }
 
+/* libadwaita 1.7 draws its controls in the foreground colour at an opacity
+   over the window background (alpha(currentColor, …)): buttons, entries
+   and pop-ups at 10%, troughs and unchecked check boxes' and radios' rings
+   at 15% (30% in high contrast), checked toggles and pressed buttons at
+   30%; disabled controls are those at half opacity (40% in high
+   contrast). High contrast adds a 1px outline, the foreground at 50%.
+   The foreground is libadwaita's window_fg_color as it shows over the
+   window: rgba(0, 0, 6, 0.8) in the light style, white in the dark one.
+   These are the theme's own keys (GnomeThemePaletteColor() in the
+   renderers reads them). */
+static void
+GnomeThemeAddWidgetColors(NSColorList *colors, NSColor *foreground, BOOL highContrast)
+{
+  NSColor *window = [colors colorWithKey: @"windowBackgroundColor"];
+  NSColor *button = nil;
+  NSColor *trough = nil;
+
+  if (window == nil || foreground == nil)
+    {
+      return;
+    }
+  button = [window blendedColorWithFraction: 0.10 ofColor: foreground];
+  trough = [window blendedColorWithFraction: (highContrast ? 0.30 : 0.15) ofColor: foreground];
+  [colors setColor: foreground forKey: @"GnomeThemeForegroundColor"];
+  [colors setColor: button forKey: @"GnomeThemeButtonColor"];
+  [colors setColor: [window blendedColorWithFraction: 0.30 ofColor: foreground]
+            forKey: @"GnomeThemeButtonPressedColor"];
+  [colors setColor: [button blendedColorWithFraction: (highContrast ? 0.6 : 0.5) ofColor: window]
+            forKey: @"GnomeThemeButtonDisabledColor"];
+  [colors setColor: trough forKey: @"GnomeThemeTroughColor"];
+  /* Separators inside a control (a spin button's): the trough's 15%, or
+     the outline in high contrast. */
+  [colors setColor: (highContrast
+                       ? [window blendedColorWithFraction: 0.5 ofColor: foreground]
+                       : [window blendedColorWithFraction: 0.15 ofColor: foreground])
+            forKey: @"GnomeThemeSeparatorColor"];
+  if (highContrast)
+    {
+      [colors setColor: [window blendedColorWithFraction: 0.5 ofColor: foreground]
+                forKey: @"GnomeThemeOutlineColor"];
+    }
+}
+
 @implementation GnomeThemePalette
 
 + (NSColorList *) colorListForSettings: (GnomeThemeSettings *)settings
 {
   NSColorList *colors = AUTORELEASE ([[NSColorList alloc] initWithName: @"System"
                                                               fromFile: nil]);
+  BOOL dark = [settings prefersDarkAppearance];
+  BOOL highContrast = [settings highContrastEnabled];
 
-  if ([settings prefersDarkAppearance])
+  if (dark)
     {
       GnomeThemePopulateDarkPalette (colors);
     }
@@ -212,10 +262,13 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
     {
       GnomeThemePopulateLightPalette (colors);
     }
-  if ([settings highContrastEnabled])
+  if (highContrast)
     {
       GnomeThemeApplyHighContrast (colors);
     }
+  GnomeThemeAddWidgetColors (colors,
+                             GnomeThemeColorFromHex (dark ? @"#ffffff" : @"#323237"),
+                             highContrast);
 
   return colors;
 }
