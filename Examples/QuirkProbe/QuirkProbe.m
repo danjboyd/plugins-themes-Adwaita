@@ -4748,6 +4748,80 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
     }
 }
 
+/* Whether a pixel is within `tolerance` of an expected colour (0xRRGGBB),
+   in every channel. */
+static BOOL
+QuirkProbeNear(const NSUInteger rgb[3], unsigned int expected, NSUInteger tolerance)
+{
+  long want[3] = { (expected >> 16) & 0xff, (expected >> 8) & 0xff, expected & 0xff };
+  int i;
+
+  for (i = 0; i < 3; i++)
+    {
+      if (labs ((long)rgb[i] - want[i]) > (long)tolerance)
+        {
+          return NO;
+        }
+    }
+  return YES;
+}
+
+static NSString *
+QuirkProbeHex(const NSUInteger rgb[3])
+{
+  return [NSString stringWithFormat: @"#%02lx%02lx%02lx",
+    (unsigned long)rgb[0], (unsigned long)rgb[1], (unsigned long)rgb[2]];
+}
+
+/* libadwaita 1.7's control colours, measured from its reference app on the
+   same display (Reference/AdwaitaDemo), in the palette the run uses (light
+   or dark by the window colour, high contrast from -ProbeHighContrast):
+   the window, and a button (the foreground at 10% over it)
+   (plugins-themes-Adwaita#60). */
+- (void) checkControlColors
+{
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  NSString *style = dark ? (highContrast ? @"high contrast dark" : @"dark")
+                         : (highContrast ? @"high contrast" : @"light");
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 120) title: @"Probe Control Colours"];
+  NSButton *secondary = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 70, 120, 34)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], buttonRGB[3];
+  NSRect inWindow;
+  NSString *detail;
+
+  [secondary setTitle: @""];
+  [[window contentView] addSubview: secondary];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+#define QUIRK_PROBE_SAMPLE(view, dx, dy, rgb) \
+  inWindow = [view convertRect: [view bounds] toView: nil]; \
+  QuirkProbePixelAt (rep, (NSInteger)(NSMinX (inWindow) + (dx)), \
+                     (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
+  QUIRK_PROBE_SAMPLE (secondary, -10, 17, windowRGB);
+  QUIRK_PROBE_SAMPLE (secondary, 60, 17, buttonRGB);
+#undef QUIRK_PROBE_SAMPLE
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%@: window %@ (want %s), button %@ (want %s)", style,
+    QuirkProbeHex (windowRGB), dark ? "#222226" : "#fafafb",
+    QuirkProbeHex (buttonRGB), dark ? "#38383b" : "#e6e6e7"];
+  if (QuirkProbeNear (windowRGB, dark ? 0x222226 : 0xfafafb, 1)
+    && QuirkProbeNear (buttonRGB, dark ? 0x38383b : 0xe6e6e7, 1))
+    {
+      [self pass: @"control-colors-window-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-window-button" detail: detail];
+    }
+}
+
 /* NSSwitch as libadwaita's switch: a 46x26 pill, the accent when on with
    the knob at the end, a neutral track when off with the knob at the start
    (plugins-themes-Adwaita#35). */
@@ -5060,6 +5134,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkControlColors];
       [self finish];
       return;
     }
@@ -5114,6 +5189,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];
+  [self checkControlColors];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
