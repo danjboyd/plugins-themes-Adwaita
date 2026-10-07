@@ -82,6 +82,9 @@ BOOL GnomeThemeImageIsTemplate(NSImage *image);
    and drawing one (YES when the scroller is an overlay one). */
 BOOL GnomeThemeUsesOverlayScrollers(void);
 BOOL GnomeThemeDrawOverlayScrollerIfNeeded(NSScroller *scroller);
+/* Whether a scroll view gets libadwaita's frame: it has a border and
+   doesn't hold a table or outline view (those are plain areas). */
+BOOL GnomeThemeScrollViewHasFrame(NSScrollView *scrollView);
 NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
 /* A template image's colour in a control: the header bar's in a toolbar
    in the bar, the disabled colour when `dimmed`, else `text`. */

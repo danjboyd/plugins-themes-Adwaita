@@ -367,6 +367,12 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
      and the scroller is narrower, which left a strip by the edges where
      the scroll view showed through, with its line by the corner. */
   inner = NSInsetRect ([scrollView bounds], border.width, border.height);
+  /* Inside libadwaita's frame the content keeps clear of its 8px
+     corners (-drawScrollViewRect:inView: can't clip it): 4px in. */
+  if (GnomeThemeScrollViewHasFrame (scrollView))
+    {
+      inner = NSInsetRect ([scrollView bounds], MAX (border.width, 4.0), MAX (border.height, 4.0));
+    }
   if (vertical != nil && [vertical superview] == scrollView)
     {
       NSRect strip = NSIntersectionRect ([vertical frame], inner);

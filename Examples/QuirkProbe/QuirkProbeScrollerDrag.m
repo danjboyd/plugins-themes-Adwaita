@@ -180,6 +180,13 @@
   [window orderFront: nil];
   [scrollView tile];
   border = [[GSTheme theme] sizeForBorderType: borderType];
+  /* With a border the theme draws libadwaita's frame, and the content
+     keeps 4px clear of its rounded corners (plugins-themes-Adwaita#58). */
+  if (borderType != NSNoBorder)
+    {
+      border.width = MAX (border.width, 4.0);
+      border.height = MAX (border.height, 4.0);
+    }
   inner = NSInsetRect ([scrollView bounds], border.width, border.height);
   vertical = [scrollView verticalScroller];
   horizontal = [scrollView horizontalScroller];

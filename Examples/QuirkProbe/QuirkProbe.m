@@ -4812,6 +4812,63 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
     }
 }
 
+/* A text view's scroll view draws libadwaita's frame: one 1px line at its
+   edge and rounded corners, where GNUstep's bezel drew two dark lines and
+   square corners (plugins-themes-Adwaita#58). */
+- (void) checkScrollViewFrame
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 160) title: @"Probe Frame"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (20, 20, 220, 120)]);
+  NSTextView *textView = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 200, 300)]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect inWindow;
+  NSUInteger corner[3], outside[3], inside[3], pixel[3];
+  NSInteger left, top, x, y, lines = 0, insideSum;
+  NSString *detail;
+
+  [scrollView setBorderType: NSBezelBorder];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setDocumentView: textView];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+  inWindow = [scrollView convertRect: [scrollView bounds] toView: nil];
+  left = (NSInteger)NSMinX (inWindow);
+  top = (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow));
+  QuirkProbePixelAt (rep, left, top, corner);
+  QuirkProbePixelAt (rep, left - 3, top - 3, outside);
+  x = left + (NSInteger)NSWidth (inWindow) / 3;
+  QuirkProbePixelAt (rep, x, top + 8, inside);
+  insideSum = (NSInteger)(inside[0] + inside[1] + inside[2]);
+  /* The rows at the top edge that aren't the content's colour. */
+  for (y = top; y < top + 5; y++)
+    {
+      QuirkProbePixelAt (rep, x, y, pixel);
+      if (labs ((NSInteger)(pixel[0] + pixel[1] + pixel[2]) - insideSum) > 15)
+        {
+          lines++;
+        }
+    }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%ld line(s) at the top edge; corner %lu/%lu/%lu, window %lu/%lu/%lu, content %lu/%lu/%lu",
+    (long)lines, (unsigned long)corner[0], (unsigned long)corner[1], (unsigned long)corner[2],
+    (unsigned long)outside[0], (unsigned long)outside[1], (unsigned long)outside[2],
+    (unsigned long)inside[0], (unsigned long)inside[1], (unsigned long)inside[2]];
+  if (lines == 1
+      && labs ((NSInteger)(corner[0] + corner[1] + corner[2]) - (NSInteger)(outside[0] + outside[1] + outside[2])) <= 12)
+    {
+      [self pass: @"scroll-view-frame" detail: detail];
+    }
+  else
+    {
+      [self fail: @"scroll-view-frame" detail: detail];
+    }
+}
+
 - (void) checkSwitch
 {
   Class switchClass = NSClassFromString (@"NSSwitch");
@@ -4932,12 +4989,33 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
                                                              fromView: scrollView]];
   inkRest = QuirkProbeMeasure (QuirkProbeRender (scroller), QuirkProbeIsInk).count;
 
-  [document scrollPoint: NSMakePoint (0, 300)];
-  [window display];
-  hitShown = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
-                                                              fromView: scrollView]];
-  QuirkProbeInkBackground = 750;
-  inkShown = QuirkProbeMeasure (QuirkProbeRender (scrollView), QuirkProbeIsInk).count;
+  {
+    /* The slider shown: pixels in the scroller's strip that change from
+       the scroll view at rest. (Counting ink over the whole scroll view
+       counted its bezel, plugins-themes-Adwaita#58.) */
+    NSBitmapImageRep *before = QuirkProbeRender (scrollView), *after;
+    NSInteger x, y;
+    NSUInteger a[3], b[3];
+
+    [document scrollPoint: NSMakePoint (0, 300)];
+    [window display];
+    hitShown = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
+                                                                fromView: scrollView]];
+    after = QuirkProbeRender (scrollView);
+    inkShown = 0;
+    for (y = (NSInteger)NSMinY (strip); y < (NSInteger)NSMaxY (strip); y++)
+      {
+        for (x = (NSInteger)NSMinX (strip); x < (NSInteger)NSMaxX (strip); x++)
+          {
+            QuirkProbePixelAt (before, x, y, a);
+            QuirkProbePixelAt (after, x, y, b);
+            if (labs ((NSInteger)(a[0] + a[1] + a[2]) - (NSInteger)(b[0] + b[1] + b[2])) > 30)
+              {
+                inkShown++;
+              }
+          }
+      }
+  }
 
   [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 1.6]];
   hitFaded = [scrollView hitTest: [[scrollView superview] convertPoint: NSMakePoint (NSMidX (strip), NSMidY (strip))
@@ -5122,6 +5200,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkSliderKnob];
+  [self checkScrollViewFrame];
       [self finish];
       return;
     }
@@ -5177,6 +5256,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkSliderKnob];
+  [self checkScrollViewFrame];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose

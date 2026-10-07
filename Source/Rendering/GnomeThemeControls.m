@@ -2354,11 +2354,64 @@ GnomeThemeDrawTabLabel(NSString *label,
                                       1.0);
 }
 
+BOOL
+GnomeThemeScrollViewHasFrame(NSScrollView *scrollView)
+{
+  return [scrollView borderType] != NSNoBorder
+    && [[scrollView documentView] isKindOfClass: [NSTableView class]] == NO;
+}
+
+/* libadwaita's frame round a text view or other scrolled content: a 1px
+   border, the text colour at 15% over the view's background (40% in high
+   contrast, as measured), with 8px corners; GNUstep's bezel (two dark lines top and
+   left, square corners) looked like a sunken Windows 9x field (#58). The
+   scroll view draws before its content, so the corners can't clip it:
+   the radius is at most what keeps the content's square corners inside
+   the border, from the inset the content and scrollers actually have
+   (4px with overlay scrollers, see -tile; GNUstep's 2px otherwise). */
+static void
+GnomeThemeDrawScrollViewFrame(GnomeTheme *theme, NSScrollView *scrollView)
+{
+  NSRect bounds = [scrollView bounds];
+  NSRect used = [[scrollView contentView] frame];
+  NSArray *subviews = [scrollView subviews];
+  NSEnumerator *enumerator = [subviews objectEnumerator];
+  NSView *subview;
+  id document = [scrollView documentView];
+  NSColor *text = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
+  NSColor *fill = GnomeThemeColor (theme, @"textBackgroundColor", [NSColor textBackgroundColor]);
+  NSColor *border;
+  CGFloat inset, radius;
+
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if ([subview isKindOfClass: [NSScroller class]] && [subview isHidden] == NO)
+        {
+          used = NSUnionRect (used, [subview frame]);
+        }
+    }
+  inset = MIN (MIN (NSMinX (used) - NSMinX (bounds), NSMinY (used) - NSMinY (bounds)),
+               MIN (NSMaxX (bounds) - NSMaxX (used), NSMaxY (bounds) - NSMaxY (used)));
+  /* The largest radius whose 1px border's inner edge passes outside the
+     content's corner, inset px in: (r + 0.5 - inset) * sqrt 2 <= r - 0.5. */
+  radius = floor (((inset - 0.5) * M_SQRT2 - 0.5) / (M_SQRT2 - 1.0));
+  radius = MAX (0.0, MIN (8.0, radius));
+
+  if ([document respondsToSelector: @selector(drawsBackground)]
+      && [document respondsToSelector: @selector(backgroundColor)]
+      && [document drawsBackground] && [document backgroundColor] != nil)
+    {
+      fill = [document backgroundColor];
+    }
+  border = GnomeThemeBlend (fill, text, [[theme settings] highContrastEnabled] ? 0.4 : 0.15);
+  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (bounds, 0.5, 0.5), radius, fill, border, 1.0);
+}
+
 /* Scroll views holding a table or outline view get no bezel and no line
    between the content and the scrollers (see -drawBorderType:frame:view:):
    the space GNUstep leaves for them is filled with the table's background,
-   so the list reads as one plain area. Everything else keeps GNUstep's
-   drawing. */
+   so the list reads as one plain area. Other scroll views with a border
+   get libadwaita's frame; without one, GNUstep's drawing (none). */
 - (void) drawScrollViewRect: (NSRect)rect
                      inView: (NSView *)view
 {
@@ -2372,6 +2425,11 @@ GnomeThemeDrawTabLabel(NSString *label,
       if ([documentView isKindOfClass: [NSTableView class]])
         {
           tableView = documentView;
+        }
+      else if (GnomeThemeScrollViewHasFrame ((NSScrollView *)view))
+        {
+          GnomeThemeDrawScrollViewFrame (self, (NSScrollView *)view);
+          return;
         }
     }
   if (tableView == nil)
