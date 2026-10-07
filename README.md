@@ -145,7 +145,13 @@ designed):
   `NSMainStoryboardFile` or `GSMainMarkupFile` in their Info.plist) get
   `compact` metrics instead: GNUstep's 12pt, regular-weight button titles,
   GNUstep's button margins and tab height, so layouts made at those metrics
-  fit. Set it to override that choice.
+  fit. In an app built in code, the windows it loads from Gorm or nib files
+  (its own, or libs-gui's panels) get compact metrics of their own: their
+  controls' text at GNUstep's size and GNUstep's margins, indicators and tab
+  height, while its other windows, its menus and its fonts keep GNOME's.
+  Set `gnome` or `compact` to give every window the same; `auto` is the
+  same as not setting it. A code-built app whose Gorm files were laid out
+  for GNOME's metrics (with the Adwaita palette below) sets `gnome`.
 - `GnomeThemeMenuStyle`: `menubar` (the default) or `primary`. With
   `primary` the menu bar becomes GNOME's main menu button (☰): at the end of
   the window's toolbar when it shows one, otherwise alone in a slim bar.

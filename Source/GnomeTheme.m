@@ -315,6 +315,7 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
     {
       _settings = [GnomeThemeSettings new];
       _metrics = [GnomeThemeMetrics new];
+      _nibMetrics = [GnomeThemeMetrics new];
       [self reloadConfiguration];
     }
   return self;
@@ -324,6 +325,7 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 {
   RELEASE (_settings);
   RELEASE (_metrics);
+  RELEASE (_nibMetrics);
   RELEASE (_palette);
   [super dealloc];
 }
@@ -332,6 +334,7 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 {
   [_settings reload];
   [_metrics reloadFromSettings: _settings];
+  [_nibMetrics reloadFromSettings: _settings compact: YES];
   DESTROY (_palette);
 }
 
@@ -342,6 +345,24 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 
 - (GnomeThemeMetrics *) metrics
 {
+  return _metrics;
+}
+
+- (GnomeThemeMetrics *) metricsForView: (NSView *)view
+{
+  if ([_settings metricsFollowWindows] && GnomeThemeViewUsesNibMetrics (view))
+    {
+      return _nibMetrics;
+    }
+  return _metrics;
+}
+
+- (GnomeThemeMetrics *) metricsForCell: (NSCell *)cell inView: (NSView *)controlView
+{
+  if ([_settings metricsFollowWindows] && GnomeThemeCellUsesNibMetrics (cell, controlView))
+    {
+      return _nibMetrics;
+    }
   return _metrics;
 }
 
@@ -628,8 +649,9 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
   GSThemeMargins margins = [super buttonMarginsForCell: cell
                                                  style: style
                                                  state: state];
-  CGFloat horizontal = [_metrics buttonHorizontalPadding];
-  CGFloat vertical = [_metrics buttonVerticalPadding];
+  GnomeThemeMetrics *metrics = [self metricsForCell: cell inView: nil];
+  CGFloat horizontal = [metrics buttonHorizontalPadding];
+  CGFloat vertical = [metrics buttonVerticalPadding];
 
   switch (style)
     {
@@ -659,7 +681,8 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
       case NSBottomTabsBezelBorder:
       case NSLeftTabsBezelBorder:
       case NSRightTabsBezelBorder:
-        height = MAX (height, [_metrics minimumTabHeight]);
+        /* The tab view's window's (GnomeThemeSetMetricsView). */
+        height = MAX (height, [[self metricsForView: nil] minimumTabHeight]);
         break;
 
       default:

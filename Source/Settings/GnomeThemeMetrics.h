@@ -40,7 +40,11 @@
   BOOL _compact;
 }
 
+/* The app's metrics: GNOME's, or compact ones. */
 - (void) reloadFromSettings: (GnomeThemeSettings *)settings;
+/* Compact metrics whatever the app uses, for windows loaded from nib or
+   Gorm files in an app with GNOME's (#24), or GNOME's. */
+- (void) reloadFromSettings: (GnomeThemeSettings *)settings compact: (BOOL)compact;
 
 - (CGFloat) menuBarHeight;
 - (CGFloat) menuItemHeight;

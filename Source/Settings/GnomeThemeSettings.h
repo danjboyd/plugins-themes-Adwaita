@@ -39,6 +39,8 @@ typedef enum
   BOOL _overlayScrolling;
   NSInteger _fontHintStyle;
   BOOL _compactMetrics;
+  BOOL _metricsFollowWindows;
+  CGFloat _compactInterfaceFontSize;
   NSString *_buttonLayout;
   NSString *_titlebarDoubleClickAction;
   NSString *_titlebarMiddleClickAction;
@@ -63,10 +65,15 @@ typedef enum
 /* GNUstep's metrics (12pt text, GNUstep's button margins and tab height)
    instead of GNOME's, for apps whose windows come from Gorm or nib files and
    were laid out at those metrics. The GnomeThemeMetrics default chooses
-   ("compact" or "gnome"), then the same key in the app's Info.plist;
-   otherwise apps with a main nib, storyboard or markup file get compact
-   metrics. */
+   ("compact" or "gnome", for every window), then the same key in the app's
+   Info.plist; otherwise ("auto", or no choice) apps with a main nib,
+   storyboard or markup file get compact metrics. */
 - (BOOL) compactMetrics;
+/* An app built in code with no choice made ("auto"): GNOME's metrics, but
+   compact metrics for the windows it loads from nib or Gorm files (#24). */
+- (BOOL) metricsFollowWindows;
+/* The interface font's size with compact metrics. */
+- (CGFloat) compactInterfaceFontSize;
 
 /* org.gnome.desktop.wm.preferences: button-layout (for example
    "appmenu:minimize,maximize,close") and the title bar's

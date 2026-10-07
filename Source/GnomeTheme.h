@@ -107,15 +107,33 @@ void GnomeThemeTrackMenu(NSMenu *menu, NSPoint corner, BOOL rightAligned);
    a 34px button 6px from the view's right edge, centred vertically. */
 NSView *GnomeThemeNewHeaderBarMenuButton(void);
 
+/* Windows loaded from nib or Gorm files, in an app built in code (#24,
+   GnomeThemeNibMetrics.m): whether `view` is in one (or one is loading),
+   and the view that metrics are asked for while geometry is computed
+   outside drawing; it returns the one it replaces, to put back. */
+BOOL GnomeThemeViewUsesNibMetrics(NSView *view);
+/* The same for a cell, which may not know its control yet. */
+BOOL GnomeThemeCellUsesNibMetrics(NSCell *cell, NSView *controlView);
+NSView *GnomeThemeSetMetricsView(NSView *view);
+
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;
   GnomeThemeMetrics *_metrics;
+  GnomeThemeMetrics *_nibMetrics;
   NSColorList *_palette;
 }
 
 - (void) reloadConfiguration;
 - (GnomeThemeSettings *) settings;
+/* The app's metrics. */
 - (GnomeThemeMetrics *) metrics;
+/* The metrics of the window `view` is in: compact ones for a window loaded
+   from a nib or Gorm file in an app that otherwise has GNOME's. With no
+   view, the view set by GnomeThemeSetMetricsView(), or the one being
+   drawn. */
+- (GnomeThemeMetrics *) metricsForView: (NSView *)view;
+/* For `cell`, drawn in `controlView` (or nil). */
+- (GnomeThemeMetrics *) metricsForCell: (NSCell *)cell inView: (NSView *)controlView;
 
 @end

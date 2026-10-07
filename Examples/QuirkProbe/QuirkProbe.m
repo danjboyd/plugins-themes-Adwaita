@@ -4694,6 +4694,14 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
       [self showContextMenuDemo];
       return;
     }
+  /* -ProbeOnly nib-metrics, for the runs with -GnomeThemeMetrics set
+     (make check-nib-metrics). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"nib-metrics"])
+    {
+      [self checkNibMetrics];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
      high contrast runs (the other checks assume the light palette). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])
@@ -4746,6 +4754,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkCocoaApplicationMenu];
   [self checkGormControls];
   [self checkMetricsMode];
+  [self checkNibMetrics];
   [self checkPrimaryMenu];
   [self checkHeaderBar];
   [self checkHeaderBarToolbar];

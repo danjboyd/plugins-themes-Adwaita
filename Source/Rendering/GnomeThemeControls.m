@@ -133,12 +133,13 @@ static const CGFloat GnomeThemeIndicatorLabelGap = 4.0;
 
 static GnomeTheme *GnomeThemeActiveTheme(void);
 
+/* In the window of `cell`, drawn in `controlView` or nil (#24). */
 static CGFloat
-GnomeThemeIndicatorMinimumSize(void)
+GnomeThemeIndicatorMinimumSize(NSCell *cell, NSView *controlView)
 {
   GnomeTheme *theme = GnomeThemeActiveTheme ();
 
-  return (theme != nil) ? [[theme metrics] indicatorMinimumSize] : 18.0;
+  return (theme != nil) ? [[theme metricsForCell: cell inView: controlView] indicatorMinimumSize] : 18.0;
 }
 
 /* GTK's focus-visible: buttons, checkboxes and other non-text controls show
@@ -1463,8 +1464,10 @@ GnomeThemeSuppressEditorBackground(NSText *textObject)
     }
 }
 
+/* Bold, as libadwaita's button titles, unless the window of `cell` (drawn
+   in `controlView`, or nil) has compact metrics. */
 static NSFont *
-GnomeThemeEmphasizedFont(NSFont *font)
+GnomeThemeEmphasizedFont(NSFont *font, NSCell *cell, NSView *controlView)
 {
   NSFontManager *fontManager = [NSFontManager sharedFontManager];
   NSFont *boldFont = nil;
@@ -1474,7 +1477,7 @@ GnomeThemeEmphasizedFont(NSFont *font)
       return font;
     }
 
-  if ([[GnomeThemeActiveTheme () metrics] emphasizesButtonTitles] == NO)
+  if ([[GnomeThemeActiveTheme () metricsForCell: cell inView: controlView] emphasizesButtonTitles] == NO)
     {
       return font;
     }
@@ -1530,7 +1533,7 @@ GnomeThemeDrawButtonLabel(NSButtonCell *cell,
         {
           font = [NSFont controlContentFontOfSize: 0.0];
         }
-      font = GnomeThemeEmphasizedFont (font);
+      font = GnomeThemeEmphasizedFont (font, cell, controlView);
 
       [mutableTitle addAttribute: NSForegroundColorAttributeName
                            value: textColor
@@ -1585,7 +1588,8 @@ GnomeThemeButtonTitleRect(NSButtonCell *cell, NSRect cellFrame)
       case NSRoundedBezelStyle:
       case NSRoundRectBezelStyle:
       case NSTexturedRoundedBezelStyle:
-        extra = [[GnomeThemeActiveTheme () metrics] buttonHorizontalPadding] > 0.0 ? 0.0 : 10.0;
+        extra = [[GnomeThemeActiveTheme () metricsForCell: cell inView: nil] buttonHorizontalPadding] > 0.0
+          ? 0.0 : 10.0;
         break;
 
       default:
@@ -1626,7 +1630,7 @@ GnomeThemeButtonLabelSize(NSButtonCell *cell)
     {
       font = [NSFont controlContentFontOfSize: 0.0];
     }
-  font = GnomeThemeEmphasizedFont (font);
+  font = GnomeThemeEmphasizedFont (font, cell, nil);
 
   attributes = AUTORELEASE ([[NSMutableDictionary alloc] init]);
   if (font != nil)
@@ -1681,7 +1685,8 @@ static NSRect
 GnomeThemeIndicatorFocusRect(NSButtonCell *cell, NSRect cellFrame)
 {
   NSRect contentRect = [cell drawingRectForBounds: cellFrame];
-  CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (contentRect.size.height * 0.58));
+  CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (cell, nil),
+                               floor (contentRect.size.height * 0.58));
   NSRect indicatorRect = GnomeThemeIndicatorRectInContent (cell, contentRect, indicatorSize);
   NSSize labelSize = GnomeThemeButtonLabelSize (cell);
   CGFloat labelWidth = MIN (labelSize.width,
@@ -2684,13 +2689,19 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
                               [controlView isFlipped]);
 }
 
+/* The tab height is the tab view's window's (-tabHeightForType: has no
+   view to ask): a nib window's tab view keeps GNUstep's (#24). */
 - (NSRect) tabViewContentRectForBounds: (NSRect)aRect
                            tabViewType: (NSTabViewType)type
                                tabView: (NSTabView *)view
 {
-  return [super tabViewContentRectForBounds: aRect
-                                tabViewType: type
-                                    tabView: view];
+  NSView *previous = GnomeThemeSetMetricsView (view);
+  NSRect contentRect = [super tabViewContentRectForBounds: aRect
+                                              tabViewType: type
+                                                  tabView: view];
+
+  GnomeThemeSetMetricsView (previous);
+  return contentRect;
 }
 
 /* Top tabs look like a libadwaita GtkNotebook: a 1px frame around tabs and
@@ -2702,6 +2713,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 {
   NSTabView *tabView = (NSTabView *)view;
   BOOL flipped = [view isFlipped];
+  NSView *previous = GnomeThemeSetMetricsView (view);
   CGFloat tabHeight = [self tabHeightForType: type];
   NSColor *headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   NSColor *contentFill = GnomeThemeColor (self, @"textBackgroundColor", [NSColor textBackgroundColor]);
@@ -2714,6 +2726,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSRect contentRect;
   NSRect separatorRect;
 
+  GnomeThemeSetMetricsView (previous);
   if ([view isKindOfClass: [NSTabView class]] == NO
     || GnomeThemeUsesCustomTopTabs (type) == NO)
     {
@@ -2746,6 +2759,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   BOOL truncate = [tabView allowsTruncatedLabels];
   BOOL flipped = [view isFlipped];
   NSRect bounds = [view bounds];
+  NSView *previous = GnomeThemeSetMetricsView (view);
   CGFloat tabHeight = [self tabHeightForType: type];
   NSColor *headerFill = nil;
   NSColor *textColor = nil;
@@ -2755,6 +2769,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSTabViewItem *item = nil;
   CGFloat cursorX = NSMinX (bounds) + GnomeThemeTabStart;
 
+  GnomeThemeSetMetricsView (previous);
   if ([view isKindOfClass: [NSTabView class]] == NO
     || GnomeThemeUsesCustomTopTabs (type) == NO)
     {
@@ -3191,7 +3206,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   if ([label length] > 0)
     {
       NSMutableDictionary *attributes = [[cell _nonAutoreleasedTypingAttributes] mutableCopy];
-      NSFont *font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName]);
+      NSFont *font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName], (NSCell *)self, view);
       NSSize textSize = [label sizeWithAttributes: attributes];
       CGFloat availableWidth = MAX (0.0, frame.size.width - 10.0);
       CGFloat drawWidth = MIN (availableWidth, ceil (textSize.width));
@@ -3868,7 +3883,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSImage *savedImage = nil;
   NSRect contentFrame = cellFrame;
   NSFont *originalFont = [cell font];
-  NSFont *popupFont = GnomeThemeEmphasizedFont (originalFont);
+  NSFont *popupFont = GnomeThemeEmphasizedFont (originalFont, (NSCell *)self, controlView);
 
   if (item != nil && [item image] == arrowImage)
     {
@@ -3984,7 +3999,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   if ([displayString length] > 0)
     {
       attributes = [[cell _nonAutoreleasedTypingAttributes] mutableCopy];
-      font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName]);
+      font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName], (NSCell *)self, controlView);
       if (font != nil)
         {
           [attributes setObject: font forKey: NSFontAttributeName];
@@ -4165,7 +4180,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       /* Mirrors drawInteriorWithFrame: an indicator of at least 18pt at +2,
          the label gap, then the title in the cell's own font. */
       NSAttributedString *title = [cell attributedTitle];
-      CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (drawing.size.height * 0.58));
+      CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (cell, nil), floor (drawing.size.height * 0.58));
       CGFloat labelWidth = [title length] > 0 ? ceil ([title size].width) : 0.0;
       CGFloat width = bezel + 2.0 + indicatorSize + (labelWidth > 0.0 ? GnomeThemeIndicatorLabelGap + labelWidth + slack : 2.0);
 
@@ -4359,7 +4374,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
     BOOL highlighted = [(NSButtonCell *)self isHighlighted];
     NSInteger state = [(NSButtonCell *)self state];
     NSRect contentRect = [(NSButtonCell *)self drawingRectForBounds: cellFrame];
-    CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize (), floor (contentRect.size.height * 0.58));
+    CGFloat indicatorSize = MAX (GnomeThemeIndicatorMinimumSize ((NSCell *)self, controlView), floor (contentRect.size.height * 0.58));
     NSRect indicatorRect = GnomeThemeIndicatorRectInContent ((NSButtonCell *)self, contentRect, indicatorSize);
     NSRect titleRect = GnomeThemeIndicatorTitleRect ((NSButtonCell *)self, contentRect, indicatorRect);
     NSColor *fillColor = nil;
