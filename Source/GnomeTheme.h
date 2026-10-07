@@ -102,6 +102,10 @@ NSColor *GnomeThemeHeaderBarTextColor(NSWindow *window);
    outside it, or Escape is pressed. Call it after the click that opens it
    has been released. */
 void GnomeThemeTrackMenu(NSMenu *menu, NSPoint corner, BOOL rightAligned);
+/* A press on a narrow menu bar's overflow button (#25), from
+   GnomeThemeMenusAndData.m: handles it and returns YES, or returns NO when
+   the press is elsewhere. */
+BOOL GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event);
 
 /* A new (retained) ☰ button for the header bar, from GnomeThemePrimaryMenu.m:
    a 34px button 6px from the view's right edge, centred vertically. */
