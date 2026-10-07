@@ -4428,9 +4428,12 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
     NSColor *borderColor = nil;
     NSColor *markColor = nil;
     NSBezierPath *path = nil;
+    BOOL checked = (state == NSOnState || state == NSMixedState);
+    NSColor *windowColor = [NSColor windowBackgroundColor];
+    BOOL highContrast = [[theme settings] highContrastEnabled];
 
 
-    if (state == NSOnState || state == NSMixedState)
+    if (checked)
       {
         fillColor = [NSColor selectedControlColor];
         borderColor = GnomeThemeBlend (fillColor, [NSColor controlShadowColor], 0.25);
@@ -4438,19 +4441,31 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       }
     else
       {
-        fillColor = [NSColor textBackgroundColor];
-        borderColor = [NSColor controlShadowColor];
+        /* libadwaita's unchecked check box and radio: no fill, a 2px ring
+           of the foreground at 15% (the outline's 50% in high contrast).
+           The text background and the border colour were the window's own
+           in the dark palette, so the indicator didn't show (#57). */
+        fillColor = nil;
+        borderColor = GnomeThemePaletteColor (theme, @"GnomeThemeOutlineColor",
+                                              GnomeThemePaletteColor (theme, @"GnomeThemeTroughColor",
+                                                                      [NSColor controlShadowColor]));
         markColor = [NSColor controlTextColor];
       }
 
     if (highlighted && enabled)
       {
-        fillColor = GnomeThemeBlend (fillColor, [NSColor controlShadowColor], 0.14);
+        fillColor = checked
+          ? GnomeThemeBlend (fillColor, [NSColor controlShadowColor], 0.14)
+          : GnomeThemePaletteColor (theme, @"GnomeThemeButtonColor", nil);
       }
     if (enabled == NO)
       {
-        fillColor = GnomeThemeBlend (fillColor, [NSColor controlBackgroundColor], 0.35);
-        borderColor = GnomeThemeBlend (borderColor, [NSColor controlBackgroundColor], 0.35);
+        fillColor = (fillColor != nil)
+          ? GnomeThemeBlend (fillColor, [NSColor controlBackgroundColor], 0.35)
+          : nil;
+        borderColor = checked
+          ? GnomeThemeBlend (borderColor, [NSColor controlBackgroundColor], 0.35)
+          : GnomeThemeBlend (borderColor, windowColor, highContrast ? 0.6 : 0.5);
         markColor = [NSColor disabledControlTextColor];
       }
 
@@ -4464,20 +4479,42 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
         GnomeThemeDrawFocusRing (theme, focusRect, focusRadius);
       }
 
-    if (radio)
+    if (checked)
       {
-        path = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect (indicatorRect, 0.5, 0.5)];
+        if (radio)
+          {
+            path = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect (indicatorRect, 0.5, 0.5)];
+          }
+        else
+          {
+            path = GnomeThemeRoundedPath (NSInsetRect (indicatorRect, 0.5, 0.5), 5.0);
+          }
+        [fillColor set];
+        [path fill];
+        [borderColor set];
+        [path setLineWidth: 1.0];
+        [path stroke];
       }
     else
       {
-        path = GnomeThemeRoundedPath (NSInsetRect (indicatorRect, 0.5, 0.5), 5.0);
+        /* The ring inside the indicator's edge, 2px wide. */
+        if (radio)
+          {
+            path = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect (indicatorRect, 1.0, 1.0)];
+          }
+        else
+          {
+            path = GnomeThemeRoundedPath (NSInsetRect (indicatorRect, 1.0, 1.0), 4.0);
+          }
+        if (fillColor != nil)
+          {
+            [fillColor set];
+            [path fill];
+          }
+        [borderColor set];
+        [path setLineWidth: 2.0];
+        [path stroke];
       }
-
-    [fillColor set];
-    [path fill];
-    [borderColor set];
-    [path setLineWidth: 1.0];
-    [path stroke];
 
     if (state == NSOnState)
       {

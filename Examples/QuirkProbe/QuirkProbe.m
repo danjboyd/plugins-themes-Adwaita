@@ -4788,9 +4788,14 @@ QuirkProbeHex(const NSUInteger rgb[3])
   NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 120) title: @"Probe Control Colours"];
   NSButton *secondary = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 70, 120, 34)]);
   NSButton *defaultButton = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (170, 70, 120, 34)]);
+  NSButton *radio = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 120, 24)]);
+  NSButton *checkBox = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (170, 20, 120, 24)]);
   NSView *frameView;
   NSBitmapImageRep *rep;
   NSUInteger windowRGB[3], buttonRGB[3], defaultRGB[3], titleRGB[3] = { 0, 0, 0 };
+  NSUInteger radioRGB[3] = { 0, 0, 0 }, checkRGB[3] = { 0, 0, 0 };
+  long radioStep = -1, checkStep = -1;
+  unsigned int ring;
   NSRect inWindow;
   NSString *detail;
   NSInteger x;
@@ -4798,8 +4803,14 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [secondary setTitle: @""];
   [defaultButton setTitle: @"Default"];
   [defaultButton setKeyEquivalent: @"\r"];
+  [radio setButtonType: NSRadioButton];
+  [radio setTitle: @""];
+  [checkBox setButtonType: NSSwitchButton];
+  [checkBox setTitle: @""];
   [[window contentView] addSubview: secondary];
   [[window contentView] addSubview: defaultButton];
+  [[window contentView] addSubview: radio];
+  [[window contentView] addSubview: checkBox];
   [window orderFront: nil];
   [window display];
   frameView = [[window contentView] superview];
@@ -4820,6 +4831,28 @@ QuirkProbeHex(const NSUInteger rgb[3])
       if (rgb[0] + rgb[1] + rgb[2] > titleRGB[0] + titleRGB[1] + titleRGB[2])
         {
           titleRGB[0] = rgb[0]; titleRGB[1] = rgb[1]; titleRGB[2] = rgb[2];
+        }
+    }
+  /* An unchecked indicator's ring: the pixel along its middle row that is
+     furthest from the window. */
+  for (x = 0; x < 30; x++)
+    {
+      NSUInteger rgb[3];
+      long step;
+
+      QUIRK_PROBE_SAMPLE (radio, x, 12, rgb);
+      step = labs ((long)rgb[0] - (long)windowRGB[0]) + labs ((long)rgb[1] - (long)windowRGB[1])
+        + labs ((long)rgb[2] - (long)windowRGB[2]);
+      if (step > radioStep)
+        {
+          radioStep = step; radioRGB[0] = rgb[0]; radioRGB[1] = rgb[1]; radioRGB[2] = rgb[2];
+        }
+      QUIRK_PROBE_SAMPLE (checkBox, x, 12, rgb);
+      step = labs ((long)rgb[0] - (long)windowRGB[0]) + labs ((long)rgb[1] - (long)windowRGB[1])
+        + labs ((long)rgb[2] - (long)windowRGB[2]);
+      if (step > checkStep)
+        {
+          checkStep = step; checkRGB[0] = rgb[0]; checkRGB[1] = rgb[1]; checkRGB[2] = rgb[2];
         }
     }
 #undef QUIRK_PROBE_SAMPLE
@@ -4850,6 +4883,21 @@ QuirkProbeHex(const NSUInteger rgb[3])
   else
     {
       [self fail: @"control-colors-default-button" detail: detail];
+    }
+
+  /* An unchecked radio and check box show libadwaita's ring: the
+     foreground at 15% over the window, 50% in high contrast. In the dark
+     palette they used to be the window's own colour (#57). */
+  ring = dark ? (highContrast ? 0x919193 : 0x434346) : (highContrast ? 0x969699 : 0xdddddd);
+  detail = [NSString stringWithFormat: @"%@: radio ring %@, check box ring %@ (want #%06x)",
+    style, QuirkProbeHex (radioRGB), QuirkProbeHex (checkRGB), ring];
+  if (QuirkProbeNear (radioRGB, ring, 6) && QuirkProbeNear (checkRGB, ring, 6))
+    {
+      [self pass: @"control-colors-unchecked-indicators" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-colors-unchecked-indicators" detail: detail];
     }
 }
 
