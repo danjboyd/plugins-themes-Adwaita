@@ -71,6 +71,35 @@ Until they are released, build libs-gui and libs-back with the patches in
 the header bar has to be turned on by hand ([below](#header-bar)), and
 windows, menus and tool tips have square corners and no shadow.
 
+## Features
+
+- **Header bar:** libadwaita's header bar drawn by GNUstep, with GNOME's
+  window buttons, moving, resizing, tiling and the window menu through the
+  window manager, the window's toolbar in the bar if the app wants it, and
+  a document window's file name as its title with a dot while it has
+  unsaved changes ([Header bar](#header-bar)).
+- **Menus:** a menu bar inside the window, or GNOME's primary ☰ menu
+  ([Settings](#settings)); menus drawn as libadwaita's popovers; titles that
+  don't fit a narrow window fold into an overflow menu at the bar's end;
+  context menus open at the pointer; inline button rows such as a zoom row
+  ([below](#inline-button-rows-in-menus)).
+- **Controls:** buttons, entries, search fields, pop-ups, check boxes,
+  radios, switches, sliders, steppers, segmented controls and tabs as
+  libadwaita draws them, and tables and outlines in Adwaita's style; symbolic icons tinted with the text
+  colour ([below](#symbolic-icons)); translucent tool tips.
+- **GNOME's settings:** light or dark style (`color-scheme`),
+  high contrast, the interface and monospace fonts, `font-hinting`,
+  overlay scrollbars, the window buttons' layout and the title bar's
+  double-click action.
+- **Dialogs:** alerts attached to the window they interrupt, without a bar,
+  and GNOME's file chooser for open and save panels.
+- **Window types** as GTK sets them, so the window manager and compositor
+  treat menus, tool tips, drag images and dialogs as they do GTK's.
+- **Metrics per window:** windows built in code at GNOME's sizes, windows
+  from Gorm or nib files at GNUstep's ([Settings](#settings)), and an
+  Adwaita palette for laying out GNOME-style windows in Gorm
+  ([below](#designing-a-gnome-style-app-in-gorm)).
+
 ## Controls reference
 
 <p>
@@ -79,31 +108,19 @@ windows, menus and tool tips have square corners and no shadow.
   <img src="Docs/Screenshots/theme-data.png" alt="ThemeDemo data views page" width="32%">
 </p>
 
-## Release status
+## Known issues
 
-This project should currently be treated as an `0.1.0-alpha5` release.
+This is an alpha (`0.1.0-alpha5`). What is open, with an issue for each in
+[the tracker](https://github.com/danjboyd/plugins-themes-Adwaita/issues):
 
-What is already in place:
-
-- Adwaita-inspired palette, spacing, and control rendering for core widgets
-- A GNUstep demo app for side-by-side inspection
-- A GTK4/libadwaita reference app for comparison
-- GNOME settings integration for fonts and appearance variants
-
-What is still known to be incomplete:
-
-- text-field focus/render parity is not fully resolved yet
-- some popup/combo-box interaction details still need manual polish
-- visual acceptance is still partly manual rather than fully scripted
-
-## Known Issues
-
-- Focusing a text field can still cause a subtle text rendering change compared
-  to the unfocused state.
-- Combo-box and popup-menu interaction chrome is substantially improved, but a
-  few interaction details still need final polish against the GTK reference.
-- The project still relies on manual side-by-side visual review for some
-  acceptance decisions.
+- Text is about 1.4% narrower than GTK's at the same font (#23): libs-back
+  hints the metrics to whole pixels, and matching GTK exactly needs libs-gui
+  to round the sizes it takes from text.
+- Under GNOME Shell, the file chooser isn't attached to the app's window as
+  a modal dialog (#44, a Mutter issue: GNOME/mutter#5106).
+- Gorm's own inspectors are cramped at GNOME's fonts (#26).
+- A few GNUstep bugs are worked around in the theme until fixes land
+  upstream (#28, #29; see `Docs/upstream-issues/`).
 
 ## Scope
 
@@ -113,7 +130,9 @@ It does not currently aim to:
 
 - support arbitrary third-party GTK themes
 - reproduce GTK4's rendering architecture
-- patch `libs-gui` unless a clear framework blocker remains after theme work
+- patch GNUstep where the theme layer can do the job: the libs-back and
+  libs-gui patches it needs are the exceptions, kept small and sent
+  upstream (`Docs/upstream-patches/`)
 - guarantee that existing GNUstep applications will preserve their prior look
   unchanged under this theme
 
@@ -122,12 +141,15 @@ It does not currently aim to:
 ```text
 Source/                  Theme implementation
 Resources/               Theme bundle metadata and assets
+Palettes/Adwaita/        Gorm palette of controls at GNOME's sizes
 Examples/ThemeDemo/      GNUstep-side demo app
+Examples/QuirkProbe/     Offscreen checks run by make check-quirks
 Reference/AdwaitaDemo/   GTK4/libadwaita comparison harness
 Reference/HeaderBar/     libadwaita header bar measurements and renders
-Tests/Scripts/           Capture and local verification helpers
-Docs/                    Public design notes and roadmap; releasing in Docs/RELEASING.md
-Tools/                   Release helpers
+Tests/Scripts/           Check runners and capture helpers (readme-shots/: the README's screenshots)
+Docs/                    Design notes and handoffs; Screenshots/
+Docs/upstream-patches/   The libs-back and libs-gui patches the theme needs, with review notes
+Docs/upstream-issues/    GNUstep (and Mutter) bug reports with reproducers
 ```
 
 ## Requirements
@@ -136,9 +158,17 @@ Build requirements for the GNUstep theme bundle:
 
 - GNUstep make and GNUstep GUI development environment
 - `pkg-config`
-- `gio-2.0`
-- `glib-2.0`
-- `gobject-2.0`
+- `gio-2.0`, `glib-2.0` and `gobject-2.0` (GNOME's settings)
+- `x11` (window manager integration)
+
+At run time:
+
+- GNUstep 0.32 or later. libs-gui and libs-back built with the patches in
+  `Docs/upstream-patches/` give the header bar by default, the window
+  shadow, rounded corners and rounded menus (see
+  [Status and requirements](#status-and-requirements)).
+- For GNOME's file chooser: `xdg-desktop-portal` with a GTK or GNOME
+  backend. Without it, open and save panels are GNUstep's own.
 
 Reference app requirements:
 
@@ -147,46 +177,40 @@ Reference app requirements:
 - GTK4
 - libadwaita
 
-## Build
+## Install and use
+
+Build and install the theme for the current user:
 
 ```sh
 make
-make -C Examples/ThemeDemo
-```
-
-Install the theme for the current user:
-
-```sh
 make install GNUSTEP_INSTALLATION_DOMAIN=USER
 ```
 
-The installed theme bundle will be placed under:
-
-```text
-~/GNUstep/Library/Themes/Adwaita.theme
-```
-
-## Run
-
-Launch the GNUstep demo app with the Adwaita theme selected:
+The bundle goes to `~/GNUstep/Library/Themes/Adwaita.theme`. Select it for
+every app, or for one (by its defaults domain, here TextEdit's):
 
 ```sh
-PATH=/usr/GNUstep/System/Tools:$PATH defaults write ThemeDemo GSTheme Adwaita
+defaults write NSGlobalDomain GSTheme Adwaita
+defaults write TextEdit GSTheme Adwaita
+```
+
+Apps pick the theme up when they start. To try it once without changing
+anything, pass `-GSTheme Adwaita` on an app's command line.
+
+## Demo apps
+
+The GNUstep demo app, against the theme built in this checkout:
+
+```sh
+make -C Examples/ThemeDemo
 bash Tests/Scripts/run-theme-demo.sh
 ```
 
-Launch the GTK reference app:
+The GTK 4 / libadwaita reference app, for comparison, whole or one page:
 
 ```sh
 python3 Reference/AdwaitaDemo/adwaita_demo.py
-```
-
-Open a specific page in the reference app:
-
-```sh
-python3 Reference/AdwaitaDemo/adwaita_demo.py --page controls
-python3 Reference/AdwaitaDemo/adwaita_demo.py --page data
-python3 Reference/AdwaitaDemo/adwaita_demo.py --page text
+python3 Reference/AdwaitaDemo/adwaita_demo.py --page controls   # or data, text
 ```
 
 ## Settings
@@ -309,8 +333,9 @@ work in a window without the menu bar: GNUstep sends them to the main menu.
 
 By default GNUstep draws the window decorations instead of the window
 manager, and this theme draws them as libadwaita's header bar: one 46pt
-row with the bold title centred, round window buttons in the order of GNOME's `button-layout`, and
-the primary menu's ☰ before them. Drag the bar to move the window; resize
+row with the bold title centred and round window buttons in the order of
+GNOME's `button-layout` (with `GnomeThemeMenuStyle primary`, the ☰ menu
+before them). Drag the bar to move the window; resize
 from any edge or corner; double-click the bar for GNOME's
 `action-double-click-titlebar` action (maximise by default); right-click it
 for the window menu. On X11 (GNUstep apps on GNOME run under Xwayland) the
@@ -433,12 +458,31 @@ the dark palette and in high contrast over the light and the dark palette
 `-ProbeOnly header-bar`). The probe sets the decoration
 flag itself, so a user default doesn't change the runs.
 
+Other checks, each on private displays with no gvfs (never the desktop
+you work on):
+
+- `make check-mutter`: the header bar under GNOME Shell (moving, resizing,
+  maximising, tiling, the window menu, menu types).
+- `make check-mutter-shadow`: the same against libs-gui and libs-back with
+  the patches (`MUTTER_CHECK_GUI`, `MUTTER_CHECK_BACK`), with the shadow,
+  rounded corners and popover shadow.
+- `make check-wms`: the header bar's checks under GNOME Shell, KWin, Xfwm4
+  and Openbox with picom.
+- `make check-file-chooser`: open and save panels against a stand-in portal.
+- `make check-nib-metrics`: per-window metrics for nib and Gorm windows.
+- `make check-menu-timing`, `make check-scroller-drag`,
+  `make check-context-menu`: menu sizing time, overlay scroller drags and
+  context menu placement.
+
 Useful helpers:
 
 - `bash Tests/Scripts/run-theme-demo.sh`
 - `bash Tests/Scripts/run-quirk-probe.sh --output /tmp/quirk-probe`
 - `bash Tests/Scripts/run-adwaita-demo.sh`
 - `bash Tests/Scripts/capture-theme-demo.sh --page controls --output /tmp/theme-controls.png`
+  (runs on the current display and clears ThemeDemo's `GSTheme`,
+  `GSScaleFactor` and decoration defaults; for the README's screenshots use
+  `Tests/Scripts/readme-shots/`, see `Docs/Screenshots/README.md`)
 - `bash Tests/Scripts/capture-adwaita-demo.sh --page controls --output /tmp/adwaita-controls.png`
 - `python3 Reference/AdwaitaDemo/adwaita_demo.py --dump-metrics`
 - `python3 Tests/Scripts/import-adwaita-cursors.py`
@@ -487,6 +531,6 @@ version 2 of the License, or (at your option) any later version.
 
 See [COPYING.LIB](./COPYING.LIB).
 
-## Current Ownership
+## Author
 
-- Author: Daniel Boyd
+Daniel Boyd
