@@ -38,6 +38,7 @@ typedef enum
   BOOL _highContrast;
   BOOL _overlayScrolling;
   NSInteger _fontHintStyle;
+  CGFloat _textScalingFactor;
   BOOL _compactMetrics;
   BOOL _metricsFollowWindows;
   CGFloat _compactInterfaceFontSize;
@@ -62,6 +63,12 @@ typedef enum
 /* GNOME's font-hinting (none, slight, medium or full; slight when unset)
    as libs-back's hint style: 1 none, 2 slight, 3 medium, 4 full. */
 - (NSInteger) fontHintStyle;
+/* GNOME's text-scaling-factor (Large Text in the accessibility settings;
+   1.0 when unset or outside GNOME's 0.5 to 3.0): the interface and
+   monospace sizes are multiplied by it, as GTK's text is, and the metrics
+   follow (#53). Compact metrics keep GNUstep's sizes. Read when the theme
+   loads, like the other GNOME settings. */
+- (CGFloat) textScalingFactor;
 /* GNUstep's metrics (12pt text, GNUstep's button margins and tab height)
    instead of GNOME's, for apps whose windows come from Gorm or nib files and
    were laid out at those metrics. The GnomeThemeMetrics default chooses

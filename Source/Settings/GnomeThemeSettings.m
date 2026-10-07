@@ -264,6 +264,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   BOOL highContrast = NO;
   BOOL overlayScrolling = YES;
   NSInteger fontHintStyle = 2;
+  CGFloat textScalingFactor = 1.0;
   NSString *gtkThemeName = @"Adwaita";
   CGFloat fontScale = GnomeThemeResolvedFontScale ();
 
@@ -320,6 +321,15 @@ GnomeThemeResolveFont(NSString *preferredName,
             }
         }
 
+      if (g_settings_schema_has_key (schema, "text-scaling-factor"))
+        {
+          textScalingFactor = g_settings_get_double (settings, "text-scaling-factor");
+          if (textScalingFactor < 0.5 || textScalingFactor > 3.0)
+            {
+              textScalingFactor = 1.0;
+            }
+        }
+
       if (g_settings_schema_has_key (schema, "overlay-scrolling"))
         {
           overlayScrolling = g_settings_get_boolean (settings, "overlay-scrolling") ? YES : NO;
@@ -368,10 +378,13 @@ GnomeThemeResolveFont(NSString *preferredName,
       monoSize = GnomeThemeDefaultMonospaceFontSize;
     }
 
-  fontSize *= fontScale;
-  monoSize *= fontScale;
+  /* Large Text scales the text as GTK's is, and the metrics follow it. */
+  fontSize *= fontScale * textScalingFactor;
+  monoSize *= fontScale * textScalingFactor;
 
-  /* GNUstep's size, still following GnomeFontScale. */
+  /* GNUstep's size, still following GnomeFontScale, but not Large Text:
+     compact metrics are for windows laid out at GNUstep's sizes, whose
+     frames don't grow with their text, so larger text would clip. */
   _compactInterfaceFontSize = GnomeThemeCompactInterfaceFontSize * (fontScale / GnomeThemeDefaultFontScale);
   _compactMetrics = GnomeThemeWantsCompactMetrics (&_metricsFollowWindows);
   if (_compactMetrics)
@@ -429,6 +442,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   _highContrast = highContrast;
   _overlayScrolling = overlayScrolling;
   _fontHintStyle = fontHintStyle;
+  _textScalingFactor = textScalingFactor;
 
   [self reloadWindowManagerPreferences];
 }
@@ -574,6 +588,11 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (NSInteger) fontHintStyle
 {
   return _fontHintStyle;
+}
+
+- (CGFloat) textScalingFactor
+{
+  return _textScalingFactor;
 }
 
 - (NSFont *) interfaceFont

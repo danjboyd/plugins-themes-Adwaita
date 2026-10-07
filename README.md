@@ -282,6 +282,15 @@ High contrast follows GNOME's accessibility setting
 light or dark palette with stronger borders and separators. GNOME 3's
 `HighContrast` and `HighContrastInverse` themes still turn it on.
 
+Large Text follows GNOME's `text-scaling-factor`
+(`org.gnome.desktop.interface`, 0.5 to 3.0), as GTK's text does: the
+interface and monospace fonts are multiplied by it, on top of
+`GnomeFontScale`, and menus, rows, fields and tabs grow with the text.
+Windows with compact metrics (laid out at GNUstep's sizes, such as those
+loaded from Gorm or nib files) keep GNUstep's 12pt, since their controls
+don't grow with their text and larger text would clip. Like the theme's
+other GNOME settings, it is read when an app starts.
+
 ### Symbolic icons
 
 A template image is drawn in the colour of the text around it, as GTK
@@ -470,6 +479,8 @@ you work on):
   and Openbox with picom.
 - `make check-file-chooser`: open and save panels against a stand-in portal.
 - `make check-nib-metrics`: per-window metrics for nib and Gorm windows.
+- `make check-text-scaling`: fonts and metrics with GNOME's Large Text
+  (text-scaling-factor 1.25 and 2.0).
 - `make check-menu-timing`, `make check-scroller-drag`,
   `make check-context-menu`: menu sizing time, overlay scroller drags and
   context menu placement.
