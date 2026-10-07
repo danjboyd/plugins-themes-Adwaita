@@ -12,7 +12,67 @@ use case today is making it possible to build new GNUstep apps that feel at
 home on GNOME. Backward-compatibility improvements may still happen later, but
 they are not the primary design constraint for this release.
 
-## Screenshots
+## GNUstep's theme and Adwaita, side by side
+
+The same apps, the same windows, left with GNUstep's default theme and right
+with this one:
+
+<table>
+  <tr>
+    <th width="50%">GNUstep theme</th>
+    <th width="50%">Adwaita</th>
+  </tr>
+  <tr>
+    <td><img src="Docs/Screenshots/compare/markdownviewer-gnustep.png" alt="MarkdownViewer with GNUstep's theme: the window manager's title bar, a grey in-window menu bar and toolbar, and arrow scrollers"></td>
+    <td><img src="Docs/Screenshots/compare/markdownviewer-adwaita.png" alt="MarkdownViewer with Adwaita: a header bar holding the toolbar and the Read, Edit and Split switcher, a flat menu bar with the primary menu, rounded corners and a window shadow"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><a href="https://github.com/danjboyd/ObjcMarkdown">MarkdownViewer</a></td>
+  </tr>
+  <tr>
+    <td><img src="Docs/Screenshots/compare/screenshottool-gnustep.png" alt="ScreenshotTool with GNUstep's theme, annotating a chart: bevelled toolbar buttons and a grey toolbar under the window manager's title bar"></td>
+    <td><img src="Docs/Screenshots/compare/screenshottool-adwaita.png" alt="ScreenshotTool with Adwaita, annotating the same chart: its tools as a linked button group in the header bar, symbolic icons and round window buttons"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><a href="https://github.com/danjboyd/ScreenshotTool">ScreenshotTool</a></td>
+  </tr>
+  <tr>
+    <td><img src="Docs/Screenshots/compare/gorm-gnustep.png" alt="Gorm with GNUstep's theme: document window, a window being designed, the Controls palette and the button inspector, all grey and bevelled"></td>
+    <td><img src="Docs/Screenshots/compare/gorm-adwaita.png" alt="Gorm with Adwaita: the same windows with header bars, flat controls, libadwaita's check boxes and pop-up buttons"></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">Gorm, GNUstep's interface builder (its windows come from Gorm files, so it runs with compact metrics)</td>
+  </tr>
+</table>
+
+What changes: libadwaita's header bar, with the window's toolbar in it and
+GNOME's window buttons; its buttons, entries, switches, check boxes and
+pop-ups; menus as popovers with the primary ☰ menu; overlay scrollbars;
+GNOME's fonts, dark style and high contrast; GNOME's file chooser for open
+and save panels. All taken on GNOME Shell 48 (X11) with the `+csd`
+libraries below; how each shot was made is in
+[`Docs/Screenshots/README.md`](Docs/Screenshots/README.md).
+
+## Status and requirements
+
+The theme as it stands relies on **GNUstep patches that are not upstream
+yet** (see [`Docs/upstream-patches/README.md`](Docs/upstream-patches/README.md)):
+
+- **libs-back:** window manager functions for windows GNUstep decorates
+  (sent as [libs-back#244](https://github.com/gnustep/libs-back/pull/244)),
+  GTK's window types for menus, tool tips and dialogs, an alpha channel for
+  borderless windows, and GNOME's window shadow, rounded corners and popover
+  shadow.
+- **libs-gui:** letting a theme turn on GNUstep-drawn window decorations,
+  which is how the header bar becomes the default.
+
+The `+csd` builds of libs-gui and libs-back in our apt repo carry these
+patches; the theme's package depends on that libs-gui and recommends that
+libs-back. With stock GNUstep 0.32 the theme still works, but the header bar
+has to be turned on by hand ([below](#header-bar)), and windows have square
+corners and no shadow.
+
+## Controls reference
 
 <p>
   <img src="Docs/Screenshots/theme-controls.png" alt="ThemeDemo controls page" width="32%">
@@ -20,9 +80,9 @@ they are not the primary design constraint for this release.
   <img src="Docs/Screenshots/theme-data.png" alt="ThemeDemo data views page" width="32%">
 </p>
 
-## Status
+## Release status
 
-This project should currently be treated as an `0.1.0-alpha1` release.
+This project should currently be treated as an `0.1.0-alpha5` release.
 
 What is already in place:
 
