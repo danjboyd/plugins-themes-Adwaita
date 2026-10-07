@@ -2750,6 +2750,43 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* A pop-up button's chevron is libadwaita's pan-down: about 10x7 with a
+   2px stroke, in the text colour, and nothing else at that end (GNUstep's
+   was 6x4 and faint, after a divider; plugins-themes-Adwaita#59). */
+- (void) checkPopUpChevron
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 70) title: @"Probe Chevron"];
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 18, 200, 34)
+                                                                pullsDown: NO]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk ink;
+  NSInteger width;
+  NSString *detail;
+
+  [popUp addItemWithTitle: @"x"];
+  [[window contentView] addSubview: popUp];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (popUp);
+  width = [rep pixelsWide];
+  QuirkProbePixelAt (rep, width - 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (width - 40, 0, 36, [rep pixelsHigh]));
+  QuirkProbeInkBackground = 750;
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"ink %ldx%ld at the right end (want about 10x7)", (long)ink.width, (long)ink.height];
+  if (ink.count > 0 && ink.width >= 9 && ink.width <= 11 && ink.height >= 5 && ink.height <= 8)
+    {
+      [self pass: @"popup-chevron" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-chevron" detail: detail];
+    }
+}
+
 /* A focused push button, as in OneDriveServiceManager's Resync panel, where
    Cancel is the first key view. As in GTK, the ring shows only after a key
    press. It runs along the button's edge: not around the title (where NSCell
@@ -5201,6 +5238,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkSwitch];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
+  [self checkPopUpChevron];
       [self finish];
       return;
     }
@@ -5257,6 +5295,7 @@ QuirkProbePixelAt(NSBitmapImageRep *rep, NSInteger x, NSInteger y, NSUInteger rg
   [self checkSwitch];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
+  [self checkPopUpChevron];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
