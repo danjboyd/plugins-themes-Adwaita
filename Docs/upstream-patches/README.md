@@ -15,10 +15,10 @@ send without it, as GNUstep has already accepted his code, and to deal
 with it if a maintainer raises it.
 
 **Patch 2 on its own:** sent as its own pull request, patch 2 is
-`57d54d4` on branch `x11-window-types`, on master `23fbe39`
+`25affcd` on branch `x11-window-types`, on master `23fbe39`
 (`libs-back-standalone/`; review packet `review/libs-back-0002.md`). It
 corrects two statements that runs disproved on 2026-10-07 (Mutter focus,
-Openbox's types); the series commit `2a7e6cb` still needs the same fixes.
+Openbox's types); the series has the same corrections.
 
 ## The series
 
@@ -58,6 +58,12 @@ grew it by the margin. `shadowmargin.m` gains two checks of that order;
 the restore's fails with the patch as it was. Patch 5's message has the
 new count only. Upstream master has moved on to `23fbe39` since the
 series was made; all five patches still apply to it with `git am`.
+
+**Changed again on 2026-10-07:** patch 2 has the standalone version's two
+corrections (its code comment, ChangeLog and message on Openbox's types,
+and the message's Mutter sentence), so the series is now `dbfbe53` (1,
+unchanged), `7ac2405`, `8589356`, `129aefc` and `9160d53`. Patches 3–5
+differ from the previous ones only by those lines, carried forward.
 
 **libs-gui** (`libs-gui/`), against master `549f63913`, branch
 `ai-policy/theme-backend-defaults` in `~/git/gnustep/libs-gui-series`:

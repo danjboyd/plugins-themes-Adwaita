@@ -1,4 +1,4 @@
-From 251a97531f77ef9119a5518c412e446fc4bb4524 Mon Sep 17 00:00:00 2001
+From 129aefcb4a0a8d69357737ec5dff8eb22c73a205 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:30:32 -0500
 Subject: [PATCH 4/5] x11, cairo: window shadows and rounded corners for
@@ -123,7 +123,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  create mode 100644 Tests/x11/shadowmargin.m
 
 diff --git a/ChangeLog b/ChangeLog
-index 9a09d01..292ecce 100644
+index 562c2cf..4b6d759 100644
 --- a/ChangeLog
 +++ b/ChangeLog
 @@ -1,3 +1,81 @@
@@ -970,7 +970,7 @@ index c98ecb3..93ac1e8 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 12fc835..7aa84ba 100644
+index 77513be..fcbda5b 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -468,6 +468,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
@@ -1396,7 +1396,7 @@ index 12fc835..7aa84ba 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -4120,8 +4417,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -4121,8 +4418,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  

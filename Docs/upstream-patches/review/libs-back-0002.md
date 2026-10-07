@@ -1,12 +1,12 @@
 # Review: libs-back patch 2
 
 **Item:** libs-back 0002, "x11: type menus, tool tips, drag images and modal panels as GTK does"
-**Commit:** `57d54d48777c4bf20a567e1bc8eee54e51b7714a`
+**Commit:** `25affcd98513fd08554fa8cd931348f236143909`
 **Base:** libs-back master `23fbe39` (2026-10-06, current on 2026-10-07)
 **Where:** branch `x11-window-types` in the libs-back repository of `~/git/gnustep/libs-back-series` (a branch of its own, not in the series worktree's checkout); patch file `Docs/upstream-patches/libs-back-standalone/0001-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch`
 **Files:** `Source/x11/XGServerWindow.m` (+107 −64), `ChangeLog` (+18), `Tests/x11/windowtype.m` (new, 307 lines)
 
-This is the version to sign off on. It is commit 2 of the series (`2a7e6cb`) made to stand on its own: it goes as its own pull request, and libs-back#244 (patch 1) isn't merged, so it is based on current master instead of on patch 1. `git cherry-pick` applied the code and the test unchanged; only the ChangeLog needed resolving, because the series' entry sat on top of patch 1's. Two corrections were made to the series commit's wording, both because a run disproved it. First, the Mutter focus sentence in the message (see "Under a real window manager"). Second, the code comment, the ChangeLog and the message about Openbox. They said Openbox knows none of the new types, but Openbox 3.6.1's `libobt` interns `_POPUP_MENU` (it doesn't intern `_TOOLTIP` or `_DND`). They now say that. `git diff 2a7e6cb 57d54d4 -- Source Tests` shows patch 1's lines (which this commit doesn't contain) and that comment, nothing else. The series commit (`2a7e6cb`) still has both old wordings and needs the same fixes.
+This is the version to sign off on. It is commit 2 of the series (`2a7e6cb`) made to stand on its own: it goes as its own pull request, and libs-back#244 (patch 1) isn't merged, so it is based on current master instead of on patch 1. `git cherry-pick` applied the code and the test unchanged; only the ChangeLog needed resolving, because the series' entry sat on top of patch 1's. Two corrections were made to the series commit's wording, both because a run disproved it. First, the Mutter focus sentence in the message (see "Under a real window manager"). Second, the code comment, the ChangeLog and the message about Openbox. They said Openbox knows none of the new types, but Openbox 3.6.1's `libobt` interns `_POPUP_MENU` (it doesn't intern `_TOOLTIP` or `_DND`). They now say that. `git diff 2a7e6cb 25affcd -- Source Tests` shows patch 1's lines (which this commit doesn't contain) and that comment, nothing else. The series commit has the same fixes since 2026-10-07 (`7ac2405`).
 
 Prepared under `Docs/UPSTREAM_POLICY.md`. Nothing has been sent.
 
@@ -65,7 +65,7 @@ Every GNUstep app on an EWMH window manager, whatever theme it uses: context men
 
 On a private Xvfb, each build loaded through a GNUstep.conf copy whose user Library holds only that build's bundle, with empty user defaults. libs-gui and libs-base were the installed packages: gui snapshot 7892137bd, base 1.31.1.
 
-| Check | Master `23fbe39` (the test copied in) | With the patch (`57d54d4`) |
+| Check | Master `23fbe39` (the test copied in) | With the patch (`25affcd`) |
 |---|---|---|
 | `Tests/x11/windowtype.m` | 4 of 5 fail: tool tip, context menu, modal panel, drag image. "Another window at the pop-up menu level stays a dialog" passes | 5 of 5 pass |
 | Whole `Tests/x11` | 50 passed, 4 failed (the above) | 54 passed, 0 failed |
@@ -89,7 +89,7 @@ Run on 2026-10-07 under GNOME Shell 48.7 (`--x11`) as the window manager of a pr
 
 **Focus did not change, with either build.** `_NET_ACTIVE_WINDOW`, the X input focus and `_NET_WM_STATE_FOCUSED` stayed on the main window while each menu and the tool tip was open, and the app saw no change of key or main window.
 
-The series commit's message said the opposite ("Mutter focuses a dialog, so opening a context menu or a pop-up button's menu drew the window under it as unfocused"). That came from an earlier session and doesn't hold on this setup, so this version's message drops it. It now says only that window managers and compositors read the type, and it gives the GNOME Shell types above as a result. This is the only change from `db25bb5`; the tree is identical.
+The series commit's message said the opposite ("Mutter focuses a dialog, so opening a context menu or a pop-up button's menu drew the window under it as unfocused"). That came from an earlier session and doesn't hold on this setup, so this version's message drops it. It now says only that window managers and compositors read the type, and it gives the GNOME Shell types above as a result. This is the only change from `db25bb5`; the tree is identical. `25affcd` then rewrapped one line of the message that the Openbox fix had left over 80 characters (2026-10-07); nothing else changed, and the tree is still identical, so every result here applies to it.
 
 **Not covered:** GNOME on Wayland (through Xwayland), the Adwaita theme's own title bar, and Mutter focus settings other than the default. If the unfocused parent was ever real, it came from one of those. With the GNUstep-drawn decorations, only the context menu and the tool tip were checked.
 
@@ -109,8 +109,8 @@ The series commit's message said the opposite ("Mutter focuses a dialog, so open
 
 ```
 cd ~/git/gnustep/libs-back-series
-git show 57d54d4                       # the whole commit
-git diff 2a7e6cb 57d54d4 -- Source Tests   # differs from the series commit only by patch 1
+git show 25affcd                       # the whole commit
+git diff 7ac2405 25affcd -- Source Tests   # differs from the series commit only by patch 1
 ```
 
 The packet's results came from `run-back-tests.sh <tree> <display> [dir]` in the session's scratch directory. Ask Claude to run it with you watching.
@@ -120,9 +120,9 @@ The packet's results came from `run-back-tests.sh <tree> <display> [dir]` in the
 If you approve this exact version, say so in the chat ("I approve libs-back-0002") and Claude records it, or add this row to `Docs/UPSTREAM_SIGNOFF.md` yourself:
 
 ```
-| <date> | libs-back 0002 | 57d54d48777c4bf20a567e1bc8eee54e51b7714a | | |
+| <date> | libs-back 0002 | 25affcd98513fd08554fa8cd931348f236143909 | | |
 ```
 
 ## The patch, as it would be sent
 
-See `Docs/upstream-patches/libs-back-standalone/0001-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch` (from `git format-patch -1 57d54d4`; `git am` onto `23fbe39` gives the same tree).
+See `Docs/upstream-patches/libs-back-standalone/0001-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch` (from `git format-patch -1 25affcd`; `git am` onto `23fbe39` gives the same tree).

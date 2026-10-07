@@ -1,4 +1,4 @@
-From 2a7e6cb1afd890106e62f2b8ead83a84657b17ac Mon Sep 17 00:00:00 2001
+From 7ac2405422e3564fac4a7d26c1421e203b0af4fe Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:21:23 -0500
 Subject: [PATCH 2/5] x11: type menus, tool tips, drag images and modal panels
@@ -6,9 +6,8 @@ Subject: [PATCH 2/5] x11: type menus, tool tips, drag images and modal panels
 
 -setwindowlevel:: typed every window at the pop-up menu level other than
 a tool tip as _NET_WM_WINDOW_TYPE_DIALOG, and modal panels as _NORMAL.
-Window managers act on the type: Mutter focuses a dialog, so opening a
-context menu or a pop-up button's menu drew the window under it as
-unfocused, and compositors animate and shadow windows by type.  Tool tips
+Window managers and compositors read the type to decide how to treat a
+window, so menus and tool tips should say what they are.  Tool tips
 were meant to be _TOOLTIP, but a tool tip's level is set while its window
 is deferred, before the backend has registered the NSWindow for it, so
 its class wasn't known and it was typed _DIALOG as well (libs-gui#965).
@@ -19,9 +18,10 @@ the pop-up menu level, when its class is known.  A tool tip is _TOOLTIP,
 a menu panel at that level is _POPUP_MENU, a drag image (XGRawWindow or
 GSRawWindow) is _DND, and a modal panel is _DIALOG, as GTK types them.
 Each new type is followed by _DIALOG, the window's old type, so window
-managers that don't know the new ones (Openbox) treat the window as
-before.  Other windows keep their types, and a theme can still set a
-finer type after the level (a menu bar's menus as _DROPDOWN_MENU).
+managers that don't know the new ones (Openbox 3.6 doesn't know _TOOLTIP
+or _DND) treat the window as before.  Other windows keep their types, and
+a theme can still set a finer type after the level (a menu bar's menus as
+_DROPDOWN_MENU).
 
 Testing: Tests/x11/windowtype.m forks a window manager that announces
 itself as an EWMH one and maps what asks to be, then makes the windows
@@ -32,7 +32,10 @@ fallback type as well as the new one, and the tool tip case reproduces
 the registration order that hid its class.  A plain window at the
 pop-up menu level guards against typing other windows by level alone.
 Without this change four of the five checks fail; with it all five
-pass.  The test needs a display with no window manager of its own (a
+pass.  Under GNOME Shell 48.7 (X11), a real pop-up button menu, context
+menu and tool tip were each typed _DIALOG without this change, and
+_POPUP_MENU, _POPUP_MENU and _TOOLTIP (each followed by _DIALOG) with
+it.  The test needs a display with no window manager of its own (a
 private Xvfb) and skips otherwise.
 
 AI assistance: this change, its test and this description were written
@@ -40,17 +43,17 @@ with Claude (Anthropic's Claude Code).
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- ChangeLog                   |  17 ++
- Source/x11/XGServerWindow.m | 170 ++++++++++++--------
+ ChangeLog                   |  18 +++
+ Source/x11/XGServerWindow.m | 171 ++++++++++++--------
  Tests/x11/windowtype.m      | 307 ++++++++++++++++++++++++++++++++++++
- 3 files changed, 430 insertions(+), 64 deletions(-)
+ 3 files changed, 432 insertions(+), 64 deletions(-)
  create mode 100644 Tests/x11/windowtype.m
 
 diff --git a/ChangeLog b/ChangeLog
-index 47ed8d1..95aec54 100644
+index 47ed8d1..407b66a 100644
 --- a/ChangeLog
 +++ b/ChangeLog
-@@ -1,3 +1,20 @@
+@@ -1,3 +1,21 @@
 +2026-10-06 Daniel Boyd <danieljboyd@icloud.com>
 +
 +	* Source/x11/XGServerWindow.m (-_setWindowType:): New, from
@@ -59,7 +62,8 @@ index 47ed8d1..95aec54 100644
 +	menu level (a context menu or a pop-up button's) is _POPUP_MENU
 +	rather than _DIALOG, a drag image is _DND, and a modal panel is
 +	_DIALOG rather than _NORMAL.  The new types are followed by _DIALOG,
-+	their old type, for window managers that don't know them (Openbox).
++	their old type, for window managers that don't know them (Openbox
++	3.6 doesn't know _TOOLTIP or _DND).
 +	Other windows keep their types.
 +	(-setwindowlevel::): Use it.
 +	(-orderwindow:::): Set the type again just before mapping a window
@@ -72,7 +76,7 @@ index 47ed8d1..95aec54 100644
  
  	* Source/x11/XGServerWindow.m (setWindowHintsForStyle): For a styled
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index b491681..f69697d 100644
+index b491681..e60f726 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -463,6 +463,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
@@ -96,7 +100,7 @@ index b491681..f69697d 100644
  
        /*
         * If we are asked to set hints for the appicon and the window manager is
-@@ -3572,6 +3579,94 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3572,6 +3579,95 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    return rect;
  }
  
@@ -150,8 +154,9 @@ index b491681..f69697d 100644
 +      NSWindow *nswin = GSWindowWithNumber(window->number);
 +      NSString *className = [nswin className];
 +
-+      /* A window manager that doesn't know the first type (Openbox
-+         knows none of these) uses the second, as before. */
++      /* A window manager that doesn't know the first type (Openbox 3.6
++         knows _POPUP_MENU but not _TOOLTIP or _DND) uses the second, as
++         before. */
 +      data[1] = generic._NET_WM_WINDOW_TYPE_DIALOG_ATOM;
 +      if ([className isEqual: @"GSTTPanel"])
 +        {
@@ -191,7 +196,7 @@ index b491681..f69697d 100644
  - (void) setwindowlevel: (int)level : (int)win
  {
    gswindow_device_t *window;
-@@ -3615,70 +3710,17 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3615,70 +3711,17 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
  
        if ((generic.wm & XGWM_EWMH) != 0)
          {

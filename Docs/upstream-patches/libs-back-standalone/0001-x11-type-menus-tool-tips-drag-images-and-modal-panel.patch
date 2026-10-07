@@ -1,4 +1,4 @@
-From 57d54d48777c4bf20a567e1bc8eee54e51b7714a Mon Sep 17 00:00:00 2001
+From 25affcd98513fd08554fa8cd931348f236143909 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:21:23 -0500
 Subject: [PATCH] x11: type menus, tool tips, drag images and modal panels as
@@ -19,8 +19,9 @@ a menu panel at that level is _POPUP_MENU, a drag image (XGRawWindow or
 GSRawWindow) is _DND, and a modal panel is _DIALOG, as GTK types them.
 Each new type is followed by _DIALOG, the window's old type, so window
 managers that don't know the new ones (Openbox 3.6 doesn't know _TOOLTIP
-or _DND) treat the window as before.  Other windows keep their types, and a theme can still set a
-finer type after the level (a menu bar's menus as _DROPDOWN_MENU).
+or _DND) treat the window as before.  Other windows keep their types, and
+a theme can still set a finer type after the level (a menu bar's menus as
+_DROPDOWN_MENU).
 
 Testing: Tests/x11/windowtype.m forks a window manager that announces
 itself as an EWMH one and maps what asks to be, then makes the windows

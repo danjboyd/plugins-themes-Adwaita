@@ -1,4 +1,4 @@
-From 1d6dfb32b7145e54ce378a192964a14bffda9b99 Mon Sep 17 00:00:00 2001
+From 9160d538fdee3af7acdefd09e63e7a3f78505400 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:33:53 -0500
 Subject: [PATCH 5/5] x11, cairo: popover shadows for menus, when a theme asks
@@ -51,7 +51,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
  6 files changed, 216 insertions(+), 14 deletions(-)
 
 diff --git a/ChangeLog b/ChangeLog
-index 292ecce..5c9af4d 100644
+index 4b6d759..a875239 100644
 --- a/ChangeLog
 +++ b/ChangeLog
 @@ -1,3 +1,28 @@
@@ -207,7 +207,7 @@ index e334283..71b82dc 100644
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 7aa84ba..21ba962 100644
+index fcbda5b..4f3277e 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -633,6 +633,17 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
