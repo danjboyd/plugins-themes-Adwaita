@@ -668,9 +668,14 @@ GSTabHandleShortcut (NSWindow *window, NSEvent *event)
     {
       return NO;
     }
+  /* The Ctrl key, whichever modifier it arrives as: GNUstep's default
+     key mapping (GSFirstCommandKey) makes the physical Ctrl key
+     NSCommandKeyMask, which is why apps' Ctrl+N shortcuts are Command
+     key equivalents; with Ctrl mapped to Control it is NSControlKeyMask.
+     Alt with it is something else. */
   flags = [event modifierFlags];
-  if ((flags & NSControlKeyMask) == 0
-    || (flags & (NSAlternateKeyMask | NSCommandKeyMask)) != 0)
+  if ((flags & (NSControlKeyMask | NSCommandKeyMask)) == 0
+    || (flags & NSAlternateKeyMask) != 0)
     {
       return NO;
     }
