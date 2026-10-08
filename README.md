@@ -321,8 +321,20 @@ interface and monospace fonts are multiplied by it, on top of
 `GnomeFontScale`, and menus, rows, fields and tabs grow with the text.
 Windows with compact metrics (laid out at GNUstep's sizes, such as those
 loaded from Gorm or nib files) keep GNUstep's 12pt, since their controls
-don't grow with their text and larger text would clip. Like the theme's
-other GNOME settings, it is read when an app starts.
+don't grow with their text and larger text would clip.
+
+These GNOME settings are followed while an app runs, as GTK apps follow
+them: the colour scheme, high contrast, Large Text, the interface and
+monospace fonts, `font-hinting`, `overlay-scrolling`, the window buttons'
+`button-layout` and the title bar's actions. Within a fraction of a second
+of a change the system colours and window backgrounds follow, header bars
+lay their buttons out again for a new `button-layout`, and fonts asked
+for from then on are the new ones (`make check-live-settings` measures
+these); menus are sized again and scroll views tiled again, as libs-gui
+does when the theme changes. What a window already holds stays as it
+was: a control or a text view that was given a font when it was made
+keeps that font, and frames laid out at launch aren't laid out again, so
+an app shows Large Text in full in the windows it opens after the change.
 
 ### Symbolic icons
 
@@ -544,6 +556,8 @@ you work on):
 - `make check-nib-metrics`: per-window metrics for nib and Gorm windows.
 - `make check-text-scaling`: fonts and metrics with GNOME's Large Text
   (text-scaling-factor 1.25 and 2.0).
+- `make check-live-settings`: GNOME's settings changed while an app runs
+  (dark style and Large Text on, then off).
 - `make check-menu-timing`, `make check-scroller-drag`,
   `make check-context-menu`: menu sizing time, overlay scroller drags and
   context menu placement.
