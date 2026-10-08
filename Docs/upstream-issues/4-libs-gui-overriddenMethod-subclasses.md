@@ -46,16 +46,18 @@ the original. `MyCell` subclasses `NSActionCell` without overriding `-tag`.
 base = [NSActionCell new]; [base setTag: 7];
 sub = [MyCell new];        [sub setTag: 7];
 NSLog(@"NSActionCell tag = %ld", (long)[base tag]);
-NSLog(@"MyCell tag       = %ld", (long)[sub tag]);
+NSLog(@"MyCell tag       = %ld  (%@)", (long)[sub tag],
+      [sub tag] == 7 ? @"PASS" : @"FAIL");
 ```
 
-Output:
+Output (libs-gui master 549f639, GNUstep's default theme):
 
 ```
-  override called for NSActionCell: original IMP 0x7fc6c0b749a0
+  override called for NSActionCell: original IMP 0x7f489ee20130
 NSActionCell tag = 7
   override called for MyCell: original IMP (null)
-MyCell tag       = -1
+  override called for MyCell: original IMP (null)
+MyCell tag       = -1  (FAIL)
 ```
 
 ### Expected

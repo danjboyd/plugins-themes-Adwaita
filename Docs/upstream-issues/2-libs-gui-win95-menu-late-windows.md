@@ -35,7 +35,7 @@ Output:
 
 ```
 window created at launch: menu attached
-window created later:     menu none
+window created later:     menu none  (FAIL)
 ```
 
 On screen (Xvfb, no window manager, GNUstep's default theme), the second
