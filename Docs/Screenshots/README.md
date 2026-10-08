@@ -2,11 +2,14 @@
 
 ## `compare/`: GNUstep's theme and Adwaita
 
-The README's side-by-side shots. Taken 2026-10-07 (MarkdownViewer and
-ScreenshotTool retaken the same day with the primary menu) on a private Xvfb with
+The README's side-by-side shots. The Adwaita side was retaken on 2026-10-08
+for the theme on `main` after 0.1.0-alpha6 (libadwaita 1.7's colours and
+controls, #55-#62); MarkdownViewer's GNUstep side too, as the document it
+shows had changed. The GNUstep sides of ScreenshotTool and Gorm are from
+2026-10-07. All on a private Xvfb with
 GNOME Shell 48.7 (X11) as the window manager, never on a real desktop, with
 libs-gui and libs-back built with the patches in `Docs/upstream-patches/`, the
-theme built from this repository (0.1.0-alpha5 plus `main`), light style,
+theme built from this repository, light style (dark for the dark row),
 Cantarell 11 and empty GNUstep user defaults, so nothing a user set reaches
 either side. Each app ran once per theme, by `-GSTheme GNUstep` or
 `-GSTheme <repo>/Adwaita.theme`.
@@ -21,6 +24,14 @@ $H/app.sh "$W" Adwaita <app> [file] &
 $H/place.sh "$W" "<title>" Adwaita 1036 740
 $H/shot.sh "$W" out.png
 $H/stop.sh "$W"                   # also deletes $W
+```
+
+For GNOME's dark style, run the app with `README_SHOTS_STYLE=dark` in its
+environment: `app.sh` then gives it a copy of the session's settings with
+`color-scheme='prefer-dark'`.
+
+```sh
+README_SHOTS_STYLE=dark $H/app.sh "$W" Adwaita <app> [file] &
 ```
 
 Close an app between the two themes. An app with an edited document waits
@@ -76,9 +87,19 @@ Inspector). Then:
 Gorm's own windows run with compact metrics (#24), and its inspectors are
 cramped at GNOME's fonts (#26): the shots show both as they are.
 
+### The dark row
+
+`compare/markdownviewer-adwaita-dark.png` follows MarkdownViewer's steps
+with `README_SHOTS_STYLE=dark`; `compare/themedemo-controls-adwaita-dark.png`
+is ThemeDemo's controls page (below) the same way. ScreenshotTool isn't in
+the dark row: in dark style its toolbar icons are nearly invisible on the
+header bar (cause not yet found: the theme reports a dark window
+background to it), which would misrepresent the theme until that is
+fixed.
+
 ## `theme-*.png`
 
-ThemeDemo's controls, text and data pages under Adwaita, taken 2026-10-07 in
+ThemeDemo's controls, text and data pages under Adwaita, taken 2026-10-08 in
 the same session as `compare/`:
 
 ```sh
