@@ -84,6 +84,10 @@
 - (void) checkNibMetrics;
 @end
 
+@interface QuirkProbe (LiveSettings)
+- (void) checkLiveSettings;
+@end
+
 @interface QuirkProbe (ContextMenu)
 - (void) checkContextMenu;
 - (void) showContextMenuDemo;

@@ -23,6 +23,7 @@
 #import "Settings/GnomeThemeMetrics.h"
 #import "Rendering/GnomeThemePalette.h"
 #import "Adapters/GnomeThemeWindowManager.h"
+#import "Adapters/GnomeThemeSettingsMonitor.h"
 #import "GSWindowTabbing.h"
 
 #import <AppKit/AppKit.h>
@@ -36,6 +37,7 @@ static NSString *GnomeThemeRuntimeDefaultsDomain = @"GnomeThemeRuntimeDomain";
 - (void) removeRuntimeDefaults;
 - (void) windowNeedsMainMenu: (NSNotification *)notification;
 - (void) defaultsDidChange: (NSNotification *)notification;
+- (void) desktopSettingsDidChange: (NSNotification *)notification;
 - (NSDictionary *) runtimeDefaultsDictionary;
 - (void) addFont: (NSFont *)font
           forKey: (NSString *)key
@@ -394,6 +396,41 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
              selector: @selector(defaultsDidChange:)
                  name: NSUserDefaultsDidChangeNotification
                object: nil];
+  [center addObserver: self
+             selector: @selector(desktopSettingsDidChange:)
+                 name: GnomeThemeDesktopSettingsDidChangeNotification
+               object: nil];
+  GnomeThemeSettingsMonitorStart ();
+}
+
+/* GNOME's settings changed while the app runs (#64). What activating the
+   theme takes from them is taken again (settings, metrics, palette, the
+   runtime defaults with the fonts and GSFontHinting), and libs-gui is
+   told as for a theme change: system colours are recached, menus sized,
+   scroll views tiled (overlay scrollers on or off) and decorations
+   redrawn. Controls that already hold a font keep it; see README. */
+- (void) desktopSettingsDidChange: (NSNotification *)notification
+{
+  NSDictionary *oldDefaults = [self runtimeDefaultsDictionary];
+  NSEnumerator *enumerator;
+  NSWindow *window;
+
+  [self reloadConfiguration];
+  [self applyRuntimeDefaults];
+  if ([oldDefaults isEqual: [self runtimeDefaultsDictionary]] == NO)
+    {
+      GnomeThemeSystemFontsDidChange ();
+    }
+  [[NSNotificationCenter defaultCenter]
+    postNotificationName: GSThemeDidActivateNotification
+                  object: self];
+  GnomeThemeHeaderBarDesktopSettingsChanged ();
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      [[[window contentView] superview] setNeedsDisplay: YES];
+      [window setViewsNeedDisplay: YES];
+    }
 }
 
 /* Settings that apply to open windows, changed by the app or the user
@@ -410,6 +447,8 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
   [center removeObserver: self name: NSWindowDidBecomeKeyNotification object: nil];
   [center removeObserver: self name: NSWindowDidBecomeMainNotification object: nil];
   [center removeObserver: self name: NSUserDefaultsDidChangeNotification object: nil];
+  [center removeObserver: self name: GnomeThemeDesktopSettingsDidChangeNotification object: nil];
+  GnomeThemeSettingsMonitorStop ();
   [self removeRuntimeDefaults];
   [super deactivate];
   GnomeThemeForgetOriginalMethods ();
@@ -934,6 +973,9 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
   NSMutableArray *searchList = [[defaults searchList] mutableCopy];
   NSUInteger index = NSNotFound;
 
+  /* Replaced as a whole when GNOME's settings change (#64):
+     NSUserDefaults won't set a volatile domain that exists. */
+  [defaults removeVolatileDomainForName: GnomeThemeRuntimeDefaultsDomain];
   [defaults setVolatileDomain: [self runtimeDefaultsDictionary]
                       forName: GnomeThemeRuntimeDefaultsDomain];
 

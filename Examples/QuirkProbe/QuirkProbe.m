@@ -5819,6 +5819,14 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self showContextMenuDemo];
       return;
     }
+  /* -ProbeOnly live-settings: GNOME's settings changed while the probe
+     runs (make check-live-settings). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"live-settings"])
+    {
+      [self checkLiveSettings];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly text-scaling, for the runs with GNOME's Large Text
      (make check-text-scaling). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"text-scaling"])

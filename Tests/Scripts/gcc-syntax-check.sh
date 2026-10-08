@@ -71,7 +71,7 @@ done
 BASE_FLAGS+=(-x objective-c -fsyntax-only -fgnu-runtime
   -fconstant-string-class=NSConstantString
   "-I$GNUSTEP_MAKEFILES/TestFramework")
-for pkg in x11 xext xrender cairo freetype2 fontconfig; do
+for pkg in x11 xext xrender cairo freetype2 fontconfig gio-2.0; do
   BASE_FLAGS+=($(pkg-config --cflags "$pkg" 2>/dev/null))
 done
 

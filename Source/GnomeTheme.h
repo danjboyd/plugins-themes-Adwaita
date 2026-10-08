@@ -70,6 +70,13 @@ BOOL GnomeThemeToolbarInHeaderBar(NSToolbar *toolbar);
    windows. */
 BOOL GnomeThemeHeaderBarToolbarEnabled(void);
 void GnomeThemeHeaderBarToolbarSettingChanged(void);
+/* GNOME's settings changed while the app runs (#64): lay the window
+   buttons out again (button-layout) and redraw open header bars. */
+void GnomeThemeHeaderBarDesktopSettingsChanged(void);
+/* GNOME's fonts changed while the app runs (#64): NSFont's role methods
+   stop handing out the fonts they cached for the default size
+   (Source/Settings/GnomeThemeSystemFonts.m). */
+void GnomeThemeSystemFontsDidChange(void);
 /* While the app waits for a modal dialog outside it (the portal's file
    chooser): a press in a header bar that moves its window, which then
    isn't dropped. YES when the press was taken. */
