@@ -141,16 +141,21 @@ set +u
 . /usr/GNUstep/System/Library/Makefiles/GNUstep.sh
 set -u
 
-# Theme and scale go on the command line (GNUstep's argument domain), so they
-# apply to this capture only. Writing them with `defaults write` left ThemeDemo
-# at double size for every later launch after a `--scale 2` capture.
-defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
-defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
+# A defaults domain of the capture's own, empty: what the desktop's user set
+# for ThemeDemo doesn't change the capture, and the capture writes nothing
+# into the user's defaults (theme and scale go on the command line).
+CAPTURE_DEFAULTS="$(mktemp -d --suffix=.theme-demo-defaults)"
+trap 'rm -rf --one-file-system "$CAPTURE_DEFAULTS"' EXIT
+grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
+  >"$CAPTURE_DEFAULTS/GNUstep.conf"
+mkdir -p "$CAPTURE_DEFAULTS/defaults"
+echo "GNUSTEP_USER_DEFAULTS_DIR=$CAPTURE_DEFAULTS/defaults" >>"$CAPTURE_DEFAULTS/GNUstep.conf"
+chmod 600 "$CAPTURE_DEFAULTS/GNUstep.conf"
+export GNUSTEP_CONFIG_FILE="$CAPTURE_DEFAULTS/GNUstep.conf"
 if [ ! -d "$THEME" ]; then
   echo "theme bundle not found: $THEME (run make first)" >&2
   exit 1
 fi
-defaults delete ThemeDemo GSTheme >/dev/null 2>&1 || true
 DEFAULT_ARGS=(-GSTheme "$THEME")
 if [ -n "$SCALE" ]; then
   DEFAULT_ARGS+=(-GSScaleFactor "$SCALE")

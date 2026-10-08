@@ -77,7 +77,7 @@ cleanup() {
     kill "$XVFB_PID" >/dev/null 2>&1 || true
     wait "$XVFB_PID" 2>/dev/null || true
   fi
-  rm -rf "$SETTINGS_DIR"
+  rm -rf --one-file-system "$SETTINGS_DIR"
 }
 trap cleanup EXIT
 
@@ -152,6 +152,32 @@ button-layout='appmenu:minimize,maximize,close'
 action-double-click-titlebar='toggle-maximize'
 KEYFILE
 
+# GNUstep's defaults: a user domain of the probe's own, empty, so nothing
+# the desktop's user set (menu style, decorations, tool tips, modifier
+# keys) changes a run, and nothing a run saves (recent documents, a
+# panel's folder) lands in the user's defaults. The rest of the
+# configuration (a caller's user Library with a backend under test, say)
+# is kept. GNUstep ignores a config file others can write.
+mkdir -p "$SETTINGS_DIR/defaults" "$SETTINGS_DIR/run"
+chmod 700 "$SETTINGS_DIR/run"
+grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
+  >"$SETTINGS_DIR/GNUstep.conf"
+echo "GNUSTEP_USER_DEFAULTS_DIR=$SETTINGS_DIR/defaults" >>"$SETTINGS_DIR/GNUstep.conf"
+chmod 600 "$SETTINGS_DIR/GNUstep.conf"
+# Nothing from the desktop's session: not its Wayland display, and not its
+# session bus. Without an address GLib would find the user bus through
+# XDG_RUNTIME_DIR, so the probe gets a runtime directory of its own and an
+# address that leads nowhere. A caller that runs the probe on a private
+# bus of its own (the file chooser and print checks) says so with
+# QUIRK_PROBE_PRIVATE_BUS=1, and its bus is kept.
+PROBE_ENV=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11
+           GNUSTEP_CONFIG_FILE="$SETTINGS_DIR/GNUstep.conf"
+           XDG_RUNTIME_DIR="$SETTINGS_DIR/run"
+           GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$SETTINGS_DIR")
+if [ "${QUIRK_PROBE_PRIVATE_BUS:-0}" != 1 ]; then
+  PROBE_ENV+=(DBUS_SESSION_BUS_ADDRESS="unix:path=$SETTINGS_DIR/no-session-bus")
+fi
+
 PROBE_ARGS=(-GSTheme "$THEME" -NSMenuInterfaceStyle NSWindows95InterfaceStyle)
 # The window manager's title bar unless the run asks for the header bar,
 # whatever the user's own defaults say.
@@ -187,8 +213,7 @@ fi
 
 RESULTS="$(mktemp --suffix=.quirk-probe.out)"
 set +e
-GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$SETTINGS_DIR" \
-  timeout 60 "$PROBE" "${PROBE_ARGS[@]}" >"$RESULTS" 2>>"$LOG"
+"${PROBE_ENV[@]}" timeout 60 "$PROBE" "${PROBE_ARGS[@]}" >"$RESULTS" 2>>"$LOG"
 STATUS=$?
 set -e
 cat "$RESULTS"

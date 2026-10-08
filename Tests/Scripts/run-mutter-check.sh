@@ -231,6 +231,7 @@ case "$WM" in
 esac
 session() { # command...
   env -i HOME="$HOME" PATH="$PATH" DISPLAY="$DISPLAY" XDG_CONFIG_HOME="$WORK/config" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$WORK/no-session-bus" \
     XDG_DATA_HOME="$WORK/data" XDG_CACHE_HOME="$WORK/cache" XDG_STATE_HOME="$WORK/state" \
     XDG_RUNTIME_DIR="$WORK/run" GSETTINGS_BACKEND=keyfile LIBGL_ALWAYS_SOFTWARE=1 \
     GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix "$@"
@@ -282,23 +283,37 @@ action-double-click-titlebar='toggle-maximize'
 KEYFILE
 # ThemeDemo reads commands from here (the alert check).
 mkfifo "$WORK/commands"
+# ThemeDemo gets empty GNUstep user defaults of its own, whatever the
+# desktop's user set, and nothing it saves reaches the user's defaults.
+# Nothing from the desktop's session either: not its Wayland display, and
+# not its session bus (an address that leads nowhere, as GLib would
+# otherwise find the user bus through XDG_RUNTIME_DIR).
+mkdir -p "$WORK/gsdefaults" "$WORK/gsrun"
+chmod 700 "$WORK/gsrun"
+DEMO_ENV=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf"
+          XDG_RUNTIME_DIR="$WORK/gsrun" DBUS_SESSION_BUS_ADDRESS="unix:path=$WORK/no-session-bus"
+          GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs")
 if [ "$SHADOW" = YES ]; then
-  # Empty user defaults (the theme alone asks for the decorations), and a
-  # user Library holding the backend, all in the scratch directory.
-  mkdir -p "$WORK/gsdefaults" "$WORK/gslibrary/Bundles"
+  # The theme alone asks for the decorations, and a user Library in the
+  # scratch directory holds the backend.
+  mkdir -p "$WORK/gslibrary/Bundles"
   ln -s "$MUTTER_CHECK_BACK" "$WORK/gslibrary/Bundles/libgnustep-backshadow-032.bundle"
-  sed -e "s|^GNUSTEP_USER_DEFAULTS_DIR=.*|GNUSTEP_USER_DEFAULTS_DIR=$WORK/gsdefaults|" \
-      -e "s|^GNUSTEP_USER_DIR_LIBRARY=.*|GNUSTEP_USER_DIR_LIBRARY=$WORK/gslibrary|" \
-      "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" >"$WORK/GNUstep.conf"
+  grep -v -e '^GNUSTEP_USER_DEFAULTS_DIR=' -e '^GNUSTEP_USER_DIR_LIBRARY=' \
+    "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" >"$WORK/GNUstep.conf"
+  printf 'GNUSTEP_USER_DEFAULTS_DIR=%s\nGNUSTEP_USER_DIR_LIBRARY=%s\n' \
+    "$WORK/gsdefaults" "$WORK/gslibrary" >>"$WORK/GNUstep.conf"
   chmod 600 "$WORK/GNUstep.conf"
-  GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf" LD_LIBRARY_PATH="$MUTTER_CHECK_GUI:${LD_LIBRARY_PATH:-}" \
-  GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
+  "${DEMO_ENV[@]}" LD_LIBRARY_PATH="$MUTTER_CHECK_GUI:${LD_LIBRARY_PATH:-}" \
     "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES \
     -ThemeDemoCommandFIFO "$WORK/commands" >"$WORK/demo.log" 2>&1 &
 else
-  # The menu bar whatever the user's own defaults say (the checks below
-  # press its titles).
-  GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/gs" \
+  grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
+    >"$WORK/GNUstep.conf"
+  echo "GNUSTEP_USER_DEFAULTS_DIR=$WORK/gsdefaults" >>"$WORK/GNUstep.conf"
+  chmod 600 "$WORK/GNUstep.conf"
+  # The theme's header bar and the menu bar, whatever the defaults say
+  # (the checks below press its titles).
+  "${DEMO_ENV[@]}" \
     "$DEMO" -GSTheme "$THEME" -GSX11HandlesWindowDecorations NO -ThemeDemoLogFrames YES \
     -GnomeThemeMenuStyle menubar -NSMenuInterfaceStyle NSWindows95InterfaceStyle \
     -ThemeDemoCommandFIFO "$WORK/commands" \

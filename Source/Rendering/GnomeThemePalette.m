@@ -218,8 +218,8 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
    contrast). High contrast adds a 1px outline, the foreground at 50%.
    The foreground is libadwaita's window_fg_color as it shows over the
    window: rgba(0, 0, 6, 0.8) in the light style, white in the dark one.
-   These are the theme's own keys (GnomeThemePaletteColor() in the
-   renderers reads them). */
+   These are the theme's own keys (GnomeThemeColor() in the renderers
+   reads them). */
 static void
 GnomeThemeAddWidgetColors(NSColorList *colors, NSColor *foreground, BOOL highContrast)
 {
@@ -253,6 +253,50 @@ GnomeThemeAddWidgetColors(NSColorList *colors, NSColor *foreground, BOOL highCon
     }
 }
 
+/* Keys the renderers ask for by name, set from the colours they are drawn
+   in. Before the renderers read the palette first (GnomeThemeColor()),
+   these keys never reached them: menus, the menu bar and their borders
+   were drawn in the view, window and border colours, and those stay. A
+   selected row is libadwaita's (measured from its GtkColumnView): the
+   accent at 25% over the row's colour, whether or not the view has focus,
+   with the row's own text colour; it had been
+   alternateSelectedControlColor with white text. */
+static void
+GnomeThemeAddLookupColors(NSColorList *colors)
+{
+  NSColor *view = [colors colorWithKey: @"controlBackgroundColor"];
+  NSColor *border = [colors colorWithKey: @"controlShadowColor"];
+  NSColor *window = [colors colorWithKey: @"windowBackgroundColor"];
+  NSColor *row = [colors colorWithKey: @"rowBackgroundColor"];
+  NSColor *accent = [colors colorWithKey: @"selectedControlColor"];
+  NSColor *text = [colors colorWithKey: @"controlTextColor"];
+  NSColor *selection;
+
+  if (view != nil)
+    {
+      [colors setColor: view forKey: @"menuBackgroundColor"];
+    }
+  if (border != nil)
+    {
+      [colors setColor: border forKey: @"menuBorderColor"];
+      [colors setColor: border forKey: @"menuBarBorderColor"];
+    }
+  if (window != nil)
+    {
+      [colors setColor: window forKey: @"menuBarBackgroundColor"];
+    }
+  if (row != nil && accent != nil)
+    {
+      selection = [row blendedColorWithFraction: 0.25 ofColor: accent];
+      [colors setColor: selection forKey: @"highlightedTableRowBackgroundColor"];
+      [colors setColor: selection forKey: @"selectedInactiveColor"];
+    }
+  if (text != nil)
+    {
+      [colors setColor: text forKey: @"highlightedTableRowTextColor"];
+    }
+}
+
 @implementation GnomeThemePalette
 
 + (NSColorList *) colorListForSettings: (GnomeThemeSettings *)settings
@@ -277,6 +321,7 @@ GnomeThemeAddWidgetColors(NSColorList *colors, NSColor *foreground, BOOL highCon
   GnomeThemeAddWidgetColors (colors,
                              GnomeThemeColorFromHex (dark ? @"#ffffff" : @"#323237"),
                              highContrast);
+  GnomeThemeAddLookupColors (colors);
 
   return colors;
 }

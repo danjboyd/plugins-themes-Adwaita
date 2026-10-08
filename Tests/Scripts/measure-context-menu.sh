@@ -79,17 +79,31 @@ export DISPLAY=":$n"
 Xvfb "$DISPLAY" -screen 0 1280x800x24 -nolisten tcp +extension GLX +extension RANDR >/dev/null 2>&1 &
 PIDS+=($!)
 sleep 1
-mkdir -p "$WORK"/{config/glib-2.0/settings,data,cache,state,run}
+mkdir -p "$WORK"/{config/glib-2.0/settings,data,cache,state,run,gsdefaults,dbus/services}
+# The session's bus can start only the accessibility bus: with the standard
+# service directories any client could start gvfs (which mounts the phone,
+# this machine's network), Evolution's data servers or the document portal.
+[ -e /usr/share/dbus-1/services/org.a11y.Bus.service ] \
+  && ln -sf /usr/share/dbus-1/services/org.a11y.Bus.service "$WORK/dbus/services/"
+sed "s|<standard_session_servicedirs */>|<servicedir>$WORK/dbus/services</servicedir>|" \
+  /usr/share/dbus-1/session.conf >"$WORK/dbus/session.conf"
+# GNUstep user defaults of the measurement's own, empty.
+grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
+  >"$WORK/GNUstep.conf"
+echo "GNUSTEP_USER_DEFAULTS_DIR=$WORK/gsdefaults" >>"$WORK/GNUstep.conf"
+chmod 600 "$WORK/GNUstep.conf"
 chmod 700 "$WORK/run"
 printf "[org/gnome/desktop/background]\npicture-uri=''\ncolor-shading-type='solid'\nprimary-color='#777777'\n" \
   >"$WORK/config/glib-2.0/settings/keyfile"
 session() { # command...
   env -i HOME="$HOME" PATH="$PATH" DISPLAY="$DISPLAY" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+    GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf" GDK_BACKEND=x11 \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$WORK/no-session-bus" \
     XDG_CONFIG_HOME="$WORK/config" XDG_DATA_HOME="$WORK/data" XDG_CACHE_HOME="$WORK/cache" \
     XDG_STATE_HOME="$WORK/state" XDG_RUNTIME_DIR="$WORK/run" GSETTINGS_BACKEND=keyfile LIBGL_ALWAYS_SOFTWARE=1 \
     GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix "$@"
 }
-session dbus-run-session -- gnome-shell --x11 >"$WORK/wm.log" 2>&1 &
+session dbus-run-session --config-file="$WORK/dbus/session.conf" -- gnome-shell --x11 >"$WORK/wm.log" 2>&1 &
 PIDS+=($!)
 for _ in $(seq 1 60); do
   xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q "window id" && break

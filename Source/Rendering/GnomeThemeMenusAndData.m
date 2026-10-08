@@ -70,31 +70,6 @@ GnomeThemePhase67StateIsSelected(GSThemeControlState state)
     || state == GSThemeSelectedFirstResponderState);
 }
 
-static NSColor *
-GnomeThemePhase67Color(GnomeTheme *theme, NSString *key, NSColor *fallback)
-{
-  NSColor *color = nil;
-
-  if (theme != nil)
-    {
-      color = [theme colorNamed: key state: GSThemeNormalState];
-    }
-
-  return (color != nil) ? color : fallback;
-}
-
-/* A table colour from the theme's own palette (rowBackgroundColor and
-   alternateRowBackgroundColor): -colorNamed:state: only finds colours in
-   GSTheme's extra colour list, so tables fell back to the table's
-   controlBackgroundColor, #303030 in the dark palette instead of
-   libadwaita's view colour (#62). */
-static NSColor *
-GnomeThemePhase67TableColor(GnomeTheme *theme, NSString *key, NSColor *fallback)
-{
-  NSColor *color = (theme != nil) ? [[theme colors] colorWithKey: key] : nil;
-
-  return (color != nil) ? color : GnomeThemePhase67Color (theme, key, fallback);
-}
 
 /* The colour a table draws its rows on: the palette's row colour unless
    the app gave the table a background of its own. */
@@ -103,7 +78,7 @@ GnomeThemePhase67TableRowColor(GnomeTheme *theme, NSColor *backgroundColor)
 {
   if (backgroundColor == nil || [backgroundColor isEqual: [NSColor controlBackgroundColor]])
     {
-      return GnomeThemePhase67TableColor (theme, @"rowBackgroundColor",
+      return GnomeThemeColor (theme, @"rowBackgroundColor",
                                           [NSColor controlBackgroundColor]);
     }
   return backgroundColor;
@@ -507,19 +482,19 @@ GnomeThemePhase67MenuForegroundColor(GnomeTheme *theme,
 
   if ([item isEnabled] == NO)
     {
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"disabledControlTextColor",
                                       [NSColor disabledControlTextColor]);
     }
   else if (highlighted)
     {
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"selectedMenuItemTextColor",
                                       [NSColor selectedMenuItemTextColor]);
     }
   else
     {
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"controlTextColor",
                                       [NSColor controlTextColor]);
     }
@@ -775,15 +750,12 @@ GnomeThemeDrawOverflowIcon(NSRect rect, NSColor *color)
 static void
 GnomeThemeFillMenuBarPill(GnomeTheme *theme, NSRect cellFrame, NSView *controlView)
 {
-  NSColor *fillColor = GnomeThemePhase67ViewIsActive (controlView)
-    ? GnomeThemePhase67Color (theme,
-                              @"secondarySelectedControlColor",
-                              [NSColor selectedControlColor])
-    : GnomeThemePhase67Color (theme,
-                              @"selectedInactiveColor",
-                              [NSColor selectedControlColor]);
+  /* The accent, active or not: the title is drawn white over it. */
+  NSColor *fillColor = GnomeThemeColor (theme,
+                                        @"selectedControlColor",
+                                        [NSColor selectedControlColor]);
   NSColor *strokeColor = GnomeThemePhase67Blend (fillColor,
-                                                 GnomeThemePhase67Color (theme,
+                                                 GnomeThemeColor (theme,
                                                                          @"menuBarBorderColor",
                                                                          [NSColor controlShadowColor]),
                                                  0.28);
@@ -901,10 +873,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
 
   if (horizontal)
     {
-      fillColor = GnomeThemePhase67Color (self,
+      fillColor = GnomeThemeColor (self,
                                           @"menuBarBackgroundColor",
                                           [NSColor windowBackgroundColor]);
-      borderColor = GnomeThemePhase67Color (self,
+      borderColor = GnomeThemeColor (self,
                                             @"menuBarBorderColor",
                                             [NSColor controlShadowColor]);
 
@@ -932,10 +904,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     }
   else
     {
-      fillColor = GnomeThemePhase67Color (self,
+      fillColor = GnomeThemeColor (self,
                                           @"menuBackgroundColor",
                                           [NSColor controlBackgroundColor]);
-      borderColor = GnomeThemePhase67Color (self,
+      borderColor = GnomeThemeColor (self,
                                             @"menuBorderColor",
                                             [NSColor controlShadowColor]);
 
@@ -985,10 +957,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   else
     {
       NSColor *fillColor = GnomeThemePhase67ViewIsActive (controlView)
-        ? GnomeThemePhase67Color (self,
+        ? GnomeThemeColor (self,
                                   @"selectedMenuItemColor",
                                   [NSColor selectedMenuItemColor])
-        : GnomeThemePhase67Color (self,
+        : GnomeThemeColor (self,
                                   @"selectedInactiveColor",
                                   [NSColor selectedControlColor]);
       NSRect selectionRect = NSInsetRect (cellFrame, 4.0, 2.0);
@@ -999,7 +971,7 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
       GnomeThemePhase67FillAndStrokeRoundedRect (NSInsetRect (selectionRect, 0.5, 0.5),
                                                  7.0,
                                                  fillColor,
-                                                 highContrast ? GnomeThemePhase67Color (self, @"menuBorderColor",
+                                                 highContrast ? GnomeThemeColor (self, @"menuBorderColor",
                                                                                         [NSColor controlShadowColor])
                                                    : nil,
                                                  highContrast ? 1.0 : 0.0);
@@ -1012,7 +984,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
                              isHorizontal: (BOOL)isHorizontal
 {
   /* Not -menuSeparatorColor: it is black for in-window (Windows 95 style)
-     menus when the theme names no colour. */
+     menus when the theme names no colour. GSTheme's extra colour lists,
+     not the palette: none ships here, so the separator is libadwaita's
+     blend below rather than the palette's flat menuSeparatorColor. */
   NSColor *separatorColor = [self colorNamed: @"menuSeparatorColor" state: GSThemeNormalState];
   CGFloat inset = [self menuSeparatorInset];
   NSBezierPath *path = [NSBezierPath bezierPath];
@@ -1025,10 +999,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
      (plugins-themes-Adwaita#11: two rows of mid grey). */
   if (separatorColor == nil)
     {
-      NSColor *background = GnomeThemePhase67Color (self,
+      NSColor *background = GnomeThemeColor (self,
                                                     @"menuBackgroundColor",
                                                     [NSColor controlBackgroundColor]);
-      NSColor *text = GnomeThemePhase67Color (self,
+      NSColor *text = GnomeThemeColor (self,
                                               @"controlTextColor",
                                               [NSColor controlTextColor]);
 
@@ -1060,14 +1034,14 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
                         withBounds: (NSRect)bounds
                           withClip: (NSRect)clipRect
 {
-  NSColor *fillColor = GnomeThemePhase67Blend (GnomeThemePhase67Color (self,
+  NSColor *fillColor = GnomeThemePhase67Blend (GnomeThemeColor (self,
                                                                        @"menuBarBackgroundColor",
                                                                        [NSColor windowBackgroundColor]),
-                                               GnomeThemePhase67Color (self,
+                                               GnomeThemeColor (self,
                                                                        @"menuBackgroundColor",
                                                                        [NSColor controlBackgroundColor]),
                                                0.35);
-  NSColor *borderColor = GnomeThemePhase67Color (self,
+  NSColor *borderColor = GnomeThemeColor (self,
                                                  @"menuBarBorderColor",
                                                  [NSColor controlShadowColor]);
 
@@ -1090,16 +1064,16 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
    sorted column's header gets the full text colour. */
 - (NSColor *) tableHeaderTextColorForState: (GSThemeControlState)state
 {
-  NSColor *textColor = GnomeThemePhase67Color (self,
+  NSColor *textColor = GnomeThemeColor (self,
                                                @"headerTextColor",
                                                [NSColor headerTextColor]);
-  NSColor *background = GnomeThemePhase67TableColor (self,
+  NSColor *background = GnomeThemeColor (self,
                                                      @"rowBackgroundColor",
                                                      [NSColor controlBackgroundColor]);
 
   if (GnomeThemePhase67StateIsDisabled (state))
     {
-      return GnomeThemePhase67Color (self,
+      return GnomeThemeColor (self,
                                      @"disabledControlTextColor",
                                      [NSColor disabledControlTextColor]);
     }
@@ -1166,7 +1140,7 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
 {
   NSTableView *tableView = (NSTableView *)view;
   NSColor *rowColor = GnomeThemePhase67TableRowColor (self, backgroundColor);
-  NSColor *alternateColor = GnomeThemePhase67TableColor (self,
+  NSColor *alternateColor = GnomeThemeColor (self,
                                                          @"alternateRowBackgroundColor",
                                                          GnomeThemePhase67Blend (rowColor,
                                                                                  [NSColor controlShadowColor],
@@ -1213,7 +1187,7 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
                               inView: (NSView *)view
 {
   NSTableView *tableView = (NSTableView *)view;
-  NSColor *gridColor = GnomeThemePhase67Color (self,
+  NSColor *gridColor = GnomeThemeColor (self,
                                                @"gridColor",
                                                [NSColor gridColor]);
   NSBezierPath *path = [NSBezierPath bezierPath];
@@ -1227,7 +1201,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     {
       return;
     }
-  gridColor = [gridColor colorWithAlphaComponent: 0.72];
+  /* The grid colour as it is: the lines have always been drawn opaque
+     (the colour once came back as a named system colour, which ignored
+     -colorWithAlphaComponent:), and are kept so. */
   [gridColor set];
 
   for (row = 0; (mask & NSTableViewSolidHorizontalGridLineMask) != 0 && row < rowCount; row++)
@@ -1291,22 +1267,22 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
 
   if (GnomeThemePhase67ViewIsActive (view) && [[view window] firstResponder] != nil)
     {
-      NSColor *fallbackSelectionColor = GnomeThemePhase67Color (self,
+      NSColor *fallbackSelectionColor = GnomeThemeColor (self,
                                                                 @"secondarySelectedControlColor",
                                                                 [NSColor alternateSelectedControlColor]);
 
-      selectionColor = GnomeThemePhase67Color (self,
+      selectionColor = GnomeThemeColor (self,
                                                @"highlightedTableRowBackgroundColor",
                                                fallbackSelectionColor);
     }
   else
     {
-      selectionColor = GnomeThemePhase67Color (self,
+      selectionColor = GnomeThemeColor (self,
                                                @"selectedInactiveColor",
                                                [NSColor secondarySelectedControlColor]);
       if (selectionColor == nil)
         {
-          selectionColor = GnomeThemePhase67Color (self,
+          selectionColor = GnomeThemeColor (self,
                                                    @"secondarySelectedControlColor",
                                                    [NSColor secondarySelectedControlColor]);
         }
@@ -1373,10 +1349,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
       NSIndexSet *selectedRows = [outlineView selectedRowIndexes];
       BOOL selected = [selectedRows containsIndex: rowIndex];
       NSColor *arrowColor = selected
-        ? GnomeThemePhase67Color (self,
+        ? GnomeThemeColor (self,
                                   @"highlightedTableRowTextColor",
                                   [NSColor selectedControlTextColor])
-        : GnomeThemePhase67Color (self,
+        : GnomeThemeColor (self,
                                   @"controlTextColor",
                                   [NSColor controlTextColor]);
 
@@ -1936,13 +1912,13 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
 
   if ([item isEnabled] == NO)
     {
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"disabledControlTextColor",
                                       [NSColor disabledControlTextColor]);
     }
   else if (highlighted)
     {
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"selectedMenuItemTextColor",
                                       [NSColor selectedMenuItemTextColor]);
     }
@@ -1950,7 +1926,7 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     {
       /* The accent as text (accent_color): fills' darker accent would be
          faint on a dark menu. */
-      color = GnomeThemePhase67Color (theme,
+      color = GnomeThemeColor (theme,
                                       @"highlightColor",
                                       [NSColor highlightColor]);
     }

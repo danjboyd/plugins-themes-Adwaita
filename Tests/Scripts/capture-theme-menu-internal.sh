@@ -67,9 +67,17 @@ if [ ! -d "$THEME" ]; then
   echo "theme bundle not found: $THEME (run make first)" >&2
   exit 1
 fi
-defaults delete ThemeDemo GSTheme >/dev/null 2>&1 || true
-defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
-defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
+# A defaults domain of the capture's own, empty: what the desktop's user set
+# for ThemeDemo doesn't change the capture, and the capture writes nothing
+# into the user's defaults (theme and scale go on the command line).
+CAPTURE_DEFAULTS="$(mktemp -d --suffix=.theme-demo-defaults)"
+trap 'rm -rf --one-file-system "$CAPTURE_DEFAULTS"' EXIT
+grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
+  >"$CAPTURE_DEFAULTS/GNUstep.conf"
+mkdir -p "$CAPTURE_DEFAULTS/defaults"
+echo "GNUSTEP_USER_DEFAULTS_DIR=$CAPTURE_DEFAULTS/defaults" >>"$CAPTURE_DEFAULTS/GNUstep.conf"
+chmod 600 "$CAPTURE_DEFAULTS/GNUstep.conf"
+export GNUSTEP_CONFIG_FILE="$CAPTURE_DEFAULTS/GNUstep.conf"
 
 APP="$REPO_DIR/Examples/ThemeDemo/ThemeDemo.app/ThemeDemo"
 if [ ! -x "$APP" ]; then
