@@ -2515,9 +2515,14 @@ GnomeThemeDrawScrollViewFrame(GnomeTheme *theme, NSScrollView *scrollView)
       return;
     }
 
+  /* libadwaita's view colour, unless the app gave the table its own
+     background (#62). */
   background = [tableView backgroundColor];
-  background = GnomeThemeColor (self, @"rowBackgroundColor",
-                                (background != nil) ? background : [NSColor controlBackgroundColor]);
+  if (background == nil || [background isEqual: [NSColor controlBackgroundColor]])
+    {
+      background = GnomeThemePaletteColor (self, @"rowBackgroundColor",
+                                           [NSColor controlBackgroundColor]);
+    }
   [background set];
   NSRectFill (NSIntersectionRect (rect, [view bounds]));
 }

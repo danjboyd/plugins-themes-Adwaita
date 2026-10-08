@@ -83,6 +83,32 @@ GnomeThemePhase67Color(GnomeTheme *theme, NSString *key, NSColor *fallback)
   return (color != nil) ? color : fallback;
 }
 
+/* A table colour from the theme's own palette (rowBackgroundColor and
+   alternateRowBackgroundColor): -colorNamed:state: only finds colours in
+   GSTheme's extra colour list, so tables fell back to the table's
+   controlBackgroundColor, #303030 in the dark palette instead of
+   libadwaita's view colour (#62). */
+static NSColor *
+GnomeThemePhase67TableColor(GnomeTheme *theme, NSString *key, NSColor *fallback)
+{
+  NSColor *color = (theme != nil) ? [[theme colors] colorWithKey: key] : nil;
+
+  return (color != nil) ? color : GnomeThemePhase67Color (theme, key, fallback);
+}
+
+/* The colour a table draws its rows on: the palette's row colour unless
+   the app gave the table a background of its own. */
+static NSColor *
+GnomeThemePhase67TableRowColor(GnomeTheme *theme, NSColor *backgroundColor)
+{
+  if (backgroundColor == nil || [backgroundColor isEqual: [NSColor controlBackgroundColor]])
+    {
+      return GnomeThemePhase67TableColor (theme, @"rowBackgroundColor",
+                                          [NSColor controlBackgroundColor]);
+    }
+  return backgroundColor;
+}
+
 static NSColor *
 GnomeThemePhase67Blend(NSColor *fromColor, NSColor *toColor, CGFloat fraction)
 {
@@ -634,13 +660,7 @@ GnomeThemeInlineSegment(NSMenuView *menuView, NSRect row, NSRange group, NSInteg
 static NSColor *
 GnomeThemePhase67TableBackgroundColor(GnomeTheme *theme, NSTableView *tableView)
 {
-  NSColor *fallback = [tableView backgroundColor];
-
-  if (fallback == nil)
-    {
-      fallback = [NSColor controlBackgroundColor];
-    }
-  return GnomeThemePhase67Color (theme, @"rowBackgroundColor", fallback);
+  return GnomeThemePhase67TableRowColor (theme, [tableView backgroundColor]);
 }
 
 /* libadwaita column headers sit on the list's own background, with no fill,
@@ -1073,9 +1093,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   NSColor *textColor = GnomeThemePhase67Color (self,
                                                @"headerTextColor",
                                                [NSColor headerTextColor]);
-  NSColor *background = GnomeThemePhase67Color (self,
-                                                @"rowBackgroundColor",
-                                                [NSColor controlBackgroundColor]);
+  NSColor *background = GnomeThemePhase67TableColor (self,
+                                                     @"rowBackgroundColor",
+                                                     [NSColor controlBackgroundColor]);
 
   if (GnomeThemePhase67StateIsDisabled (state))
     {
@@ -1145,14 +1165,12 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
                        withBackgroundColor: (NSColor *)backgroundColor
 {
   NSTableView *tableView = (NSTableView *)view;
-  NSColor *rowColor = GnomeThemePhase67Color (self,
-                                              @"rowBackgroundColor",
-                                              backgroundColor);
-  NSColor *alternateColor = GnomeThemePhase67Color (self,
-                                                    @"alternateRowBackgroundColor",
-                                                    GnomeThemePhase67Blend (rowColor,
-                                                                            [NSColor controlShadowColor],
-                                                                            0.035));
+  NSColor *rowColor = GnomeThemePhase67TableRowColor (self, backgroundColor);
+  NSColor *alternateColor = GnomeThemePhase67TableColor (self,
+                                                         @"alternateRowBackgroundColor",
+                                                         GnomeThemePhase67Blend (rowColor,
+                                                                                 [NSColor controlShadowColor],
+                                                                                 0.035));
   NSInteger rowCount = [tableView numberOfRows];
   NSInteger row = 0;
 

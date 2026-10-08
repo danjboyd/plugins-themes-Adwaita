@@ -153,8 +153,10 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#3d3d3d") forKey: @"gridColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#355278") forKey: @"highlightedTableRowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"highlightedTableRowTextColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"rowBackgroundColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#2b2b2b") forKey: @"alternateRowBackgroundColor"];
+  /* libadwaita's view colour, as a plain GtkColumnView draws it over the
+     window (#62); alternate rows the text colour at 3.5% over it. */
+  [colors setColor: GnomeThemeColorFromHex (@"#1d1d20") forKey: @"rowBackgroundColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#252528") forKey: @"alternateRowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"highlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"shadowColor"];

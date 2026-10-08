@@ -4870,6 +4870,66 @@ QuirkProbeHex(const NSUInteger rgb[3])
     (unsigned long)rgb[0], (unsigned long)rgb[1], (unsigned long)rgb[2]];
 }
 
+/* A table in a scroll view draws on libadwaita's view colour, as a plain
+   GtkColumnView does over the window (measured with
+   Reference/TableCard/table_card.py, #62): #ffffff in light and #1d1d20 in
+   dark, the same in high contrast. No card: no border, no rounded corners.
+   The dark palette's table colours were never read (a lookup that only
+   finds GSTheme's extra colours), so tables drew on #303030. */
+- (void) checkTableBackground
+{
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  NSUInteger want[3] = { 0xff, 0xff, 0xff };
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 240, 160) title: @"Probe Table Background"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (20, 20, 200, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 200, 120)]);
+  NSTableColumn *column = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"c"]);
+  NSBitmapImageRep *rep;
+  NSUInteger inside[3], corner[3], outside[3];
+  NSString *detail;
+  BOOL ok;
+
+  if (dark)
+    {
+      want[0] = 0x1d; want[1] = 0x1d; want[2] = 0x20;
+    }
+  [column setWidth: 180];
+  [[column headerCell] setStringValue: @"Column"];
+  [table addTableColumn: column];
+  [scrollView setDocumentView: table];
+  [scrollView setHasVerticalScroller: NO];
+  [scrollView setBorderType: NSNoBorder];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender ([window contentView]);
+  /* The middle of the empty table, its top left corner pixel (a card's
+     rounded corner would show the window there) and the window beside it. */
+  QuirkProbePixelAt (rep, 120, 110, inside);
+  QuirkProbePixelAt (rep, 20, 160 - 20 - 120, corner);
+  QuirkProbePixelAt (rep, 10, 80, outside);
+  [window orderOut: nil];
+
+  ok = labs ((long)inside[0] - (long)want[0]) <= 2 && labs ((long)inside[1] - (long)want[1]) <= 2
+    && labs ((long)inside[2] - (long)want[2]) <= 2
+    && labs ((long)corner[0] - (long)inside[0]) <= 2 && labs ((long)corner[2] - (long)inside[2]) <= 2;
+  detail = [NSString stringWithFormat: @"%@: table #%02lx%02lx%02lx (want #%02lx%02lx%02lx), corner #%02lx%02lx%02lx, window #%02lx%02lx%02lx",
+    dark ? @"dark" : @"light",
+    (unsigned long)inside[0], (unsigned long)inside[1], (unsigned long)inside[2],
+    (unsigned long)want[0], (unsigned long)want[1], (unsigned long)want[2],
+    (unsigned long)corner[0], (unsigned long)corner[1], (unsigned long)corner[2],
+    (unsigned long)outside[0], (unsigned long)outside[1], (unsigned long)outside[2]];
+  if (ok)
+    {
+      [self pass: @"table-background" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-background" detail: detail];
+    }
+}
+
 /* libadwaita 1.7's control colours, measured from its reference app on the
    same display (Reference/AdwaitaDemo), in the palette the run uses (light
    or dark by the window colour, high contrast from -ProbeHighContrast):
@@ -5500,6 +5560,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
+  [self checkTableBackground];
       [self finish];
       return;
     }
@@ -5559,6 +5620,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
+  [self checkTableBackground];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
