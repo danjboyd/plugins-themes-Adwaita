@@ -80,6 +80,12 @@
 @end
 
 /* -ProbeOnly nib-metrics, and in the full run (QuirkProbeNibMetrics.m). */
+@interface QuirkProbe (Lists)
+- (void) checkDropDownList;
+- (void) checkSourceList;
+- (void) showListsDemo;
+@end
+
 @interface QuirkProbe (NibMetrics)
 - (void) checkNibMetrics;
 @end

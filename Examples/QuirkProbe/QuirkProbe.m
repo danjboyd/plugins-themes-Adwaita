@@ -5799,6 +5799,20 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkPrintDialog];
       return;
     }
+  /* -ProbeOnly lists-demo: for screenshots beside GTK's (#66). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"lists-demo"])
+    {
+      [self showListsDemo];
+      return;
+    }
+  /* -ProbeOnly lists: libadwaita's lists alone (#66). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"lists"])
+    {
+      [self checkDropDownList];
+      [self checkSourceList];
+      [self finish];
+      return;
+    }
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"menu-timing"])
     {
       [self checkMenuTiming];
@@ -5866,6 +5880,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPaletteLookup];
   [self checkTableSelection];
   [self checkWindowTabs];
+  [self checkDropDownList];
+  [self checkSourceList];
       [self finish];
       return;
     }
@@ -5929,6 +5945,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPaletteLookup];
   [self checkTableSelection];
   [self checkWindowTabs];
+  [self checkDropDownList];
+  [self checkSourceList];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
