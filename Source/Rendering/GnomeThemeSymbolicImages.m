@@ -152,7 +152,10 @@ GnomeThemeTemplateImageColor(NSButtonCell *cell, NSView *controlView)
         {
           return [NSColor disabledControlTextColor];
         }
-      return [cell isHighlighted] ? [NSColor selectedMenuItemTextColor] : [NSColor controlTextColor];
+      /* Only the menu bar's accent pill has white content; a vertical
+         menu's hovered row is neutral (#67). */
+      return ([cell isHighlighted] && [[(NSMenuItemCell *)cell menuView] isHorizontal])
+        ? [NSColor selectedMenuItemTextColor] : [NSColor controlTextColor];
     }
   if (dimmed || GnomeThemeViewIsInHeaderBarToolbar (controlView))
     {

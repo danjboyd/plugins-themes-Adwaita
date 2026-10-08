@@ -511,6 +511,10 @@ GnomeThemeComboBoxButtonWidth(NSRect cellFrame)
   return MIN (24.0, MAX (20.0, floor (cellFrame.size.height * 0.72)));
 }
 
+/* Set while a pop-up button cell draws its title (see
+   -_overrideNSPopUpButtonCellMethod_drawInteriorWithFrame:inView:). */
+static BOOL GnomeThemeDrawingPopUpTitle = NO;
+
 static NSRect
 GnomeThemeComboBoxButtonRect(NSRect cellFrame)
 {
@@ -2841,6 +2845,12 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
      divider before it (#59). */
   NSColor *arrowColor = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
 
+  /* NSPopUpButtonCell asks while it draws the title in the title's frame;
+     the theme's -drawInteriorWithFrame: override draws the chevron after. */
+  if (GnomeThemeDrawingPopUpTitle)
+    {
+      return;
+    }
   (void)cell;
   if ([cell isEnabled] == NO)
     {
@@ -3205,6 +3215,64 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
     }
 }
 
+/* GTK's entries show their placeholder while they have focus and are
+   empty, with the caret at its start; GNUstep's cell draws it only when it
+   isn't editing, and the field editor draws no placeholder. The editor's
+   background is clear (GnomeThemeSuppressEditorBackground()), so the cell
+   draws it under the editor, in the colour it has unfocused (#67). */
+static void
+GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView *controlView)
+{
+  NSText *editor = [controlView isKindOfClass: [NSControl class]]
+    ? [(NSControl *)controlView currentEditor] : nil;
+  NSAttributedString *placeholder = [cell placeholderAttributedString];
+
+  if (editor == nil || [[editor string] length] > 0)
+    {
+      return;
+    }
+  if ([[placeholder string] length] == 0)
+    {
+      NSString *string = [cell placeholderString];
+      NSFont *font = [cell font];
+      NSDictionary *attributes;
+
+      if ([string length] == 0)
+        {
+          return;
+        }
+      attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                      (font != nil) ? font : [NSFont userFontOfSize: 0], NSFontAttributeName,
+                      [NSColor disabledControlTextColor], NSForegroundColorAttributeName,
+                      nil];
+      placeholder = AUTORELEASE ([[NSAttributedString alloc] initWithString: string
+                                                                 attributes: attributes]);
+    }
+  GnomeThemeDrawAttributedStringWithEditorLayout (cell, placeholder, titleRect, controlView);
+}
+
+/* The editor's text going from empty to not (or back) shows or hides the
+   placeholder the cell draws under it: redraw the field, not only the
+   editor's changed glyphs. */
+- (void) _overrideNSTextFieldMethod_textDidChange: (NSNotification *)notification
+{
+  typedef void (*TextDidChangeIMP)(id, SEL, NSNotification *);
+  TextDidChangeIMP originalIMP = (TextDidChangeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextField class]);
+  NSTextField *field = (NSTextField *)self;
+  id cell = [field cell];
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, notification);
+    }
+  if ([cell isKindOfClass: [NSTextFieldCell class]]
+    && ([[cell placeholderString] length] > 0
+        || [[[cell placeholderAttributedString] string] length] > 0))
+    {
+      [field setNeedsDisplay: YES];
+    }
+}
+
 - (void) _overrideNSTextFieldCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
                                                        inView: (NSView *)controlView
 {
@@ -3232,6 +3300,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
           GnomeThemeSuppressEditorBackground ([(NSControl *)controlView currentEditor]);
         }
 
+      GnomeThemeDrawEditingPlaceholder (cell, [cell titleRectForBounds: cellFrame], controlView);
       [cell _drawEditorWithFrame: cellFrame
                            inView: controlView];
       return;
@@ -3307,6 +3376,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
           GnomeThemeSuppressEditorBackground ([(NSControl *)controlView currentEditor]);
         }
 
+      GnomeThemeDrawEditingPlaceholder (cell, [cell titleRectForBounds: textRect], controlView);
       [cell _drawEditorWithFrame: textRect
                            inView: controlView];
     }
@@ -4051,8 +4121,11 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSRect contentFrame = cellFrame;
   NSFont *originalFont = [cell font];
   NSFont *popupFont = GnomeThemeEmphasizedFont (originalFont, (NSCell *)self, controlView);
+  NSRect chevronFrame;
 
-  if (item != nil && [item image] == arrowImage)
+  /* The theme's -_currentArrowImage is nil, so only an image put on the
+     item before the theme loaded can be the arrow. */
+  if (item != nil && arrowImage != nil && [item image] == arrowImage)
     {
       savedImage = RETAIN ([item image]);
       [item setImage: nil];
@@ -4061,6 +4134,12 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   [cell setArrowPosition: NSPopUpNoArrow];
   contentFrame.origin.x += 10.0;
   contentFrame.size.width = MAX (0.0, contentFrame.size.width - 16.0);
+  chevronFrame = contentFrame;
+  /* The title ends where the chevron's box starts; -drawTitleForMenuItemCell:
+     cuts it short there (#67). It had the chevron's frame, and ran under the
+     chevron. The chevron keeps its place, drawn below in the frame it has
+     always had. */
+  contentFrame.size.width = MAX (0.0, NSMinX (GnomeThemeComboBoxButtonRect (chevronFrame)) - NSMinX (contentFrame));
   if (popupFont != nil)
     {
       [cell setFont: popupFont];
@@ -4068,8 +4147,13 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
 
   if (originalIMP != NULL)
     {
+      GnomeThemeDrawingPopUpTitle = YES;
       originalIMP (self, _cmd, contentFrame, controlView);
+      GnomeThemeDrawingPopUpTitle = NO;
     }
+  [GnomeThemeActiveTheme () drawPopUpButtonCellInteriorWithFrame: chevronFrame
+                                                         withCell: cell
+                                                           inView: controlView];
 
   [cell setArrowPosition: originalArrowPosition];
   if (popupFont != nil)
@@ -4082,6 +4166,44 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       [item setImage: savedImage];
       RELEASE (savedImage);
     }
+}
+
+/* No arrow image: the theme draws libadwaita's chevron. NSPopUpButtonCell
+   puts its arrow image on the selected item when the item has none, and
+   NSMenuView draws items' images in the open menu, so GNUstep's nibble
+   showed at the right of the selected row, and stayed on rows selected
+   earlier (#67). */
+- (NSImage *) _overrideNSPopUpButtonCellMethod__currentArrowImage
+{
+  return nil;
+}
+
+/* Room for the theme's layout (the width the arrow image used to give):
+   the widest title in the font it is drawn in, from 10pt in, then the
+   chevron's box, which ends 8pt from the right edge. */
+- (NSSize) _overrideNSPopUpButtonCellMethod_cellSize
+{
+  typedef NSSize (*CellSizeIMP)(id, SEL);
+  CellSizeIMP originalIMP = (CellSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSPopUpButtonCell class]);
+  NSPopUpButtonCell *cell = (NSPopUpButtonCell *)self;
+  NSSize size = (originalIMP != NULL) ? originalIMP (self, _cmd) : NSZeroSize;
+  NSFont *font = GnomeThemeEmphasizedFont ([cell font], (NSCell *)cell, [cell controlView]);
+  NSDictionary *attributes = (font != nil)
+    ? [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName] : nil;
+  NSEnumerator *enumerator = [[cell itemArray] objectEnumerator];
+  NSMenuItem *item;
+  CGFloat titleWidth = 0.0;
+  NSRect frame = NSMakeRect (0.0, 0.0, size.width,
+                             MAX (size.height, NSHeight ([[cell controlView] bounds])));
+
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      titleWidth = MAX (titleWidth, [[item title] sizeWithAttributes: attributes].width);
+    }
+  size.width = MAX (size.width,
+                    ceil (10.0 + titleWidth + GnomeThemeButtonTitleSlack
+                          + NSWidth (GnomeThemeComboBoxButtonRect (frame)) + 8.0));
+  return size;
 }
 
 - (void) _overrideNSComboBoxCellMethod_drawWithFrame: (NSRect)cellFrame

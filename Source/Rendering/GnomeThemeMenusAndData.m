@@ -487,20 +487,31 @@ GnomeThemePhase67MenuForegroundColor(GnomeTheme *theme,
                                       @"disabledControlTextColor",
                                       [NSColor disabledControlTextColor]);
     }
-  else if (highlighted)
-    {
-      color = GnomeThemeColor (theme,
-                                      @"selectedMenuItemTextColor",
-                                      [NSColor selectedMenuItemTextColor]);
-    }
   else
     {
+      /* Hovered or not: libadwaita's hovered row is neutral (#67). */
       color = GnomeThemeColor (theme,
                                       @"controlTextColor",
                                       [NSColor controlTextColor]);
     }
 
+  (void)highlighted;
   return color;
+}
+
+/* A vertical menu's hovered row, as libadwaita's popover menus:
+   the foreground at 10% over the menu's background. */
+static NSColor *
+GnomeThemeMenuHoverColor(GnomeTheme *theme)
+{
+  NSColor *background = GnomeThemeColor (theme,
+                                         @"menuBackgroundColor",
+                                         [NSColor controlBackgroundColor]);
+  NSColor *foreground = GnomeThemeColor (theme,
+                                         @"GnomeThemeForegroundColor",
+                                         [NSColor controlTextColor]);
+
+  return GnomeThemePhase67Blend (background, foreground, 0.10);
 }
 
 /* Inline button rows (#42), as GTK's "horizontal-buttons" menu sections
@@ -957,13 +968,11 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     }
   else
     {
-      NSColor *fillColor = GnomeThemePhase67ViewIsActive (controlView)
-        ? GnomeThemeColor (self,
-                                  @"selectedMenuItemColor",
-                                  [NSColor selectedMenuItemColor])
-        : GnomeThemeColor (self,
-                                  @"selectedInactiveColor",
-                                  [NSColor selectedControlColor]);
+      /* libadwaita's hovered menu row: the text colour at 10% over the
+         menu, with the row's own text (#67). It had been the accent with
+         white text, and in a pop-up button's menu, whose window isn't
+         key, the pale inactive selection with white text. */
+      NSColor *fillColor = GnomeThemeMenuHoverColor (self);
       NSRect selectionRect = NSInsetRect (cellFrame, 4.0, 2.0);
       /* High contrast outlines the row, as libadwaita's hovered menu
          items (the border colour: text at 50%). */
@@ -1892,7 +1901,6 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   GnomeTheme *theme = GnomeThemeActivePhase67Theme ();
   BOOL isHorizontal = [[cell menuView] isHorizontal];
   NSInteger state = [item state];
-  BOOL highlighted = [cell isHighlighted];
   NSColor *color = nil;
   NSRect stateRect;
 
@@ -1929,16 +1937,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
                                       @"disabledControlTextColor",
                                       [NSColor disabledControlTextColor]);
     }
-  else if (highlighted)
-    {
-      color = GnomeThemeColor (theme,
-                                      @"selectedMenuItemTextColor",
-                                      [NSColor selectedMenuItemTextColor]);
-    }
   else
     {
-      /* The accent as text (accent_color): fills' darker accent would be
-         faint on a dark menu. */
+      /* The accent as text (accent_color), hovered or not (#67): fills'
+         darker accent would be faint on a dark menu. */
       color = GnomeThemeColor (theme,
                                       @"highlightColor",
                                       [NSColor highlightColor]);

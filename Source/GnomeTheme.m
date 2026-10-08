@@ -304,6 +304,49 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
     }
 }
 
+/* `title` cut short with an ellipsis to fit `width`: at its head or middle
+   when `mode` says so, at its end otherwise (wrapping and clipping too, as
+   GTK's labels in buttons). */
+static NSString *
+GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat width, NSLineBreakMode mode)
+{
+  NSString *ellipsis = [NSString stringWithFormat: @"%C", (unichar)0x2026];
+  NSUInteger keep = [title length];
+
+  while (keep > 0)
+    {
+      NSString *candidate;
+
+      keep--;
+      if (mode == NSLineBreakByTruncatingHead)
+        {
+          candidate = [ellipsis stringByAppendingString:
+            [title substringFromIndex: [title length] - keep]];
+        }
+      else if (mode == NSLineBreakByTruncatingMiddle)
+        {
+          NSUInteger head = (keep + 1) / 2;
+
+          candidate = [NSString stringWithFormat: @"%@%@%@",
+            [title substringToIndex: head], ellipsis,
+            [title substringFromIndex: [title length] - (keep - head)]];
+        }
+      else
+        {
+          /* Not inside a character made of several (an emoji, an accent). */
+          keep = [title rangeOfComposedCharacterSequenceAtIndex: keep].location;
+          candidate = [[[title substringToIndex: keep]
+            stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]]
+            stringByAppendingString: ellipsis];
+        }
+      if ([candidate sizeWithAttributes: attributes].width <= width)
+        {
+          return candidate;
+        }
+    }
+  return ellipsis;
+}
+
 @implementation GnomeTheme
 
 + (NSString *)themeName
@@ -793,12 +836,16 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
     {
       textColor = [NSColor disabledControlTextColor];
     }
-  else if (highlighted)
+  else if (highlighted && isHorizontal)
     {
+      /* White on the menu bar's accent pill. */
       textColor = [NSColor selectedMenuItemTextColor];
     }
   else
     {
+      /* A menu's hovered row is libadwaita's neutral one, and keeps the
+         text colour (#67); it had been white, on the accent or, in a pop-up
+         button's menu, on the pale inactive selection. */
       textColor = [NSColor controlTextColor];
     }
 
@@ -822,6 +869,15 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
                         font, NSFontAttributeName,
                         nil];
   titleSize = [title sizeWithAttributes: sizingAttributes];
+  /* A pop-up button's title is cut short with an ellipsis to fit before
+     its chevron, as GtkDropDown's label: at the end, or where the cell's
+     line break mode says (#67). It had wrapped out of sight word by word. */
+  if ([cell isKindOfClass: [NSPopUpButtonCell class]]
+    && titleSize.width > NSWidth (titleRect))
+    {
+      title = GnomeThemeTruncatedTitle (title, sizingAttributes, NSWidth (titleRect), [cell lineBreakMode]);
+      titleSize = [title sizeWithAttributes: sizingAttributes];
+    }
   if (isHorizontal)
     {
       titleRect.origin.x = floor (NSMidX (titleRect) - (titleSize.width / 2.0));

@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dlfcn.h>
+#include <math.h>
 
 /* Apple's tabbing API and the tab bar, from the tabbing code the theme
    builds in (#63); this libs-gui doesn't declare them. */
@@ -4951,6 +4952,289 @@ QuirkProbeHex(const NSUInteger rgb[3])
    not the fallback. -colorNamed:state: alone reads GSTheme's extra colour
    lists, which the theme doesn't ship, so such keys used to come back as
    the fallback (#62's dark tables, the selection below). */
+/* A pop-up button's arrow image never lands on its items: NSPopUpButtonCell
+   put it on each item it selected and left it on the earlier ones, so the
+   open menu showed GNUstep's nibble at the right of their rows (#67). The
+   items are selected in code, as ObjcMarkdown's paragraph pop-up follows
+   the caret. */
+- (void) checkPopUpMenuArrowImage
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 380, 70) title: @"Probe Pop-Up Items"];
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (10, 18, 160, 34)
+                                                                pullsDown: NO]);
+  NSPopUpButton *pullDown = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (200, 18, 160, 34)
+                                                                  pullsDown: YES]);
+  NSMutableArray *withImage = [NSMutableArray array];
+  NSArray *buttons = [NSArray arrayWithObjects: popUp, pullDown, nil];
+  NSEnumerator *enumerator = [buttons objectEnumerator];
+  NSPopUpButton *button;
+  NSString *detail;
+  NSInteger order[4] = { 1, 2, 0, 1 };
+  int i;
+
+  [popUp addItemsWithTitles: [NSArray arrayWithObjects: @"Paragraph", @"Heading 1", @"Heading 2", nil]];
+  [pullDown addItemsWithTitles: [NSArray arrayWithObjects: @"Insert", @"Table", @"Image", nil]];
+  [[window contentView] addSubview: popUp];
+  [[window contentView] addSubview: pullDown];
+  [window orderFront: nil];
+  /* Drawn after each selection, as the app's window is. */
+  for (i = 0; i < 4; i++)
+    {
+      [popUp selectItemAtIndex: order[i]];
+      [pullDown selectItemAtIndex: order[i]];
+      [window display];
+    }
+  [window orderOut: nil];
+  /* For the screenshots: the pop-up's items as its open menu shows them,
+     the second hovered. */
+  {
+    NSMenu *copy = AUTORELEASE ([[popUp menu] copy]);
+    NSMenuView *menuView = AUTORELEASE ([[NSMenuView alloc] initWithFrame: NSMakeRect (0, 0, 160, 100)]);
+    NSWindow *menuWindow;
+
+    [menuView setMenu: copy];
+    [menuView sizeToFit];
+    menuWindow = [self windowWithFrame: NSMakeRect (60, 200, NSWidth ([menuView frame]) + 40, NSHeight ([menuView frame]) + 40)
+                                 title: @"Probe Pop-Up Menu"];
+    [menuView setFrameOrigin: NSMakePoint (20, 20)];
+    [[menuWindow contentView] addSubview: menuView];
+    [menuWindow orderFront: nil];
+    [menuView setHighlightedItemIndex: 1];
+    [menuWindow display];
+    [self saveWindow: menuWindow named: @"popup-menu-items"];
+    [menuView setHighlightedItemIndex: -1];
+    [menuWindow orderOut: nil];
+  }
+  while ((button = [enumerator nextObject]) != nil)
+    {
+      NSEnumerator *items = [[button itemArray] objectEnumerator];
+      NSMenuItem *item;
+
+      while ((item = [items nextObject]) != nil)
+        {
+          if ([item image] != nil)
+            {
+              [withImage addObject: [item title]];
+            }
+        }
+    }
+  detail = [withImage count] == 0
+    ? @"no item of a pop-up or a pull-down has an image after four selections in code, each drawn"
+    : [NSString stringWithFormat: @"items with the arrow image: %@", [withImage componentsJoinedByString: @", "]];
+  if ([withImage count] == 0)
+    {
+      [self pass: @"popup-menu-no-arrow-image" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-menu-no-arrow-image" detail: detail];
+    }
+}
+
+/* A long title stops before the chevron, cut short with an ellipsis, as
+   GtkDropDown's label; it ran under the chevron, whatever the cell's line
+   break mode (#67). The chevron's 24pt box ends 8pt from the right edge;
+   its ink starts 6pt into it. */
+- (void) checkPopUpTitleTruncation
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 180, 70) title: @"Probe Pop-Up Title"];
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 18, 120, 34)
+                                                                pullsDown: NO]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk title, gap;
+  NSInteger width, chevronStart;
+  NSString *detail;
+
+  [popUp addItemWithTitle: @"DejaVu Math TeX Gyre"];
+  [[window contentView] addSubview: popUp];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (popUp);
+  width = [rep pixelsWide];
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  chevronStart = width - 8 - 24 + 6;
+  title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (4, 6, chevronStart - 4, [rep pixelsHigh] - 12));
+  gap = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (chevronStart - 5, 6, 5, [rep pixelsHigh] - 12));
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"popup-title-truncation"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"title ink from %ldpt to %ldpt, chevron from %ldpt; "
+    @"%lu ink pixel(s) in the 5pt before the chevron",
+    (long)title.minX, (long)(title.minX + title.width), (long)chevronStart, (unsigned long)gap.count];
+  if (title.count > 0 && title.width >= 40 && gap.count == 0)
+    {
+      [self pass: @"popup-title-truncation" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-title-truncation" detail: detail];
+    }
+}
+
+/* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
+   foreground at 10% over the menu, with the row's text in the text colour.
+   It was the accent with white text, and in a pop-up button's menu, whose
+   window isn't key, the pale inactive selection with white text (#67). */
+- (void) checkMenuHoverTextColor
+{
+  typedef NSColor *(*LookupFunction)(GSTheme *, NSString *, NSColor *);
+  LookupFunction lookup = (LookupFunction)dlsym (RTLD_DEFAULT, "GnomeThemeColor");
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Probe"]);
+  NSMenuView *menuView;
+  NSWindow *window;
+  NSBitmapImageRep *rep;
+  NSRect rows[2], bounds;
+  NSUInteger hovered[3], plain[3];
+  NSColor *foreground, *text;
+  long want[3], textSum, fillSum;
+  QuirkProbeInk ink;
+  NSString *detail;
+  BOOL fillOK, textOK;
+  int i;
+
+  if (lookup == NULL)
+    {
+      [self skip: @"menu-hover-text-colour" detail: @"GnomeThemeColor() not found in the loaded theme"];
+      return;
+    }
+  foreground = [lookup ([GSTheme theme], @"GnomeThemeForegroundColor", [NSColor controlTextColor])
+                 colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  text = [lookup ([GSTheme theme], @"controlTextColor", [NSColor controlTextColor])
+           colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  [[menu addItemWithTitle: @"Heading 1" action: @selector(description) keyEquivalent: @""] setTarget: self];
+  [[menu addItemWithTitle: @"Heading 2" action: @selector(description) keyEquivalent: @""] setTarget: self];
+  menuView = AUTORELEASE ([[NSMenuView alloc] initWithFrame: NSMakeRect (0, 0, 200, 100)]);
+  [menuView setMenu: menu];
+  [menuView sizeToFit];
+  window = [self windowWithFrame: NSMakeRect (40, 200, NSWidth ([menuView frame]) + 40, NSHeight ([menuView frame]) + 40)
+                           title: @"QuirkProbe Menu Hover"];
+  [menuView setFrameOrigin: NSMakePoint (20, 20)];
+  [[window contentView] addSubview: menuView];
+  [window orderFront: nil];
+  [menuView setHighlightedItemIndex: 0];
+  [window display];
+  rep = QuirkProbeRender (menuView);
+  bounds = [menuView bounds];
+  for (i = 0; i < 2; i++)
+    {
+      rows[i] = [menuView rectOfItemAtIndex: i];
+      if ([menuView isFlipped] == NO)
+        {
+          rows[i].origin.y = NSHeight (bounds) - NSMaxY (rows[i]);
+        }
+    }
+  /* Clear of the title and of the rounded ends. */
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX (rows[0]) - 16, (NSInteger)NSMidY (rows[0]), hovered);
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX (rows[1]) - 16, (NSInteger)NSMidY (rows[1]), plain);
+  QuirkProbeInkBackground = hovered[0] + hovered[1] + hovered[2];
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                             NSMakeRect (NSMinX (rows[0]) + 8, NSMinY (rows[0]) + 4,
+                                         NSWidth (rows[0]) / 2, NSHeight (rows[0]) - 8));
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"menu-hover"];
+  [menuView setHighlightedItemIndex: -1];
+  [window orderOut: nil];
+
+  want[0] = lround (plain[0] * 0.9 + [foreground redComponent] * 255 * 0.1);
+  want[1] = lround (plain[1] * 0.9 + [foreground greenComponent] * 255 * 0.1);
+  want[2] = lround (plain[2] * 0.9 + [foreground blueComponent] * 255 * 0.1);
+  fillOK = YES;
+  for (i = 0; i < 3; i++)
+    {
+      if (labs ((long)hovered[i] - want[i]) > 3)
+        {
+          fillOK = NO;
+        }
+    }
+  /* The title's ink lies on the text colour's side of the fill: dark in the
+     light palette, light in the dark one (white text failed the light). */
+  textSum = lround (([text redComponent] + [text greenComponent] + [text blueComponent]) * 255);
+  fillSum = (long)(hovered[0] + hovered[1] + hovered[2]);
+  textOK = ink.count > 0
+    && ((textSum < fillSum) ? ((long)ink.darkest < fillSum - 300) : ((long)ink.lightest > fillSum + 300));
+  detail = [NSString stringWithFormat: @"hovered row %@ (want #%02lx%02lx%02lx, 10%% foreground over %@); "
+    @"title ink r+g+b %lu to %lu on %ld, text colour %ld",
+    QuirkProbeHex (hovered), want[0], want[1], want[2], QuirkProbeHex (plain),
+    (unsigned long)ink.darkest, (unsigned long)ink.lightest, fillSum, textSum];
+  if (fillOK && textOK)
+    {
+      [self pass: @"menu-hover-text-colour" detail: detail];
+    }
+  else
+    {
+      [self fail: @"menu-hover-text-colour" detail: detail];
+    }
+}
+
+/* An empty search field (and text field) shows its placeholder while it
+   has focus, as GTK's entries do, and hides it once there is text (#67).
+   GNUstep's cell drew it only when not editing. */
+- (void) checkSearchPlaceholderFocused
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 120) title: @"Probe Placeholder"];
+  NSSearchField *search = AUTORELEASE ([[NSSearchField alloc] initWithFrame: NSMakeRect (20, 66, 220, 34)]);
+  NSTextField *field = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (20, 20, 220, 34)]);
+  NSArray *fields = [NSArray arrayWithObjects: search, field, nil];
+  NSMutableString *detail = [NSMutableString string];
+  NSWindow *previousKey = [NSApp keyWindow];
+  BOOL ok = YES;
+  NSUInteger i;
+
+  [[search cell] setPlaceholderString: @"Search Fonts"];
+  [[field cell] setPlaceholderString: @"Family Name"];
+  [[window contentView] addSubview: search];
+  [[window contentView] addSubview: field];
+  [window makeKeyAndOrderFront: nil];
+  for (i = 0; i < [fields count]; i++)
+    {
+      NSTextField *control = [fields objectAtIndex: i];
+      NSBitmapImageRep *rep;
+      NSUInteger fill[3];
+      QuirkProbeInk empty, typed;
+      NSRect area;
+
+      [window makeFirstResponder: control];
+      [window display];
+      rep = QuirkProbeRender (control);
+      /* Inside the entry, after the search icon, clear of its rounded ends. */
+      area = NSMakeRect (i == 0 ? 30 : 8, 8, [rep pixelsWide] - (i == 0 ? 60 : 16), [rep pixelsHigh] - 16);
+      QuirkProbePixelAt (rep, [rep pixelsWide] - 40, 6, fill);
+      QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+      empty = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, area);
+      [(NSTextView *)[control currentEditor] insertText: @"l"];
+      [window display];
+      typed = QuirkProbeMeasureIn (QuirkProbeRender (control), QuirkProbeIsInk, area);
+      QuirkProbeInkBackground = 750;
+      [detail appendFormat: @"%s%@ focused and empty: ink %ldpt wide, editing %@; with \"l\" typed: %ldpt",
+        i ? "; " : "", i == 0 ? @"search field" : @"text field", (long)empty.width,
+        [control currentEditor] != nil ? @"yes" : @"no", (long)typed.width];
+      if (empty.width < 40 || typed.width > 12 || typed.count == 0)
+        {
+          ok = NO;
+        }
+    }
+  [(NSTextView *)[field currentEditor] setString: @""];
+  [search setStringValue: @""];
+  [field setNeedsDisplay: YES];
+  [window display];
+  [self saveWindow: window named: @"search-placeholder"];
+  [window makeFirstResponder: nil];
+  [window orderOut: nil];
+  [previousKey makeKeyWindow];
+
+  if (ok)
+    {
+      [self pass: @"search-placeholder-focused" detail: detail];
+    }
+  else
+    {
+      [self fail: @"search-placeholder-focused" detail: detail];
+    }
+}
+
 - (void) checkPaletteLookup
 {
   typedef NSColor *(*LookupFunction)(GSTheme *, NSString *, NSColor *);
@@ -5879,6 +6163,10 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTableBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
+  [self checkPopUpMenuArrowImage];
+  [self checkPopUpTitleTruncation];
+  [self checkMenuHoverTextColor];
+  [self checkSearchPlaceholderFocused];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
@@ -5944,6 +6232,10 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTableBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
+  [self checkPopUpMenuArrowImage];
+  [self checkPopUpTitleTruncation];
+  [self checkMenuHoverTextColor];
+  [self checkSearchPlaceholderFocused];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
