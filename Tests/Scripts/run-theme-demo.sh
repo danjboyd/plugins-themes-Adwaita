@@ -37,7 +37,6 @@ cd "$REPO_DIR"
 make
 make demo
 
-defaults delete ThemeDemo GSTheme >/dev/null 2>&1 || true
-defaults delete ThemeDemo GSScaleFactor >/dev/null 2>&1 || true
-defaults delete ThemeDemo GSWindowManagerHandlesDecorations >/dev/null 2>&1 || true
+# The theme on the command line, for this run only; the user's own
+# ThemeDemo defaults are left as they are.
 openapp Examples/ThemeDemo/ThemeDemo.app -GSTheme "$THEME" "$@"

@@ -88,7 +88,7 @@ done
 
 # Nothing from the desktop's session: its portal, its Wayland display, gvfs.
 run_on_private_bus() {
-  env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS GDK_BACKEND=x11 DISPLAY=":$n" \
+  env -u WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS QUIRK_PROBE_PRIVATE_BUS=1 GDK_BACKEND=x11 DISPLAY=":$n" \
     GNUSTEP_CONFIG_FILE="$WORK/GNUstep.conf" \
     GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$WORK/config" \
     GIO_USE_VFS=local GVFS_DISABLE_FUSE=1 GIO_USE_VOLUME_MONITOR=unix GTK_USE_PORTAL=0 \
