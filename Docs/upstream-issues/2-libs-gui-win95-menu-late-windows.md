@@ -1,5 +1,7 @@
 **Repository:** gnustep/libs-gui
 
+**Filed:** [gnustep/libs-gui#991](https://github.com/gnustep/libs-gui/issues/991), 2026-10-08, the version signed off (draft 62c82f0, reproducer 8501413), with the reproducer's source attached.
+
 **Title:** NSWindows95InterfaceStyle: windows created after launch get no menu bar
 
 ### Summary

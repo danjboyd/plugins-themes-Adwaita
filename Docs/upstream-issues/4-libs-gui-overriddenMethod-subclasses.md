@@ -1,5 +1,7 @@
 **Repository:** gnustep/libs-gui
 
+**Filed:** [gnustep/libs-gui#990](https://github.com/gnustep/libs-gui/issues/990), 2026-10-08, the version signed off (draft 50909aa, reproducer 50511ec), with the reproducer's source attached.
+
 **Title:** GSTheme -overriddenMethod:for: returns 0 when the receiver is a subclass of the overridden class
 
 ### Summary
