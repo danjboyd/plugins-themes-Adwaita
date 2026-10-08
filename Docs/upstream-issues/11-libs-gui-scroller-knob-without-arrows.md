@@ -1,5 +1,7 @@
 **Repository:** gnustep/libs-gui
 
+**Filed:** [gnustep/libs-gui#989](https://github.com/gnustep/libs-gui/issues/989), 2026-10-08, the version signed off (draft 6c51be2, reproducer 94f62df), with the reproducer's source attached.
+
 **Title:** NSScroller: with no arrows, the knob is offset by one arrow unless GSScrollerArrowsSameEnd is set
 
 ### Summary
