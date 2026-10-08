@@ -69,6 +69,15 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeOverlayScrollers.m \
 	Source/Rendering/GnomeThemeNibMetrics.m
 
+# Window tabs: Apple's NSWindow tabbing API from the shared code in
+# danjboyd/gnustep-window-tabbing, copied into Source/WindowTabbing at the
+# commit in its VERSION by Tools/vendor-window-tabbing.sh. The directory is
+# relative, and the files are added before bundle.make reads the lists.
+GSWINDOWTABBING_DIR = Source/WindowTabbing
+include $(GSWINDOWTABBING_DIR)/GSWindowTabbing.make
+Adwaita_OBJC_FILES += $(GSWINDOWTABBING_OBJC_FILES)
+ADDITIONAL_INCLUDE_DIRS += $(GSWINDOWTABBING_INCLUDE_DIRS)
+
 -include GNUmakefile.preamble
 
 include $(GNUSTEP_MAKEFILES)/bundle.make
