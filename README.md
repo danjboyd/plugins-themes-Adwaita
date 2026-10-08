@@ -45,6 +45,20 @@ with this one:
   </tr>
 </table>
 
+<table>
+  <tr>
+    <th colspan="2">Adwaita, dark style</th>
+  </tr>
+  <tr>
+    <td width="50%"><img src="Docs/Screenshots/compare/markdownviewer-adwaita-dark.png" alt="MarkdownViewer with Adwaita in GNOME's dark style: a dark header bar with the toolbar, the Read, Edit and Split switcher and the primary menu, over the same document"></td>
+    <td width="50%"><img src="Docs/Screenshots/compare/themedemo-controls-adwaita-dark.png" alt="The theme's demo app in dark style: blue default button and checked boxes with white marks, ringed unchecked radio, the slider's light knob, pop-up and stepper"></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/danjboyd/ObjcMarkdown">MarkdownViewer</a></td>
+    <td align="center">ThemeDemo's controls page</td>
+  </tr>
+</table>
+
 What changes: libadwaita's header bar, with the window's toolbar in it and
 GNOME's window buttons; its buttons, entries, switches, check boxes and
 pop-ups; menus as popovers with the primary ☰ menu; overlay scrollbars;
