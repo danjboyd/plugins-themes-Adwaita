@@ -141,12 +141,14 @@ It does not currently aim to:
 
 ```text
 Source/                  Theme implementation
+Source/WindowTabbing/    Copy of gnustep-window-tabbing (Tools/vendor-window-tabbing.sh refreshes it)
 Resources/               Theme bundle metadata and assets
 Palettes/Adwaita/        Gorm palette of controls at GNOME's sizes
 Examples/ThemeDemo/      GNUstep-side demo app
 Examples/QuirkProbe/     Offscreen checks run by make check-quirks
 Reference/AdwaitaDemo/   GTK4/libadwaita comparison harness
 Reference/HeaderBar/     libadwaita header bar measurements and renders
+Reference/AdwaitaTabBar/ libadwaita's AdwTabBar, for the window tabs' measurements
 Tests/Scripts/           Check runners and capture helpers (readme-shots/: the README's screenshots)
 Docs/                    Design notes and handoffs; Screenshots/
 Docs/upstream-patches/   The libs-back and libs-gui patches the theme needs, with review notes
@@ -405,6 +407,35 @@ libs-back with the patches in `Docs/upstream-patches/` (see its README and
 `make check-mutter` checks the header bar with Mutter as the window manager:
 GNOME Shell on a private Xvfb display, with its own D-Bus session and no
 gvfs (see `Tests/Scripts/run-mutter-check.sh`).
+
+### Window tabs
+
+The theme gives apps Apple's window tabbing (`NSWindowTab`,
+`NSWindowTabGroup`, `-addTabbedWindow:ordered:`, `tabbingIdentifier`,
+`tabbingMode`, `newWindowForTab:` and the Window menu's tab items) through
+[gnustep-window-tabbing](https://github.com/danjboyd/gnustep-window-tabbing),
+built into the theme, and draws the tab bar as libadwaita's AdwTabBar: a
+40pt bar in the window's colour below the header bar (and any in-window
+menu bar and toolbar), tabs sharing its width, the selected one filled,
+close buttons on the selected and hovered tabs, and a "+" button at the end
+when something responds to `-newWindowForTab:`. Ctrl+Tab and Ctrl+Page
+Up/Down move between tabs, and closing a tab shows its neighbour.
+
+An app needs no code of its own beyond Apple's API: give windows a
+`tabbingIdentifier` (and `NSWindowTabbingModePreferred`, or join them with
+`-addTabbedWindow:ordered:`), and implement `-newWindowForTab:` in the
+responder chain for the "+" button. The tabbing code switches itself off
+when NSWindow already has these methods (a libs-gui that implements them).
+
+The code is a copy in `Source/WindowTabbing` of a commit of that
+repository (`Source/WindowTabbing/VERSION`); change it there, then refresh
+the copy with `bash Tools/vendor-window-tabbing.sh CHECKOUT COMMIT`. An app
+that also builds the tabbing code in itself works under the theme (the
+runtime keeps one copy of each class, and the other copy hands its calls
+to it); the same commit is safest. Screenshots
+against libadwaita are in `Docs/Screenshots/window-tabs/`, and
+`Reference/AdwaitaTabBar/adwaita_tab_bar.py` is the GTK 4 reference they
+were measured from.
 
 ### Designing a GNOME-style app in Gorm
 
