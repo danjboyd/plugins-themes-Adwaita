@@ -556,6 +556,7 @@ GnomeThemeResizeCursor(NSUInteger edges)
   NSRect _titleFolderRect;
 }
 - (void) placeToolbarForSetting;
+- (void) layoutWindowButtons;
 @end
 
 @implementation GnomeThemeHeaderBarDecorationView
@@ -1774,6 +1775,24 @@ GnomeThemeHeaderBarToolbarSettingChanged(void)
       if ([frameView isKindOfClass: [GnomeThemeHeaderBarDecorationView class]])
         {
           [(GnomeThemeHeaderBarDecorationView *)frameView placeToolbarForSetting];
+        }
+    }
+}
+
+void
+GnomeThemeHeaderBarDesktopSettingsChanged(void)
+{
+  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
+  NSWindow *window;
+
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      NSView *frameView = [[window contentView] superview];
+
+      if ([frameView isKindOfClass: [GnomeThemeHeaderBarDecorationView class]])
+        {
+          [(GnomeThemeHeaderBarDecorationView *)frameView layoutWindowButtons];
+          [frameView setNeedsDisplay: YES];
         }
     }
 }

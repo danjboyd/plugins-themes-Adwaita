@@ -55,6 +55,7 @@ Adwaita_OBJC_FILES = \
 	Source/GnomeTheme.m \
 	Source/Settings/GnomeThemeSettings.m \
 	Source/Settings/GnomeThemeMetrics.m \
+	Source/Settings/GnomeThemeSystemFonts.m \
 	Source/Rendering/GnomeThemePalette.m \
 	Source/Rendering/GnomeThemeControls.m \
 	Source/Rendering/GnomeThemeAlerts.m \
@@ -63,6 +64,7 @@ Adwaita_OBJC_FILES = \
 	Source/Adapters/GnomeThemeWindowManager.m \
 	Source/Adapters/GnomeThemeFileChooser.m \
 	Source/Adapters/GnomeThemePrintDialog.m \
+	Source/Adapters/GnomeThemeSettingsMonitor.m \
 	Source/Rendering/GnomeThemeMenusAndData.m \
 	Source/Rendering/GnomeThemeWindowTypes.m \
 	Source/Rendering/GnomeThemeSymbolicImages.m \
@@ -85,7 +87,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-live-settings check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -114,6 +116,12 @@ check-nib-metrics:
 
 # GNOME's Large Text (#53): fonts and metrics at text-scaling-factor 1.25
 # and 2.0; check-quirks checks 1.0.
+# GNOME's settings changed while an app runs: dark style and Large Text on
+# and off, in the probe's own GSettings keyfile (#64).
+check-live-settings:
+	QUIRK_PROBE_ARGS="-ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
 check-text-scaling:
 	QUIRK_PROBE_TEXT_SCALE=1.25 QUIRK_PROBE_ARGS="-ProbeOnly text-scaling" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_TEXT_SCALE=2.0 QUIRK_PROBE_ARGS="-ProbeOnly text-scaling" bash Tests/Scripts/run-quirk-probe.sh --no-build
