@@ -85,6 +85,11 @@ BOOL GnomeThemeDrawOverlayScrollerIfNeeded(NSScroller *scroller);
 /* Whether a scroll view gets libadwaita's frame: it has a border and
    doesn't hold a table or outline view (those are plain areas). */
 BOOL GnomeThemeScrollViewHasFrame(NSScrollView *scrollView);
+/* A colour by name: the theme's palette (system colours and its own keys),
+   then GSTheme's extra colour lists (-colorNamed:state:), then fallback.
+   -colorNamed:state: alone reads only the extra lists, which this theme
+   doesn't ship, so palette-only keys came back as the fallback. */
+NSColor *GnomeThemeColor(GSTheme *theme, NSString *key, NSColor *fallback);
 NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
 /* A template image's colour in a control: the header bar's in a toolbar
    in the bar, the disabled colour when `dimmed`, else `text`. */

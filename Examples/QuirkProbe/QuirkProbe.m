@@ -25,6 +25,7 @@
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <dlfcn.h>
 
 /* From the theme (GnomeThemeMenusAndData.m): a narrow menu bar's overflow
    button and the menu it shows. */
@@ -4930,6 +4931,116 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* The theme's colour lookup (GnomeThemeColor(), in the bundle) reads the
+   palette first: a palette-only key comes back as the palette's colour,
+   not the fallback. -colorNamed:state: alone reads GSTheme's extra colour
+   lists, which the theme doesn't ship, so such keys used to come back as
+   the fallback (#62's dark tables, the selection below). */
+- (void) checkPaletteLookup
+{
+  typedef NSColor *(*LookupFunction)(GSTheme *, NSString *, NSColor *);
+  LookupFunction lookup = (LookupFunction)dlsym (RTLD_DEFAULT, "GnomeThemeColor");
+  GSTheme *theme = [GSTheme theme];
+  NSColor *fallback = [NSColor colorWithCalibratedRed: 1.0 green: 0.0 blue: 0.0 alpha: 1.0];
+  NSString *keys[2] = { @"sliderKnobColor", @"highlightedTableRowBackgroundColor" };
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok = YES;
+  int i;
+
+  if (lookup == NULL)
+    {
+      [self skip: @"palette-lookup" detail: @"GnomeThemeColor() not found in the loaded theme"];
+      return;
+    }
+  for (i = 0; i < 2; i++)
+    {
+      NSColor *palette = [[theme colors] colorWithKey: keys[i]];
+      NSColor *found = lookup (theme, keys[i], fallback);
+
+      if (palette == nil || found != palette)
+        {
+          ok = NO;
+        }
+      [detail appendFormat: @"%s%@ %@", i ? "; " : "", keys[i],
+        found == fallback ? @"came back as the fallback" : (found == palette ? @"from the palette" : @"from elsewhere")];
+    }
+  if (ok)
+    {
+      [self pass: @"palette-lookup" detail: detail];
+    }
+  else
+    {
+      [self fail: @"palette-lookup" detail: detail];
+    }
+}
+
+/* A selected row in a focused table is libadwaita's (measured from its
+   GtkColumnView, Reference/AdwaitaDemo's data page): the accent at 25%
+   over the view colour, #cce0f8 in light and #233751 in dark, the same in
+   high contrast; the row's text stays the text colour. It used to be
+   alternateSelectedControlColor (#99c1f1, #4f7cb8) with white text, as
+   the palette's selection keys were never read. */
+- (void) checkTableSelection
+{
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  NSUInteger want[3] = { 0xcc, 0xe0, 0xf8 };
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 240, 160) title: @"Probe Table Selection"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (20, 20, 200, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 200, 120)]);
+  NSTableColumn *column = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"c"]);
+  NSBitmapImageRep *rep;
+  NSRect rowRect;
+  NSUInteger selected[3], plain[3];
+  NSWindow *previousKey;
+  NSString *detail;
+  BOOL ok;
+
+  if (dark)
+    {
+      want[0] = 0x23; want[1] = 0x37; want[2] = 0x51;
+    }
+  [column setWidth: 180];
+  [table addTableColumn: column];
+  [table setHeaderView: nil];
+  [table setDataSource: (id)self];
+  [scrollView setDocumentView: table];
+  [scrollView setHasVerticalScroller: NO];
+  [scrollView setBorderType: NSNoBorder];
+  [[window contentView] addSubview: scrollView];
+  [table reloadData];
+  [table selectRowIndexes: [NSIndexSet indexSetWithIndex: 1] byExtendingSelection: NO];
+  /* Key for the measurement only: later checks draw in windows that expect
+     to stay key. */
+  previousKey = [NSApp keyWindow];
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: table];
+  [window display];
+  rep = QuirkProbeRender (table);
+  /* Near the right end of the selected row, clear of its text, and the
+     same in the row after it. */
+  rowRect = [table rectOfRow: 1];
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX (rowRect) - 8, (NSInteger)NSMidY (rowRect), selected);
+  rowRect = [table rectOfRow: 2];
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX (rowRect) - 8, (NSInteger)NSMidY (rowRect), plain);
+  [window orderOut: nil];
+  [previousKey makeKeyWindow];
+
+  ok = labs ((long)selected[0] - (long)want[0]) <= 2 && labs ((long)selected[1] - (long)want[1]) <= 2
+    && labs ((long)selected[2] - (long)want[2]) <= 2;
+  detail = [NSString stringWithFormat: @"%@: selected row %@ (want #%02lx%02lx%02lx), next row %@",
+    dark ? @"dark" : @"light", QuirkProbeHex (selected),
+    (unsigned long)want[0], (unsigned long)want[1], (unsigned long)want[2], QuirkProbeHex (plain)];
+  if (ok)
+    {
+      [self pass: @"table-selection" detail: detail];
+    }
+  else
+    {
+      [self fail: @"table-selection" detail: detail];
+    }
+}
+
 /* libadwaita 1.7's control colours, measured from its reference app on the
    same display (Reference/AdwaitaDemo), in the palette the run uses (light
    or dark by the window colour, high contrast from -ProbeHighContrast):
@@ -5561,6 +5672,8 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
   [self checkTableBackground];
+  [self checkPaletteLookup];
+  [self checkTableSelection];
       [self finish];
       return;
     }
@@ -5621,6 +5734,8 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
   [self checkTableBackground];
+  [self checkPaletteLookup];
+  [self checkTableSelection];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
