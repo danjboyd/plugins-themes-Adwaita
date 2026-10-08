@@ -27,6 +27,21 @@
 #include <stdlib.h>
 #include <dlfcn.h>
 
+/* Apple's tabbing API and the tab bar, from the tabbing code the theme
+   builds in (#63); this libs-gui doesn't declare them. */
+@interface NSWindow (QuirkProbeTabbing)
+- (void) setTabbingIdentifier: (NSString *)identifier;
+- (void) addTabbedWindow: (NSWindow *)window ordered: (NSWindowOrderingMode)ordered;
+- (id) tabGroup;
+@end
+
+@interface NSObject (QuirkProbeTabBar)
+- (NSRect) rectForTabAtIndex: (NSUInteger)index;
+- (NSRect) closeButtonRectForTabAtIndex: (NSUInteger)index;
+- (NSUInteger) numberOfTabs;
+- (void) setSelectedWindow: (NSWindow *)window;
+@end
+
 /* From the theme (GnomeThemeMenusAndData.m): a narrow menu bar's overflow
    button and the menu it shows. */
 @interface NSMenuView (QuirkProbeMenuBarOverflow)
@@ -5604,6 +5619,174 @@ QuirkProbeHex(const NSUInteger rgb[3])
   RELEASE (toolTip);
 }
 
+/* Whether `area` has a pixel at least `contrast` from
+   `base` (the sum of the channels' differences). */
+static BOOL
+QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], long contrast)
+{
+  NSInteger x, y;
+  NSUInteger rgb[3];
+
+  for (y = NSMinY (area); y < NSMaxY (area); y++)
+    {
+      for (x = NSMinX (area); x < NSMaxX (area); x++)
+        {
+          QuirkProbePixelAt (rep, x, y, rgb);
+          if (labs ((long)rgb[0] - (long)base[0]) + labs ((long)rgb[1] - (long)base[1])
+              + labs ((long)rgb[2] - (long)base[2]) >= contrast)
+            {
+              return YES;
+            }
+        }
+    }
+  return NO;
+}
+
+/* The window tab bar (#63), as libadwaita 1.7's AdwTabBar measured from
+   Reference/AdwaitaTabBar/adwaita_tab_bar.py: a 40pt bar in the window's
+   colour; 34pt tabs, 6pt in from the ends and 5pt apart; the selected tab
+   filled with the foreground at 10% (#e6e6e7 light, #39393c dark); a 1px
+   separator at 15% between unselected tabs (#dbdbde, #434346), 50% in
+   high contrast (#949497, #909092), where the selected tab has a 1px
+   outline at 50% instead; a close button on the selected (and hovered)
+   tab only. The bar comes from the shared tabbing code the theme builds
+   in, through Apple's NSWindow tabbing API. */
+- (void) checkWindowTabs
+{
+  typedef NSView *(*BarFunction)(NSWindow *);
+  BarFunction barFor = (BarFunction)dlsym (RTLD_DEFAULT, "GSWindowTabBarViewForWindow");
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSWindow *windows[3];
+  NSView *bar;
+  NSBitmapImageRep *rep;
+  NSRect t0, t1, t2, close0, close1;
+  NSUInteger background[3], fill[3], edge[3], separator[3];
+  unsigned int wantBar, wantFill, wantSeparator;
+  NSInteger y, separatorX;
+  BOOL heightOK, colourOK, outlineOK, separatorOK, closeOK, closeShown, closeHidden;
+  NSString *style;
+  int i;
+
+  if (barFor == NULL || [NSWindow instancesRespondToSelector: @selector(addTabbedWindow:ordered:)] == NO)
+    {
+      [self fail: @"window-tabs" detail: @"the tabbing code isn't in the theme (no GSWindowTabBarViewForWindow)"];
+      return;
+    }
+  for (i = 0; i < 3; i++)
+    {
+      windows[i] = [self windowWithFrame: NSMakeRect (80 + 20 * i, 80, 500, 200)
+                                   title: [NSString stringWithFormat: @"Probe Tab %d", i + 1]];
+      [windows[i] setTabbingIdentifier: @"QuirkProbeTabs"];
+    }
+  [windows[0] orderFront: nil];
+  [windows[0] addTabbedWindow: windows[1] ordered: NSWindowAbove];
+  [windows[1] addTabbedWindow: windows[2] ordered: NSWindowAbove];
+  [[windows[0] tabGroup] setSelectedWindow: windows[0]];
+  bar = barFor (windows[0]);
+  if (bar == nil || [bar numberOfTabs] != 3)
+    {
+      [self fail: @"window-tabs" detail: [NSString stringWithFormat: @"no bar with three tabs (bar %@)", bar]];
+      for (i = 0; i < 3; i++)
+        {
+          [windows[i] orderOut: nil];
+        }
+      return;
+    }
+  [windows[0] display];
+  rep = QuirkProbeRender (bar);
+  t0 = [bar rectForTabAtIndex: 0];
+  t1 = [bar rectForTabAtIndex: 1];
+  t2 = [bar rectForTabAtIndex: 2];
+  close0 = [bar closeButtonRectForTabAtIndex: 0];
+  close1 = [bar closeButtonRectForTabAtIndex: 1];
+  y = (NSInteger)(NSHeight ([bar bounds]) / 2.0);
+
+  /* Height and layout. */
+  heightOK = fabs (NSHeight ([bar frame]) - 40.0) < 0.01
+    && fabs (NSMinX (t0) - 6.0) < 0.01 && fabs (NSMinX (t1) - NSMaxX (t0) - 5.0) < 0.01;
+
+  /* Colours: the bar's background between the last tab and "+" is the
+     gap; the selected tab's inside a little in from its left edge; its
+     edge pixel; the separator between tabs 2 and 3. */
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX (t2) + 2, y, background);
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (t0) + 12, y, fill);
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (t0), y, edge);
+  separatorX = (NSInteger)floor (NSMinX (t2) - 2.5);
+  QuirkProbePixelAt (rep, separatorX, y, separator);
+  if (dark)
+    {
+      wantBar = 0x222226;
+      wantFill = 0x39393c;
+      wantSeparator = highContrast ? 0x909092 : 0x434346;
+    }
+  else
+    {
+      wantBar = 0xfafafb;
+      wantFill = 0xe6e6e7;
+      wantSeparator = highContrast ? 0x949497 : 0xdbdbde;
+    }
+  colourOK = QuirkProbeNear (background, wantBar, 3) && QuirkProbeNear (fill, wantFill, 3);
+  separatorOK = QuirkProbeNear (separator, wantSeparator, 6);
+  /* The outline is at 50%, as the high contrast separator. */
+  outlineOK = highContrast
+    ? QuirkProbeNear (edge, wantSeparator, 14)
+    : (labs ((long)edge[0] - (long)fill[0]) <= 3 && labs ((long)edge[2] - (long)fill[2]) <= 3);
+
+  /* The close button: the selected tab's has its X; the unselected tab's
+     rect is empty and nothing is drawn where the button would be. */
+  closeShown = NSIsEmptyRect (close0) == NO
+    && QuirkProbeInkIn (rep, NSInsetRect (close0, 6, 6), fill, 150);
+  closeHidden = NSIsEmptyRect (close1)
+    && QuirkProbeInkIn (rep, NSMakeRect (NSMaxX (t1) - 22, y - 6, 12, 12), background, 150) == NO;
+  closeOK = closeShown && closeHidden;
+  for (i = 0; i < 3; i++)
+    {
+      [windows[i] orderOut: nil];
+    }
+
+  style = highContrast ? (dark ? @"high contrast dark" : @"high contrast") : (dark ? @"dark" : @"light");
+  if (heightOK)
+    {
+      [self pass: @"window-tabs-height" detail: [NSString stringWithFormat: @"bar %.0fpt, first tab at %.0f, spacing %.0f",
+        NSHeight ([bar frame]), NSMinX (t0), NSMinX (t1) - NSMaxX (t0)]];
+    }
+  else
+    {
+      [self fail: @"window-tabs-height" detail: [NSString stringWithFormat: @"bar %.0fpt (want 40), first tab at %.0f (want 6), spacing %.0f (want 5)",
+        NSHeight ([bar frame]), NSMinX (t0), NSMinX (t1) - NSMaxX (t0)]];
+    }
+  {
+    NSString *detail = [NSString stringWithFormat: @"%@: bar %@ (want %@), selected %@ (want %@), its edge %@ (%@), separator %@ (want %@)",
+      style, QuirkProbeHex (background), [NSString stringWithFormat: @"#%06x", wantBar], QuirkProbeHex (fill), [NSString stringWithFormat: @"#%06x", wantFill],
+      QuirkProbeHex (edge), highContrast ? @"want a 50% outline" : @"want no outline",
+      QuirkProbeHex (separator), [NSString stringWithFormat: @"#%06x", wantSeparator]];
+
+    if (colourOK && separatorOK && outlineOK)
+      {
+        [self pass: @"window-tabs-colours" detail: detail];
+      }
+    else
+      {
+        [self fail: @"window-tabs-colours" detail: detail];
+      }
+  }
+  {
+    NSString *detail = [NSString stringWithFormat: @"selected tab's close button %@, unselected tab's %@",
+      closeShown ? @"drawn" : @"missing", closeHidden ? @"hidden" : @"shown"];
+
+    if (closeOK)
+      {
+        [self pass: @"window-tabs-close" detail: detail];
+      }
+    else
+      {
+        [self fail: @"window-tabs-close" detail: detail];
+      }
+  }
+}
+
 - (void) checkFirstWindows: (NSTimer *)timer
 {
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"file-chooser"])
@@ -5674,6 +5857,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkTableBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
+  [self checkWindowTabs];
       [self finish];
       return;
     }
@@ -5736,6 +5920,7 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [self checkTableBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
+  [self checkWindowTabs];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
      delegate turns the menu bar off, and a Preferences window whose
