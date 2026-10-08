@@ -23,6 +23,7 @@
 #import "Settings/GnomeThemeMetrics.h"
 #import "Rendering/GnomeThemePalette.h"
 #import "Adapters/GnomeThemeWindowManager.h"
+#import "GSWindowTabbing.h"
 
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
@@ -310,6 +311,12 @@ GnomeThemeDrawApplicationMenuIcon(NSRect rect, NSColor *color)
 
 - (id) initWithBundle: (NSBundle *)bundle
 {
+  /* Window tabs (Apple's NSWindow API, drawn by GnomeThemeWindowTabs.m),
+     where NSWindow doesn't have them already. Before GSTheme's
+     -initWithBundle: records the methods the theme overrides: the theme's
+     -orderWindow:relativeTo:, -sendEvent: and the rest then call the
+     tabbing code's hooks as their originals. Later calls do nothing. */
+  GSWindowTabbingInstall ();
   self = [super initWithBundle: bundle];
   if (self != nil)
     {
