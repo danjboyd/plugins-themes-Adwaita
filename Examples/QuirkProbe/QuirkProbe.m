@@ -447,6 +447,23 @@ QuirkProbeFindText (NSView *view, NSString *text)
 }
 @end
 
+/* Counts how deeply -tile nests (#75). */
+@interface QuirkProbeTileCountingScrollView : NSScrollView
+@end
+
+static NSUInteger QuirkProbeTileDepth = 0;
+static NSUInteger QuirkProbeTileMaxDepth = 0;
+
+@implementation QuirkProbeTileCountingScrollView
+- (void) tile
+{
+  QuirkProbeTileDepth++;
+  QuirkProbeTileMaxDepth = MAX (QuirkProbeTileMaxDepth, QuirkProbeTileDepth);
+  [super tile];
+  QuirkProbeTileDepth--;
+}
+@end
+
 /* A toolbar delegate whose items select a view, like Gorm's document
    toolbar. */
 @interface QuirkProbeSwitcherDelegate : NSObject
@@ -5327,6 +5344,91 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* An auto-hiding scroll view whose content is near its size: libs-gui's
+   -tile has the clip view reflect, and auto-hiding tiles again, which
+   re-entered the theme's -tile override until the stack ran out where
+   libs-gui and the overlay layout disagreed on whether a scroller was
+   needed (Markdown Viewer's split view at launch). Sizes sweep both
+   boundaries; the check passes by finishing, with the scrollers settled. */
+- (void) checkAutohideTileSettles
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 360, 300) title: @"Probe Autohide"];
+  NSScrollView *scrollView = AUTORELEASE ([[QuirkProbeTileCountingScrollView alloc] initWithFrame: NSMakeRect (10, 10, 240, 200)]);
+  NSTextView *text = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 240, 200)]);
+  NSMutableString *words = [NSMutableString string];
+  NSUInteger frames = 0;
+  CGFloat w, h;
+  NSString *detail;
+  int i;
+
+  for (i = 0; i < 60; i++)
+    {
+      [words appendString: @"lorem ipsum dolor "];
+    }
+  [text setString: words];
+  [text setHorizontallyResizable: NO];
+  [text setVerticallyResizable: YES];
+  [text setAutoresizingMask: NSViewWidthSizable];
+  [[text textContainer] setWidthTracksTextView: YES];
+  [text setMaxSize: NSMakeSize (FLT_MAX, FLT_MAX)];
+  QuirkProbeTileMaxDepth = 0;
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setAutohidesScrollers: YES];
+  [scrollView setDocumentView: text];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  /* Widths where the text wraps to one more line once a scroller's width
+     is taken off, and heights round the text's. */
+  for (w = 140; w <= 320; w += 1)
+    {
+      [scrollView setFrame: NSMakeRect (10, 10, w, 200)];
+      for (h = NSHeight ([text frame]) - 20; h <= NSHeight ([text frame]) + 20; h += 1)
+        {
+          [scrollView setFrame: NSMakeRect (10, 10, w, h)];
+          frames++;
+        }
+    }
+  /* Both scrollers, content within a scroller's footprint of the clip
+     view each way: libs-gui master's auto-hiding adds a shown scroller's
+     footprint back onto the clip view, which overlay scrollers leave
+     full size, so the content fits once a scroller shows and doesn't once
+     it hides. */
+  {
+    NSScrollView *both = AUTORELEASE ([[QuirkProbeTileCountingScrollView alloc] initWithFrame: NSMakeRect (10, 10, 200, 150)]);
+    NSView *document = AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 200, 150)]);
+    CGFloat dw, dh;
+
+    [both setHasVerticalScroller: YES];
+    [both setHasHorizontalScroller: YES];
+    [both setAutohidesScrollers: YES];
+    [both setDocumentView: document];
+    [[window contentView] addSubview: both];
+    for (dw = -2; dw <= 20; dw += 1)
+      {
+        for (dh = -2; dh <= 20; dh += 1)
+          {
+            [document setFrameSize: NSMakeSize (200 + dw, 150 + dh)];
+            [both setFrame: NSMakeRect (10, 10, 199, 150)];
+            [both setFrame: NSMakeRect (10, 10, 200, 150)];
+            frames += 2;
+          }
+      }
+  }
+  [window display];
+  detail = [NSString stringWithFormat: @"%lu frames of auto-hiding scroll views round their content's size; "
+                     @"-tile nested %lu deep (want 2 at most: the theme's layout runs libs-gui's again itself)",
+                     (unsigned long)frames, (unsigned long)QuirkProbeTileMaxDepth];
+  [window orderOut: nil];
+  if (QuirkProbeTileMaxDepth <= 2)
+    {
+      [self pass: @"autohide-tile-settles" detail: detail];
+    }
+  else
+    {
+      [self fail: @"autohide-tile-settles" detail: detail];
+    }
+}
+
 - (void) checkPaletteLookup
 {
   typedef NSColor *(*LookupFunction)(GSTheme *, NSString *, NSColor *);
@@ -6267,6 +6369,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
   [self checkPopoverPanel];
+  [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
@@ -6338,6 +6441,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
   [self checkPopoverPanel];
+  [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
