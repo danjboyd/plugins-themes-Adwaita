@@ -4421,14 +4421,23 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       return;
     }
 
+  [notificationCenter postNotificationName: NSComboBoxWillPopUpNotification
+                                    object: controlView
+                                  userInfo: nil];
+  /* Nothing to choose from, even once the app could fill the list for
+     the notification: no list, not an empty box (#76). */
+  if ([cell numberOfItems] == 0)
+    {
+      [notificationCenter postNotificationName: NSComboBoxWillDismissNotification
+                                        object: controlView
+                                      userInfo: nil];
+      return;
+    }
+
   GnomeThemeNeutralizeComboBoxButtonCell (cell);
   [(NSCell *)cell setHighlighted: YES];
   [controlView setNeedsDisplay: YES];
   [controlView displayIfNeededIgnoringOpacity];
-
-  [notificationCenter postNotificationName: NSComboBoxWillPopUpNotification
-                                    object: controlView
-                                  userInfo: nil];
 
   popup = [cell _popUp];
   [cell setValue: popup forKey: @"_popup"];

@@ -305,6 +305,48 @@ QuirkProbeListsMoveTo(NSTableView *table, NSPoint point)
 
 @end
 
+/* Closes a combo box's list if it opened, noting that it did (#76). */
+@interface QuirkProbeEmptyListWatcher : NSObject
+{
+@public
+  NSComboBox *combo;
+  BOOL opened;
+  BOOL fill;
+}
+@end
+
+@implementation QuirkProbeEmptyListWatcher
+- (void) look: (NSTimer *)timer
+{
+  NSWindow *popup = [[combo cell] _popUp];
+
+  (void)timer;
+  opened = [popup isVisible];
+  if (opened)
+    {
+      [NSApp postEvent: [NSEvent keyEventWithType: NSKeyDown
+                                         location: NSZeroPoint
+                                    modifierFlags: 0
+                                        timestamp: 0
+                                     windowNumber: [popup windowNumber]
+                                          context: nil
+                                       characters: @"\e"
+                      charactersIgnoringModifiers: @"\e"
+                                        isARepeat: NO
+                                          keyCode: 9]
+               atStart: NO];
+    }
+}
+- (void) willPopUp: (NSNotification *)notification
+{
+  (void)notification;
+  if (fill)
+    {
+      [combo addItemsWithObjectValues: [NSArray arrayWithObjects: @"Recent", @"Older", nil]];
+    }
+}
+@end
+
 /* A source-list table's data: five rows, the first a group row. */
 @interface QuirkProbeSourceListData : NSObject
 @end
@@ -476,6 +518,55 @@ QuirkProbeListsMoveTo(NSTableView *table, NSPoint point)
   else
     {
       [self fail: @"source-list" detail: detail];
+    }
+}
+
+/* A combo box with no items opens no list (it was an empty white box);
+   one the app fills when told it will pop up opens as usual (#76). */
+- (void) checkDropDownEmpty
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 400, 320, 120) title: @"Probe Empty Drop-Down"];
+  NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 60, 140, 34)]);
+  QuirkProbeEmptyListWatcher *watcher = AUTORELEASE ([QuirkProbeEmptyListWatcher new]);
+  BOOL emptyOpened, filledOpened;
+  NSString *detail;
+
+  [[window contentView] addSubview: combo];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.5]];
+  watcher->combo = combo;
+  [[NSNotificationCenter defaultCenter] addObserver: watcher
+                                           selector: @selector(willPopUp:)
+                                               name: NSComboBoxWillPopUpNotification
+                                             object: combo];
+  [[combo cell] setControlView: combo];
+
+  [NSTimer scheduledTimerWithTimeInterval: 0.3 target: watcher selector: @selector(look:)
+                                 userInfo: nil repeats: NO];
+  [[combo cell] _didClickWithinButton: nil];
+  /* The watcher looks once the click has returned. */
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.5]];
+  emptyOpened = watcher->opened;
+
+  watcher->fill = YES;
+  watcher->opened = NO;
+  [NSTimer scheduledTimerWithTimeInterval: 0.3 target: watcher selector: @selector(look:)
+                                 userInfo: nil repeats: NO];
+  [[combo cell] _didClickWithinButton: nil];
+  filledOpened = watcher->opened;
+
+  [[NSNotificationCenter defaultCenter] removeObserver: watcher];
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"no items: list %@ (want not); filled for NSComboBoxWillPopUpNotification: list %@ (want opened)",
+                     emptyOpened ? @"opened" : @"not opened", filledOpened ? @"opened" : @"not opened"];
+  if (emptyOpened == NO && filledOpened)
+    {
+      [self pass: @"drop-down-empty" detail: detail];
+    }
+  else
+    {
+      [self fail: @"drop-down-empty" detail: detail];
     }
 }
 

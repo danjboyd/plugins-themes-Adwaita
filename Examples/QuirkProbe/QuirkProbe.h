@@ -83,6 +83,7 @@
 @interface QuirkProbe (Lists)
 - (void) checkDropDownList;
 - (void) checkSourceList;
+- (void) checkDropDownEmpty;
 - (void) showListsDemo;
 @end
 

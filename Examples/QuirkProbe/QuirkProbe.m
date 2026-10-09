@@ -6293,6 +6293,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"lists"])
     {
       [self checkDropDownList];
+  [self checkDropDownEmpty];
       [self checkSourceList];
       [self finish];
       return;
@@ -6372,6 +6373,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkDropDownList];
+  [self checkDropDownEmpty];
   [self checkSourceList];
       [self finish];
       return;
@@ -6444,6 +6446,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkDropDownList];
+  [self checkDropDownEmpty];
   [self checkSourceList];
 
   /* Auxiliary windows made after launch: a Settings window, a window whose
