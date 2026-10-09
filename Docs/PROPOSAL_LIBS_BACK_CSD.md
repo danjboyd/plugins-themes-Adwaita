@@ -222,6 +222,16 @@ item 4.
   it can't ask the window's class (as with libs-gui#965). A cleaner
   upstream form would be a style bit or a `GSDisplayServer` call from
   libs-gui for popovers.
+- *Popover arrows (2026-10-09, theme #74):* a popover whose window also
+  holds an arrow (an app's panel conforming to `GSThemePopoverPanel`)
+  tells libs-back where its body is, with
+  `-setPopoverBodyInsetLeft:right:top:bottom::` in points. The shadow and
+  the rounded corners then follow the body. The inset, where the theme
+  draws the arrow, is laid over the shadow, so what it leaves clear shows
+  the shadow, as GTK 4 draws it. A change of inset rebuilds the shadow and
+  exposes the whole window. A popover with an inset composites its expose
+  rather than copying rectangles; popovers are small. Windows without an
+  inset are drawn as before.
 - *Known limitations:* tried under Mutter, KWin and Xfwm4 (the margin, shadow
   and rounded corners) and Openbox (no `_GTK_FRAME_EXTENTS`: no margin);
   the art and xlib graphics backends don't define XRENDER and never make

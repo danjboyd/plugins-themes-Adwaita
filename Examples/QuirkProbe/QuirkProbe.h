@@ -86,6 +86,12 @@
 - (void) showListsDemo;
 @end
 
+/* -ProbeOnly popover-demo, and in the full run (QuirkProbePopovers.m). */
+@interface QuirkProbe (Popovers)
+- (void) checkPopoverPanel;
+- (void) showPopoverDemo;
+@end
+
 @interface QuirkProbe (NibMetrics)
 - (void) checkNibMetrics;
 @end

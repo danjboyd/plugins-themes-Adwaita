@@ -6181,6 +6181,12 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self showListsDemo];
       return;
     }
+  /* -ProbeOnly popover-demo: for screenshots beside GTK's (#74). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"popover-demo"])
+    {
+      [self showPopoverDemo];
+      return;
+    }
   /* -ProbeOnly lists: libadwaita's lists alone (#66). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"lists"])
     {
@@ -6260,6 +6266,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
+  [self checkPopoverPanel];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
@@ -6330,6 +6337,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
+  [self checkPopoverPanel];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];

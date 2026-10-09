@@ -39,7 +39,8 @@ QuirkProbe_OBJC_FILES = \
 	QuirkProbeContextMenu.m \
 	QuirkProbeNibMetrics.m \
 	QuirkProbeLiveSettings.m \
-	QuirkProbeLists.m
+	QuirkProbeLists.m \
+	QuirkProbePopovers.m
 
 QuirkProbe_HEADER_FILES = \
 	QuirkProbe.h
