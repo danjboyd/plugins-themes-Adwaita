@@ -21,6 +21,7 @@
 #import "../GnomeTheme.h"
 #import "../Settings/GnomeThemeMetrics.h"
 #import "../Settings/GnomeThemeSettings.h"
+#import "GnomeThemeLists.h"
 
 #import <AppKit/AppKit.h>
 #import <AppKit/NSGraphics.h>
@@ -818,16 +819,19 @@ GnomeThemeConfigureComboBoxPopupMetrics(NSComboBoxCell *cell)
 {
   NSInteger itemCount = 0;
   NSInteger visibleItems = 0;
+  CGFloat itemHeight = 0.0;
 
   if (cell == nil)
     {
       return;
     }
 
+  /* GtkDropDown's rows and list height (GnomeThemeLists.m). */
   itemCount = [cell numberOfItems];
-  visibleItems = MIN (MAX (itemCount, 1), 6);
+  itemHeight = GnomeThemeDropDownRowHeight ([cell font]);
+  visibleItems = GnomeThemeDropDownVisibleRows (itemHeight, itemCount);
 
-  [cell setItemHeight: 28.0];
+  [cell setItemHeight: itemHeight];
   [cell setIntercellSpacing: NSMakeSize (0.0, 0.0)];
   [cell setNumberOfVisibleItems: visibleItems];
   [cell setHasVerticalScroller: (itemCount > visibleItems)];
@@ -864,14 +868,12 @@ GnomeThemeStyleComboBoxPopupView(NSView *view,
     }
   else if ([view isKindOfClass: [NSTableView class]])
     {
+      /* Its rows' height comes from the cell's item height; it draws no
+         background of its own (GnomeThemeLists.m). */
       NSTableView *tableView = (NSTableView *)view;
-      [tableView setRowHeight: 28.0];
       [tableView setIntercellSpacing: NSMakeSize (0.0, 0.0)];
       [tableView setGridStyleMask: NSTableViewGridNone];
       [tableView setUsesAlternatingRowBackgroundColors: NO];
-      [tableView setBackgroundColor: GnomeThemeColor (theme,
-                                                       @"menuBackgroundColor",
-                                                       [NSColor controlBackgroundColor])];
     }
 
   subviews = [view subviews];
@@ -889,7 +891,6 @@ GnomeThemeStyleComboBoxPopup(NSComboBoxCell *cell, GnomeTheme *theme)
   id popup = nil;
   NSWindow *window = nil;
   NSView *contentView = nil;
-  NSColor *backgroundColor = nil;
   BOOL showScroller = NO;
 
   if (cell == nil)
@@ -926,11 +927,11 @@ GnomeThemeStyleComboBoxPopup(NSComboBoxCell *cell, GnomeTheme *theme)
       return;
     }
 
-  backgroundColor = GnomeThemeColor (theme,
-                                     @"menuBackgroundColor",
-                                     [NSColor controlBackgroundColor]);
+  /* GtkDropDown's popover (GnomeThemeLists.m); a list made before the
+     theme was active gets it now. */
   showScroller = ([cell numberOfItems] > [cell numberOfVisibleItems]);
-  [window setBackgroundColor: backgroundColor];
+  GnomeThemeInstallDropDownPopover (window);
+  GnomeThemeListClearHover ();
   contentView = [window contentView];
   if (contentView != nil)
     {
@@ -2507,6 +2508,12 @@ GnomeThemeDrawScrollViewFrame(GnomeTheme *theme, NSScrollView *scrollView)
       return;
     }
 
+  /* libadwaita's lists (a combo box's, a source list) have none
+     (GnomeThemeLists.m). */
+  if (GnomeThemeTableListStyle (tableView) != GnomeThemeListStyleNone)
+    {
+      return;
+    }
   /* libadwaita's view colour, unless the app gave the table its own
      background (#62). */
   background = [tableView backgroundColor];

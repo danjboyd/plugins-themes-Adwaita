@@ -22,6 +22,7 @@
 #import "../Settings/GnomeThemeSettings.h"
 #import "../Settings/GnomeThemeMetrics.h"
 #import "../Adapters/GnomeThemeWindowManager.h"
+#import "GnomeThemeLists.h"
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
@@ -1148,6 +1149,11 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   NSInteger rowCount = [tableView numberOfRows];
   NSInteger row = 0;
 
+  /* libadwaita's lists (GnomeThemeLists.m) have no background. */
+  if (GnomeThemeTableListStyle (tableView) != GnomeThemeListStyleNone)
+    {
+      return;
+    }
   if (rowColor == nil)
     {
       rowColor = [NSColor controlBackgroundColor];
@@ -1197,7 +1203,8 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   NSInteger row = 0;
   NSInteger column = 0;
 
-  if (mask == NSTableViewGridNone)
+  if (mask == NSTableViewGridNone
+    || GnomeThemeTableListStyle (tableView) != GnomeThemeListStyleNone)
     {
       return;
     }
@@ -1260,6 +1267,12 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     : [tableView selectedRowIndexes];
   NSUInteger index = [selectionIndexes firstIndex];
 
+  /* libadwaita's lists: rounded pills for hover and selection. */
+  if (GnomeThemeTableListStyle (tableView) != GnomeThemeListStyleNone && selectingColumns == NO)
+    {
+      GnomeThemeDrawListPills (self, tableView, clipRect);
+      return;
+    }
   if (index == NSNotFound)
     {
       return;
