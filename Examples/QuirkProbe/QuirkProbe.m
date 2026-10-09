@@ -419,6 +419,34 @@ QuirkProbeFindText (NSView *view, NSString *text)
   return nil;
 }
 
+@interface NSCell (QuirkProbeEditing)
+- (BOOL) _inEditing;
+@end
+
+/* Records what a text field's -stringValue says in
+   controlTextDidChange: (#73). */
+@interface QuirkProbeTextChangeDelegate : NSObject
+{
+@public
+  NSMutableArray *seen;
+  NSString *cellState;
+}
+@end
+
+@implementation QuirkProbeTextChangeDelegate
+- (void) controlTextDidChange: (NSNotification *)notification
+{
+  NSTextField *field = [notification object];
+  NSCell *cell = [field cell];
+
+  [seen addObject: [field stringValue]];
+  ASSIGN (cellState, ([NSString stringWithFormat: @"editing %@, control view %@",
+                        [cell _inEditing] ? @"yes" : @"no",
+                        [cell controlView] == field ? @"the field"
+                          : [[cell controlView] description]]));
+}
+@end
+
 /* A toolbar delegate whose items select a view, like Gorm's document
    toolbar. */
 @interface QuirkProbeSwitcherDelegate : NSObject
@@ -5235,6 +5263,70 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A delegate reading -stringValue in controlTextDidChange: gets the text
+   with the key just typed, as filters-while-typing need; under the theme
+   it got the text from before it (#73). */
+- (void) checkStringValueWhileTyping
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 166) title: @"Probe Typing"];
+  NSSearchField *search = AUTORELEASE ([[NSSearchField alloc] initWithFrame: NSMakeRect (20, 112, 220, 34)]);
+  NSTextField *field = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (20, 66, 220, 34)]);
+  NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 20, 220, 34)]);
+  NSArray *fields = [NSArray arrayWithObjects: search, field, combo, nil];
+  NSArray *names = [NSArray arrayWithObjects: @"search field", @"text field", @"combo box", nil];
+  QuirkProbeTextChangeDelegate *delegate = AUTORELEASE ([[QuirkProbeTextChangeDelegate alloc] init]);
+  NSMutableString *detail = [NSMutableString string];
+  NSWindow *previousKey = [NSApp keyWindow];
+  BOOL ok = YES;
+  NSUInteger i;
+
+  delegate->seen = [NSMutableArray array];
+  [[window contentView] addSubview: search];
+  [[window contentView] addSubview: field];
+  [combo addItemWithObjectValue: @"Cantarell"];
+  [[window contentView] addSubview: combo];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  for (i = 0; i < [fields count]; i++)
+    {
+      NSTextField *control = [fields objectAtIndex: i];
+      NSTextView *editor;
+
+      [delegate->seen removeAllObjects];
+      [control setDelegate: (id)delegate];
+      [window makeFirstResponder: control];
+      [window display];
+      editor = (NSTextView *)[control currentEditor];
+      [editor insertText: @"d"];
+      [window display];
+      [editor insertText: @"e"];
+      [editor insertText: @"j"];
+      [detail appendFormat: @"%s%@ typed \"dej\": delegate saw (%@), %@",
+        i ? "; " : "", [names objectAtIndex: i],
+        [delegate->seen componentsJoinedByString: @", "], delegate->cellState];
+      if ([delegate->seen count] != 3
+        || [[delegate->seen lastObject] isEqualToString: @"dej"] == NO
+        || [[delegate->seen objectAtIndex: 0] isEqualToString: @"d"] == NO)
+        {
+          ok = NO;
+        }
+      [control setDelegate: nil];
+    }
+  [window makeFirstResponder: nil];
+  [window orderOut: nil];
+  [previousKey makeKeyWindow];
+  DESTROY (delegate->cellState);
+
+  if (ok)
+    {
+      [self pass: @"string-value-while-typing" detail: detail];
+    }
+  else
+    {
+      [self fail: @"string-value-while-typing" detail: detail];
+    }
+}
+
 - (void) checkPaletteLookup
 {
   typedef NSColor *(*LookupFunction)(GSTheme *, NSString *, NSColor *);
@@ -6167,6 +6259,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
+  [self checkStringValueWhileTyping];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];
@@ -6236,6 +6329,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
+  [self checkStringValueWhileTyping];
   [self checkWindowTabs];
   [self checkDropDownList];
   [self checkSourceList];

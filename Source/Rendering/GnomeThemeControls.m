@@ -3359,6 +3359,15 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
   BOOL focused = GnomeThemeViewHasFocus (controlView) && enabled;
   NSRect textRect = [cell searchTextRectForBounds: cellFrame];
 
+  /* -[NSActionCell drawWithFrame:inView:], which this replaces, is where
+     the cell learns its control view. Without it -stringValue doesn't take
+     the field editor's text while editing, so a delegate's
+     controlTextDidChange: read the text from before the key (#73). */
+  if (controlView != nil)
+    {
+      [cell setControlView: controlView];
+    }
+
   if (focused)
     {
       GnomeThemeTrackFocusedEntryView (controlView);
@@ -4219,6 +4228,14 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSColor *arrowColor = GnomeThemeColor (theme,
                                          enabled ? @"controlTextColor" : @"disabledControlTextColor",
                                          enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]);
+
+  /* As for search fields: -[NSActionCell drawWithFrame:inView:], which this
+     replaces, is where the cell learns its control view, which -stringValue
+     needs to take the field editor's text while editing (#73). */
+  if (controlView != nil)
+    {
+      [(NSCell *)cell setControlView: controlView];
+    }
 
   if (focused)
     {
