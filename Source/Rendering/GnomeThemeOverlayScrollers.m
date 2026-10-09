@@ -89,6 +89,13 @@ GnomeThemeUsesOverlayScrollers(void)
   /* Widening the clip view has libs-gui reflect the scroll and, with
      auto-hiding scrollers, tile again: that nested tile is skipped. */
   BOOL adjusting;
+  /* libs-gui's -tile sets the clip view's frame, which reflects the
+     scroll; auto-hiding then tiles again, inside it. A tile asked for
+     while one runs is noted (retile) and run by the outer one after it
+     (#75): nested, they recursed until the stack ran out where libs-gui
+     and the overlay layout disagreed on whether a scroller was needed. */
+  BOOL tiling;
+  BOOL retile;
   NSTrackingRectTag tags[2];
 }
 - (void) reveal;
@@ -329,6 +336,8 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   return state != nil && state->dragged == scroller;
 }
 
+static void GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state);
+
 @implementation GnomeTheme (OverlayScrollers)
 
 - (void) _overrideNSScrollViewMethod_tile
@@ -336,27 +345,59 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   typedef void (*TileIMP)(id, SEL);
   TileIMP originalIMP = (TileIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScrollView class]);
   NSScrollView *scrollView = (NSScrollView *)self;
+  GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor (scrollView, NO);
+  int pass;
+
+  if (state != nil && state->adjusting)
+    {
+      return;
+    }
+  if (GnomeThemeUsesOverlayScrollers () == NO)
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd);
+        }
+      return;
+    }
+  state = GnomeThemeOverlayStateFor (scrollView, YES);
+  if (state->tiling)
+    {
+      state->retile = YES;
+      return;
+    }
+  state->tiling = YES;
+  /* A scroller shown or hidden during a pass is laid out by the next;
+     three at most, where auto-hiding never settles. */
+  for (pass = 0; pass < 3; pass++)
+    {
+      state->retile = NO;
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd);
+        }
+      GnomeThemeOverlayLayout (scrollView, state);
+      if (state->retile == NO)
+        {
+          break;
+        }
+    }
+  state->tiling = NO;
+  GnomeThemeUpdateOverlayTracking (scrollView, state);
+}
+
+/* The overlay layout after libs-gui's -tile: the scrollers over the
+   content at the edges, the clip view to those edges. */
+static void
+GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
+{
   NSClipView *clip;
   NSRect content;
   NSScroller *vertical, *horizontal;
   id documentView;
   NSSize border = [[GSTheme theme] sizeForBorderType: [scrollView borderType]];
   NSRect inner;
-  GnomeThemeOverlayState *state = GnomeThemeOverlayStateFor (scrollView, NO);
 
-  if (state != nil && state->adjusting)
-    {
-      return;
-    }
-  if (originalIMP != NULL)
-    {
-      originalIMP (self, _cmd);
-    }
-  if (GnomeThemeUsesOverlayScrollers () == NO)
-    {
-      return;
-    }
-  state = GnomeThemeOverlayStateFor (scrollView, YES);
   state->adjusting = YES;
   clip = [scrollView contentView];
   content = [clip frame];
@@ -481,7 +522,6 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
       RELEASE (horizontal);
     }
   state->adjusting = NO;
-  GnomeThemeUpdateOverlayTracking (scrollView, state);
 }
 
 /* Freed: its overlay state stops its fade timer and forgets it, even
