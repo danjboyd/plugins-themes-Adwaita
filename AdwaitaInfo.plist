@@ -5,7 +5,7 @@
     "Daniel Boyd"
   );
   GSThemeDetails = "Adwaita GNUstep theme for GNOME";
-  GSThemeVersion = "0.1.0-alpha7";
+  GSThemeVersion = "0.1.0-alpha8";
   /* An app's popover panels (windows conforming to GSThemePopoverPanel)
      are drawn as libadwaita's popover, arrow included (#74). */
   GSThemeDrawsPopoverPanels = YES;
