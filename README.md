@@ -273,6 +273,17 @@ designed):
   windows, which keep their size: the content gives up or takes the
   toolbar's row. Apps don't need to set their toolbars again.
 - `GnomeFontScale`: a factor (0.8–2.0) applied to the interface font.
+- `GnomeThemeColorScheme`: `force-dark` or `force-light` gives the app the
+  dark or light style whatever GNOME's `color-scheme` (or a `-dark` GTK
+  theme) says; `default` follows GNOME. Set it for one app
+  (`defaults write MarkdownViewer GnomeThemeColorScheme force-dark`), for
+  one launch (`-GnomeThemeColorScheme force-dark`), or for every app in
+  `NSGlobalDomain`. Without it, `GTK_THEME=Adwaita:dark` or `Adwaita:light`
+  in the environment does the same, as it does for a GTK app, so a
+  `.desktop` file or a launcher can set it. A forced style holds when GNOME
+  switches between light and dark while the app runs; fonts, Large Text and
+  high contrast still follow GNOME, with high contrast over the forced
+  palette. The choice is the user's, so it isn't read from an Info.plist.
 
 Scrollbars are GNOME's overlay scrollbars while GNOME's `overlay-scrolling`
 setting is on (its default): the content runs under them, and they show
@@ -558,6 +569,9 @@ you work on):
   (text-scaling-factor 1.25 and 2.0).
 - `make check-live-settings`: GNOME's settings changed while an app runs
   (dark style and Large Text on, then off).
+- `make check-color-scheme`: a forced light or dark style
+  (`GnomeThemeColorScheme`, `GTK_THEME`) over GNOME's, while GNOME's
+  `color-scheme` changes.
 - `make check-menu-timing`, `make check-scroller-drag`,
   `make check-context-menu`: menu sizing time, overlay scroller drags and
   context menu placement.

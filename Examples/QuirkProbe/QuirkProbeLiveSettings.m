@@ -214,6 +214,73 @@ QuirkProbeSampleWindow(NSWindow *window, NSInteger x, NSInteger y)
   [window orderOut: nil];
 }
 
+/* A forced scheme (#78): -GnomeThemeColorScheme or GTK_THEME's variant,
+   which -ProbeForcedScheme (dark or light) says the run expects. The
+   palette is that scheme's from the start, stays so when GNOME's
+   color-scheme flips, and Large Text still follows GNOME. */
+- (void) checkForcedColorScheme
+{
+  NSString *configHome = [[[NSProcessInfo processInfo] environment] objectForKey: @"XDG_CONFIG_HOME"];
+  NSString *path = [configHome stringByAppendingPathComponent: @"glib-2.0/settings/keyfile"];
+  NSString *original = [NSString stringWithContentsOfFile: path encoding: NSUTF8StringEncoding error: NULL];
+  NSString *forced = [[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeForcedScheme"];
+  NSString *want = [forced isEqualToString: @"dark"] ? @"#222226" : @"#fafafb";
+  NSString *desktopDark = [original rangeOfString: @"color-scheme='prefer-dark'"].location != NSNotFound
+    ? @"'prefer-dark'" : @"'default'";
+  NSString *flipped = [desktopDark isEqualToString: @"'prefer-dark'"] ? @"'default'" : @"'prefer-dark'";
+  NSString *changed, *startWindow, *startColor, *flipWindow, *flipColor;
+  NSWindow *window;
+  NSTimeInterval heard;
+  CGFloat expected = 11.0 * 96.0 / 72.0;
+  CGFloat largeFont;
+  BOOL ok;
+
+  if (original == nil || forced == nil
+    || [[[[NSProcessInfo processInfo] environment] objectForKey: @"GSETTINGS_BACKEND"] isEqualToString: @"keyfile"] == NO)
+    {
+      [self skip: @"forced-scheme" detail: @"needs -ProbeForcedScheme and the probe's own keyfile GSettings"];
+      return;
+    }
+  [[NSNotificationCenter defaultCenter]
+    addObserver: [QuirkProbeLiveSettingsListener class]
+       selector: @selector(heard:)
+           name: @"GnomeThemeDesktopSettingsDidChangeNotification"
+         object: nil];
+
+  window = [[NSWindow alloc] initWithContentRect: NSMakeRect (100, 100, 240, 120)
+                                       styleMask: NSTitledWindowMask | NSClosableWindowMask
+                                         backing: NSBackingStoreBuffered
+                                           defer: NO];
+  [window setTitle: @"Forced scheme"];
+  [window orderFront: nil];
+  startWindow = QuirkProbeSampleWindow (window, 200, 10);
+  startColor = QuirkProbeHex ([NSColor windowBackgroundColor]);
+  ok = [startColor isEqualToString: want] && [startWindow isEqualToString: want];
+  [self liveSettingsResult: ok ident: @"forced-scheme"
+        detail: [NSString stringWithFormat:
+         @"forced %@ with GNOME's color-scheme %@: window %@, system colour %@ (want %@)",
+         forced, desktopDark, startWindow, startColor, want]];
+
+  /* GNOME flips its color-scheme and turns Large Text on. */
+  changed = QuirkProbeKeyfileSetting (original, @"color-scheme", flipped);
+  changed = QuirkProbeKeyfileSetting (changed, @"text-scaling-factor", @"1.25");
+  heard = QuirkProbeWriteKeyfileAndWait (path, changed);
+  flipWindow = QuirkProbeSampleWindow (window, 200, 10);
+  flipColor = QuirkProbeHex ([NSColor windowBackgroundColor]);
+  largeFont = [[NSFont systemFontOfSize: 0] pointSize];
+  ok = heard >= 0.0
+    && [flipColor isEqualToString: want] && [flipWindow isEqualToString: want]
+    && fabs (largeFont - expected * 1.25) < 0.01;
+  [self liveSettingsResult: ok ident: @"forced-scheme-live"
+        detail: [NSString stringWithFormat:
+         @"heard after %.2fs; color-scheme %@: window %@, system colour %@ (want %@); Large Text: system font %.3f (want %.3f)",
+         heard, flipped, flipWindow, flipColor, want, largeFont, expected * 1.25]];
+
+  QuirkProbeWriteKeyfileAndWait (path, original);
+  [[NSNotificationCenter defaultCenter] removeObserver: [QuirkProbeLiveSettingsListener class]];
+  [window orderOut: nil];
+}
+
 /* With the header bar: a new button-layout lays the window buttons out
    again in an open window. */
 - (void) checkLiveButtonLayout: (NSWindow *)window

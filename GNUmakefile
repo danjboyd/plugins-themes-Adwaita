@@ -89,7 +89,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-live-settings check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -123,6 +123,17 @@ check-nib-metrics:
 check-live-settings:
 	QUIRK_PROBE_ARGS="-ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# A per-app scheme over GNOME's (#78): -GnomeThemeColorScheme each way,
+# GTK_THEME's variant each way, the default winning over GTK_THEME, and
+# high contrast over a forced dark palette.
+check-color-scheme:
+	QUIRK_PROBE_ARGS="-GnomeThemeColorScheme force-dark -ProbeForcedScheme dark -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GnomeThemeColorScheme force-light -ProbeForcedScheme light -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_GTK_THEME=Adwaita:dark QUIRK_PROBE_ARGS="-ProbeForcedScheme dark -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_GTK_THEME=Adwaita:light QUIRK_PROBE_ARGS="-ProbeForcedScheme light -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_GTK_THEME=Adwaita:dark QUIRK_PROBE_ARGS="-GnomeThemeColorScheme force-light -ProbeForcedScheme light -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GnomeThemeColorScheme force-dark -ProbeForcedScheme dark -ProbeOnly forced-scheme" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 check-text-scaling:
 	QUIRK_PROBE_TEXT_SCALE=1.25 QUIRK_PROBE_ARGS="-ProbeOnly text-scaling" bash Tests/Scripts/run-quirk-probe.sh

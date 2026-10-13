@@ -6326,6 +6326,14 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly forced-scheme: a per-app light or dark scheme over
+     GNOME's (make check-color-scheme). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"forced-scheme"])
+    {
+      [self checkForcedColorScheme];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly text-scaling, for the runs with GNOME's Large Text
      (make check-text-scaling). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"text-scaling"])

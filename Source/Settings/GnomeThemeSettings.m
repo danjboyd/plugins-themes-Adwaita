@@ -23,6 +23,7 @@
 #import <AppKit/AppKit.h>
 #import <gio/gio.h>
 #include <string.h>
+#include <stdlib.h>
 
 static NSString *GnomeThemeDefaultInterfaceFontName = @"Cantarell";
 static NSString *GnomeThemeDefaultMonospaceFontName = @"Monospace";
@@ -98,6 +99,52 @@ GnomeThemeResolvedFontScale(void)
     }
 
   return (scale * overrideScale);
+}
+
+/* The user's per-app light or dark choice, which wins over GNOME's:
+   GnomeThemeColorScheme (force-light, force-dark or default), then
+   GTK_THEME's variant (Adwaita:dark, Adwaita:light), as GTK takes it.
+   Not from the Info.plist: the choice is the user's, not the app's. */
+static GnomeThemeColorScheme
+GnomeThemeForcedColorScheme(void)
+{
+  NSString *choice = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeColorScheme"];
+  const char *gtkTheme;
+
+  if (choice != nil && [choice caseInsensitiveCompare: @"force-dark"] == NSOrderedSame)
+    {
+      return GnomeThemeColorSchemePreferDark;
+    }
+  if (choice != nil && [choice caseInsensitiveCompare: @"force-light"] == NSOrderedSame)
+    {
+      return GnomeThemeColorSchemePreferLight;
+    }
+  if (choice != nil && [choice caseInsensitiveCompare: @"default"] == NSOrderedSame)
+    {
+      return GnomeThemeColorSchemeDefault;
+    }
+
+  gtkTheme = getenv ("GTK_THEME");
+  if (gtkTheme != NULL)
+    {
+      NSString *theme = [NSString stringWithUTF8String: gtkTheme];
+      NSRange colon = [theme rangeOfString: @":" options: NSBackwardsSearch];
+
+      if (colon.location != NSNotFound)
+        {
+          NSString *variant = [theme substringFromIndex: NSMaxRange (colon)];
+
+          if ([variant caseInsensitiveCompare: @"dark"] == NSOrderedSame)
+            {
+              return GnomeThemeColorSchemePreferDark;
+            }
+          if ([variant caseInsensitiveCompare: @"light"] == NSOrderedSame)
+            {
+              return GnomeThemeColorSchemePreferLight;
+            }
+        }
+    }
+  return GnomeThemeColorSchemeDefault;
 }
 
 static GSettings *
@@ -432,6 +479,17 @@ GnomeThemeResolveFont(NSString *preferredName,
           colorScheme = GnomeThemeColorSchemePreferDark;
         }
     }
+
+  /* A forced scheme wins over GNOME's color-scheme and the theme name,
+     including on live updates; high contrast still applies to it. */
+  {
+    GnomeThemeColorScheme forced = GnomeThemeForcedColorScheme ();
+
+    if (forced != GnomeThemeColorSchemeDefault)
+      {
+        colorScheme = forced;
+      }
+  }
 
   ASSIGNCOPY (_interfaceFontName, fontName);
   _interfaceFontSize = fontSize;

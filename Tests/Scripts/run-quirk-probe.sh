@@ -170,10 +170,15 @@ chmod 600 "$SETTINGS_DIR/GNUstep.conf"
 # address that leads nowhere. A caller that runs the probe on a private
 # bus of its own (the file chooser and print checks) says so with
 # QUIRK_PROBE_PRIVATE_BUS=1, and its bus is kept.
-PROBE_ENV=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11
+PROBE_ENV=(env -u WAYLAND_DISPLAY -u GTK_THEME GDK_BACKEND=x11
            GNUSTEP_CONFIG_FILE="$SETTINGS_DIR/GNUstep.conf"
            XDG_RUNTIME_DIR="$SETTINGS_DIR/run"
            GSETTINGS_BACKEND=keyfile XDG_CONFIG_HOME="$SETTINGS_DIR")
+# Not the desktop's GTK_THEME either; QUIRK_PROBE_GTK_THEME sets one for
+# the probe (Adwaita:dark, say).
+if [ -n "${QUIRK_PROBE_GTK_THEME:-}" ]; then
+  PROBE_ENV+=(GTK_THEME="$QUIRK_PROBE_GTK_THEME")
+fi
 if [ "${QUIRK_PROBE_PRIVATE_BUS:-0}" != 1 ]; then
   PROBE_ENV+=(DBUS_SESSION_BUS_ADDRESS="unix:path=$SETTINGS_DIR/no-session-bus")
 fi

@@ -99,6 +99,7 @@
 
 @interface QuirkProbe (LiveSettings)
 - (void) checkLiveSettings;
+- (void) checkForcedColorScheme;
 @end
 
 @interface QuirkProbe (ContextMenu)
