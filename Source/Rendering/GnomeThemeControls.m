@@ -2325,6 +2325,70 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
 }
 
+/* An indeterminate bar is GtkProgressBar pulsing: a pill a fifth of the
+   trough long in the accent, going from end to end and back (GNUstep
+   filled the bar with grey stripes in turn). A spinner is AdwSpinner: a
+   ring in the foreground at 15% with a quarter of it in the foreground,
+   turning (GNUstep's was a NeXT image sequence). The animation's count
+   comes from NSProgressIndicator, twelve a second. Determinate bars are
+   GSTheme's, with the theme's bezel and fill. */
+- (void) drawProgressIndicator: (NSProgressIndicator *)progress
+                    withBounds: (NSRect)bounds
+                      withClip: (NSRect)rect
+                       atCount: (int)count
+                      forValue: (double)val
+{
+  NSColor *accent = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
+
+  if ([progress style] == NSProgressIndicatorSpinningStyle)
+    {
+      NSColor *window = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+      NSColor *foreground = GnomeThemeColor (self, @"GnomeThemeForegroundColor", [NSColor controlTextColor]);
+      CGFloat side = floor (MIN (NSWidth (bounds), NSHeight (bounds)));
+      CGFloat thickness = MAX (2.0, floor (side / 8.0));
+      NSPoint centre = NSMakePoint (NSMidX (bounds), NSMidY (bounds));
+      CGFloat radius = (side - thickness) / 2.0;
+      CGFloat start = -90.0 - (count % 12) * 30.0;
+      NSBezierPath *ring = [NSBezierPath bezierPath];
+      NSBezierPath *arc = [NSBezierPath bezierPath];
+
+      if (radius <= 0.0)
+        {
+          return;
+        }
+      [ring appendBezierPathWithArcWithCenter: centre radius: radius startAngle: 0.0 endAngle: 360.0];
+      [ring setLineWidth: thickness];
+      [GnomeThemeBlend (window, foreground, 0.15) set];
+      [ring stroke];
+      [arc appendBezierPathWithArcWithCenter: centre radius: radius
+                                  startAngle: start endAngle: start + 90.0];
+      [arc setLineWidth: thickness];
+      [arc setLineCapStyle: NSRoundLineCapStyle];
+      [foreground set];
+      [arc stroke];
+      return;
+    }
+  if ([progress isIndeterminate] && [progress isVertical] == NO)
+    {
+      NSRect trough = [progress isBezeled]
+        ? [self drawProgressIndicatorBezel: bounds withClip: rect]
+        : GnomeThemeProgressTrackRect (bounds);
+      CGFloat length = floor (NSWidth (trough) / 5.0);
+      NSInteger period = 30;
+      NSInteger phase = count % period;
+      /* 0 to 1 and back over the period. */
+      CGFloat t = (phase <= period / 2) ? (CGFloat)phase / (period / 2) : (CGFloat)(period - phase) / (period / 2);
+      NSRect block = trough;
+
+      block.size.width = length;
+      block.origin.x = floor (NSMinX (trough) + (NSWidth (trough) - length) * t);
+      GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (block, 0.5, 0.5), floor (NSHeight (block) / 2.0),
+                                          accent, nil, 0.0);
+      return;
+    }
+  [super drawProgressIndicator: progress withBounds: bounds withClip: rect atCount: count forValue: val];
+}
+
 - (NSRect) drawProgressIndicatorBezel: (NSRect)bounds withClip: (NSRect)rect
 {
   /* libadwaita's trough: the foreground at 15% over the window. */
@@ -3127,7 +3191,205 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
 @end
 
+/* A level indicator's fill colour, as Cocoa picks it: past the critical
+   value libadwaita's error colour, past the warning value its warning
+   colour, else the accent. With the critical value below the warning
+   value, the low values are the bad ones. With neither set, the accent
+   (GNUstep drew everything red then). */
+static NSColor *
+GnomeThemeLevelFillColor(GSTheme *theme, NSLevelIndicatorCell *cell, double value)
+{
+  double warning = [cell warningValue];
+  double critical = [cell criticalValue];
+  NSColor *accent = GnomeThemeColor (theme, @"selectedControlColor", [NSColor selectedControlColor]);
+  NSColor *warningColor = GnomeThemeColor (theme, @"GnomeThemeWarningColor", [NSColor orangeColor]);
+  NSColor *errorColor = GnomeThemeColor (theme, @"GnomeThemeErrorColor", [NSColor redColor]);
+
+  if (warning == critical)
+    {
+      return accent;
+    }
+  if (warning < critical)
+    {
+      if (critical > 0.0 && value >= critical)
+        {
+          return errorColor;
+        }
+      return (warning > 0.0 && value >= warning) ? warningColor : accent;
+    }
+  if (value <= critical)
+    {
+      return errorColor;
+    }
+  return (value <= warning) ? warningColor : accent;
+}
+
+/* A pill of `rect` (the shorter side its diameter) in `color`. */
+static void
+GnomeThemeFillPill(NSRect rect, NSColor *color)
+{
+  CGFloat radius = MIN (NSWidth (rect), NSHeight (rect)) / 2.0;
+
+  [color set];
+  [[NSBezierPath bezierPathWithRoundedRect: rect xRadius: radius yRadius: radius] fill];
+}
+
 @implementation GnomeTheme (Overrides)
+
+/* NSLevelIndicator as libadwaita's GtkLevelBar: an 8pt pill trough, the
+   foreground at 15%, the level a pill in the accent (warning or error
+   colour past those values); discrete, 8pt blocks 2pt apart, the ends
+   rounded. A rating is GNOME's starred and non-starred icons. GNUstep's
+   were bevelled green, yellow and red boxes, and its rating image is
+   missing. Tick marks and the relevancy style keep GNUstep's drawing. */
+- (void) _overrideNSLevelIndicatorCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
+                                                             inView: (NSView *)controlView
+{
+  typedef void (*DrawInteriorIMP)(id, SEL, NSRect, NSView *);
+  DrawInteriorIMP originalIMP = (DrawInteriorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSLevelIndicatorCell class]);
+  NSLevelIndicatorCell *cell = (NSLevelIndicatorCell *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  NSLevelIndicatorStyle style = [cell style];
+  double minimum = [cell minValue], maximum = [cell maxValue];
+  double value = MAX (minimum, MIN (maximum, [cell doubleValue]));
+  double fraction = (maximum > minimum) ? (value - minimum) / (maximum - minimum) : 0.0;
+  BOOL vertical = NSHeight (cellFrame) > NSWidth (cellFrame);
+  BOOL flipped = [controlView isFlipped];
+  BOOL enabled = [cell isEnabled];
+  NSColor *window = GnomeThemeColor (theme, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  NSColor *foreground = GnomeThemeColor (theme, @"GnomeThemeForegroundColor", [NSColor controlTextColor]);
+  NSColor *trough = GnomeThemeBlend (window, foreground, 0.15);
+  NSColor *fill = GnomeThemeLevelFillColor (theme, cell, value);
+  NSRect bar;
+
+  if (theme == nil || [cell numberOfTickMarks] != 0 || style == NSRelevancyLevelIndicatorStyle)
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, cellFrame, controlView);
+        }
+      return;
+    }
+  /* Insensitive: half opacity. */
+  if (enabled == NO)
+    {
+      trough = GnomeThemeBlend (trough, window, 0.5);
+      fill = GnomeThemeBlend (fill, window, 0.5);
+      foreground = GnomeThemeBlend (foreground, window, 0.5);
+    }
+
+  if (style == NSRatingLevelIndicatorStyle)
+    {
+      NSImage *starred = [NSImage imageNamed: @"GnomeThemeStarred-symbolic"];
+      NSImage *empty = [NSImage imageNamed: @"GnomeThemeNonStarred-symbolic"];
+      CGFloat side = MIN (16.0, vertical ? NSWidth (cellFrame) : NSHeight (cellFrame));
+      NSInteger count = (NSInteger)floor (maximum - minimum + 0.5);
+      NSInteger filled = (NSInteger)floor (value - minimum + 0.5);
+      NSInteger i;
+
+      if (starred == nil || empty == nil)
+        {
+          return;
+        }
+      starred = GnomeThemeTintedImage (starred, foreground);
+      empty = GnomeThemeTintedImage (empty, GnomeThemeBlend (foreground, window, 0.5));
+      for (i = 0; i < count; i++)
+        {
+          NSRect star;
+
+          if (vertical)
+            {
+              star = NSMakeRect (NSMidX (cellFrame) - side / 2.0,
+                                 flipped ? NSMaxY (cellFrame) - (i + 1) * (side + 2.0) + 2.0
+                                         : NSMinY (cellFrame) + i * (side + 2.0),
+                                 side, side);
+            }
+          else
+            {
+              star = NSMakeRect (NSMinX (cellFrame) + i * (side + 2.0), NSMidY (cellFrame) - side / 2.0,
+                                 side, side);
+            }
+          if (NSMaxX (star) > NSMaxX (cellFrame) + 0.5 || NSMaxY (star) > NSMaxY (cellFrame) + 0.5
+            || NSMinY (star) < NSMinY (cellFrame) - 0.5)
+            {
+              break;
+            }
+          [(i < filled ? starred : empty) drawInRect: NSIntegralRect (star)
+                                            fromRect: NSZeroRect
+                                           operation: NSCompositeSourceOver
+                                            fraction: 1.0
+                                      respectFlipped: YES
+                                               hints: nil];
+        }
+      return;
+    }
+
+  /* The 8pt bar, centred across the frame. */
+  if (vertical)
+    {
+      bar = NSMakeRect (floor (NSMidX (cellFrame) - 4.0), NSMinY (cellFrame), 8.0, NSHeight (cellFrame));
+    }
+  else
+    {
+      bar = NSMakeRect (NSMinX (cellFrame), floor (NSMidY (cellFrame) - 4.0), NSWidth (cellFrame), 8.0);
+    }
+
+  if (style == NSDiscreteCapacityLevelIndicatorStyle)
+    {
+      NSInteger segments = MAX (1, (NSInteger)floor (maximum - minimum + 0.5));
+      NSInteger lit = (NSInteger)floor (fraction * segments + 0.5);
+      CGFloat length = vertical ? NSHeight (bar) : NSWidth (bar);
+      CGFloat step = (length + 2.0) / segments;
+      NSInteger i;
+      NSBezierPath *clip = [NSBezierPath bezierPathWithRoundedRect: bar xRadius: 4.0 yRadius: 4.0];
+
+      [NSGraphicsContext saveGraphicsState];
+      [clip addClip];
+      for (i = 0; i < segments; i++)
+        {
+          /* Counted from the start: the left, or the bottom on screen. */
+          CGFloat start = floor (i * step);
+          CGFloat end = floor ((i + 1) * step) - 2.0;
+          NSRect block = bar;
+
+          if (vertical)
+            {
+              block.origin.y = flipped ? NSMaxY (bar) - end : NSMinY (bar) + start;
+              block.size.height = MAX (1.0, end - start);
+            }
+          else
+            {
+              block.origin.x = NSMinX (bar) + start;
+              block.size.width = MAX (1.0, end - start);
+            }
+          [(i < lit ? fill : trough) set];
+          NSRectFill (block);
+        }
+      [NSGraphicsContext restoreGraphicsState];
+      return;
+    }
+
+  /* Continuous (and anything else): a pill trough, the level a pill. */
+  GnomeThemeFillPill (bar, trough);
+  if (fraction > 0.0)
+    {
+      NSRect level = bar;
+
+      if (vertical)
+        {
+          level.size.height = MAX (8.0, floor (NSHeight (bar) * fraction + 0.5));
+          if (flipped)
+            {
+              level.origin.y = NSMaxY (bar) - NSHeight (level);
+            }
+        }
+      else
+        {
+          level.size.width = MAX (8.0, floor (NSWidth (bar) * fraction + 0.5));
+        }
+      GnomeThemeFillPill (level, fill);
+    }
+}
 
 - (void) _overrideNSScrollerMethod_drawRect: (NSRect)rect
 {

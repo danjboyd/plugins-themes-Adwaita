@@ -5758,6 +5758,108 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Level indicators and activity as libadwaita draws them (GtkLevelBar,
+   GtkProgressBar pulsing, AdwSpinner): an 8pt bar in the accent (the
+   warning colour past the warning value), discrete blocks 2pt apart, stars
+   for a rating; a pulse a fifth of the trough long; a spinner a ring.
+   GNUstep's were bevelled boxes in green, yellow and red, no rating image,
+   grey stripes and NeXT's spinner images. */
+- (void) checkLevelAndActivity
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Levels"];
+  NSView *content = [window contentView];
+  NSLevelIndicator *plain = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 170, 200, 18)]);
+  NSLevelIndicator *warned = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 145, 200, 18)]);
+  NSLevelIndicator *discrete = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 120, 200, 18)]);
+  NSLevelIndicator *rating = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 95, 100, 18)]);
+  NSProgressIndicator *pulse = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 60, 300, 20)]);
+  NSProgressIndicator *spinner = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 10, 32, 32)]);
+  NSBitmapImageRep *rep;
+  NSUInteger accentRGB[3], warnRGB[3], windowRGB[3];
+  NSColor *accent = [[NSColor selectedControlColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  QuirkProbeInk plainInk, ratingInk, pulseInk, spinnerInk;
+  NSInteger x, gaps = 0;
+  BOOL inBlock = NO, levelsOK, ratingOK, pulseOK, spinnerOK;
+  NSString *detail;
+
+  [[plain cell] setLevelIndicatorStyle: NSContinuousCapacityLevelIndicatorStyle];
+  [plain setMaxValue: 10];
+  [plain setDoubleValue: 7];
+  [[warned cell] setLevelIndicatorStyle: NSContinuousCapacityLevelIndicatorStyle];
+  [warned setMaxValue: 10];
+  [warned setWarningValue: 6];
+  [warned setCriticalValue: 8];
+  [warned setDoubleValue: 7];
+  [[discrete cell] setLevelIndicatorStyle: NSDiscreteCapacityLevelIndicatorStyle];
+  [discrete setMaxValue: 10];
+  [discrete setDoubleValue: 4];
+  [[rating cell] setLevelIndicatorStyle: NSRatingLevelIndicatorStyle];
+  [rating setMaxValue: 5];
+  [rating setDoubleValue: 3];
+  [pulse setIndeterminate: YES];
+  [spinner setStyle: NSProgressIndicatorSpinningStyle];
+  [spinner setIndeterminate: YES];
+  /* A stopped spinner is hidden unless asked, as in Cocoa. */
+  [spinner setDisplayedWhenStopped: YES];
+  [content addSubview: plain];
+  [content addSubview: warned];
+  [content addSubview: discrete];
+  [content addSubview: rating];
+  [content addSubview: pulse];
+  [content addSubview: spinner];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (content);
+  QuirkProbePixelAt (rep, 300, 5, windowRGB);
+  /* Rows from the top of the 200pt view. */
+  QuirkProbePixelAt (rep, 20, 200 - 179, accentRGB);
+  QuirkProbePixelAt (rep, 20, 200 - 154, warnRGB);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  plainInk = QuirkProbeMeasureIn (rep, QuirkProbeIsAccentBlue, NSMakeRect (10, 200 - 188, 200, 18));
+  for (x = 10; x < 210; x++)
+    {
+      NSUInteger px[3];
+      BOOL lit;
+
+      QuirkProbePixelAt (rep, x, 200 - 129, px);
+      lit = labs ((long)px[0] - (long)windowRGB[0]) > 8 || labs ((long)px[2] - (long)windowRGB[2]) > 8;
+      if (inBlock && lit == NO)
+        {
+          gaps++;
+        }
+      inBlock = lit;
+    }
+  ratingInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (10, 200 - 113, 100, 18));
+  pulseInk = QuirkProbeMeasureIn (rep, QuirkProbeIsAccentBlue, NSMakeRect (10, 200 - 80, 300, 20));
+  spinnerInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (10, 200 - 42, 32, 32));
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"levels"];
+  [window orderOut: nil];
+
+  levelsOK = plainInk.height >= 7 && plainInk.height <= 9 && plainInk.width >= 135 && plainInk.width <= 145
+    && labs ((long)accentRGB[2] - (long)floor ([accent blueComponent] * 255.0 + 0.5)) <= 3
+    && warnRGB[0] > warnRGB[2] + 100 && warnRGB[1] > warnRGB[2] + 60
+    && gaps >= 8;
+  /* The three filled stars; the empty ones are dimmer than ink. */
+  ratingOK = ratingInk.count > 0 && ratingInk.width >= 48 && ratingInk.width <= 56 && ratingInk.height >= 12;
+  pulseOK = pulseInk.count > 0 && pulseInk.width >= 50 && pulseInk.width <= 70;
+  /* The turning quarter; the ring is dimmer than ink. */
+  spinnerOK = spinnerInk.count > 0 && spinnerInk.width >= 10 && spinnerInk.height >= 10;
+  detail = [NSString stringWithFormat: @"level %ldx%ld in %@ (accent), warned %@; discrete gaps %ld; "
+    @"rating ink %ldx%ld; pulse %ldpt of 298; spinner ink %ldx%ld",
+    (long)plainInk.width, (long)plainInk.height, QuirkProbeHex (accentRGB), QuirkProbeHex (warnRGB),
+    (long)gaps, (long)ratingInk.width, (long)ratingInk.height, (long)pulseInk.width,
+    (long)spinnerInk.width, (long)spinnerInk.height];
+  if (levelsOK && ratingOK && pulseOK && spinnerOK)
+    {
+      [self pass: @"level-and-activity" detail: detail];
+    }
+  else
+    {
+      [self fail: @"level-and-activity" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7163,6 +7265,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserLists];
   [self checkShapedButtons];
   [self checkEditableComboWeight];
+  [self checkLevelAndActivity];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7246,6 +7349,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserLists];
   [self checkShapedButtons];
   [self checkEditableComboWeight];
+  [self checkLevelAndActivity];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

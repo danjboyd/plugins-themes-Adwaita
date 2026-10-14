@@ -89,6 +89,9 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   [colors setColor: GnomeThemeColorFromHex (@"#1f1f1f") forKey: @"highlightedTableRowTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"rowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#f6f6f6") forKey: @"alternateRowBackgroundColor"];
+  /* libadwaita's warning_bg_color and error_bg_color (yellow_5, red_3). */
+  [colors setColor: GnomeThemeColorFromHex (@"#e5a50a") forKey: @"GnomeThemeWarningColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#e01b24") forKey: @"GnomeThemeErrorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1c71d8") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"highlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#8c8c8c") forKey: @"shadowColor"];
@@ -157,6 +160,9 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
      window (#62); alternate rows the text colour at 3.5% over it. */
   [colors setColor: GnomeThemeColorFromHex (@"#1d1d20") forKey: @"rowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#252528") forKey: @"alternateRowBackgroundColor"];
+  /* libadwaita's dark warning_bg_color and error_bg_color (red_4). */
+  [colors setColor: GnomeThemeColorFromHex (@"#cd9309") forKey: @"GnomeThemeWarningColor"];
+  [colors setColor: GnomeThemeColorFromHex (@"#c01c28") forKey: @"GnomeThemeErrorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"highlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"shadowColor"];
