@@ -1,9 +1,64 @@
-# Handoff: the open issues (2026-10-07)
+# Handoff: the open issues (2026-10-07, overnight work added 2026-10-14)
 
 For picking up the theme's open work in a fresh session: where things
 stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
+
+## Overnight, 2026-10-14 (committed on main, not pushed)
+
+An unattended session worked through the open bug and feature issues and
+then a survey of AppKit's less common controls. Every commit has a
+QuirkProbe check that fails on the commit before it, and `make
+check-quirks` (all seven configurations) passed after each one. The other
+suites (`check-nib-metrics`, `-live-settings`, `-color-scheme`,
+`-text-scaling`, `-file-chooser`, `-print-dialog`, `-menu-timing`,
+`-scroller-drag`, `-context-menu`, `-mutter`, `-mutter-shadow`, `-wms`)
+passed at 466f0e1. Nothing was pushed, installed, tagged or posted.
+
+Issues (each commit says "Fixes #n" or "Part of #n"):
+
+| # | Commit | Note |
+|---|---|---|
+| 69 | 182b5c8 | Disabled pop-up button titles dimmed |
+| 77 | 67da117 | Submenus flip left and stay on the screen |
+| 71 | caab687 | Part of: GTK 4's indicators for the named images, and storage on 0.32. libs-gui shows no indicator for the sort descriptors (upstream draft 16). **Decision:** branch `sort-indicator-from-descriptors` (ac8b2b7, on 466f0e1) adds the theme workaround that shows it, as Cocoa does, and says "Fixes #71" |
+| 70 | 190024f | Non-editable combo boxes keep their look when focused (no field editor); upstream draft 17 for `-selectItemAtIndex:` |
+| 72 | 0f8786a | Browser titles readable; the "Window" X windows are libs-gui's unmapped image caches, not a bug |
+| 68 | 99ff339 | Tinted images keep their bitmaps |
+| 65 | 800180f, 466f0e1 | Re-vendored gnustep-window-tabbing at a052823; dragged tab and fades. The shared code scrolls a selected tab partly under a fade (`Docs/Screenshots/window-tabs/README.md`); that is for gnustep-window-tabbing |
+
+Found in GNUstep's own panels and a control gallery (no issues filed):
+compact tab rows in nib windows (f0ecc09), browser columns and chevrons
+(cd97cee), disclosure/help/circular buttons (cc4052d), editable combo box
+weight (dfc5865), level indicators, ratings, pulse and spinner (c1a25ec),
+slider tick marks (a2ea7fb), split view dividers (28c7a12), bottom tabs and
+the dark tab frame (855a750).
+
+Still unthemed, left for a decision: GNUstep's About panel (AdwAboutDialog
+looks different), NSDatePicker (GNOME has none), NSPathControl's arrows,
+left and right tabs, recessed and textured buttons (Cocoa's scope bar and
+toolbar styles; libadwaita would make them flat).
+
+Upstream drafts added, not filed: 16 (no sort indicator from the sort
+descriptors), 17 (`-selectItemAtIndex:` leaves the combo box's string
+empty). Both say to confirm Cocoa's behaviour on macOS first. Not filed:
+NSTokenField raises on 0.32 (`defaultCompletionDelay`), fixed on master.
+
+New traps:
+
+- A new `_override<Class>Method_` initializes that class while the theme
+  loads. `+[NSBrowser initialize]` makes a title cell, which fixed the
+  app's system font at DejaVu Sans 12 (metrics-mode and the nib-metrics
+  checks failed). Read a class's `+initialize` before overriding it; use a
+  GSTheme hook when it makes cells or fonts (the browser colours are set
+  in `-drawBrowserRect:...`).
+- Checks that run in the `-ProbeOnly header-bar` list also run dark and in
+  high contrast, where separators are 50%: measure against the palette,
+  not light-palette constants (`QuirkProbeIsAccentBlue` finds the accent
+  in every palette).
+- `make check-quirks` stops at the first configuration that fails; read
+  every SUMMARY line before committing.
 
 ## Where things stand
 
