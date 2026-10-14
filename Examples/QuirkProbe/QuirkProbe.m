@@ -5480,6 +5480,95 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A tinted template image keeps its bitmaps: with a 24pt one in 1px
+   stripes and a solid 32pt one, tinted and drawn into 24pt, it shows the
+   stripes in the tint, exactly. It was tinted at the image's size from the
+   32pt bitmap and scaled down (#68). */
+static NSBitmapImageRep *
+QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
+{
+  NSBitmapImageRep *rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                                               pixelsWide: pixels
+                                                                               pixelsHigh: pixels
+                                                                            bitsPerSample: 8
+                                                                          samplesPerPixel: 4
+                                                                                 hasAlpha: YES
+                                                                                 isPlanar: NO
+                                                                           colorSpaceName: NSCalibratedRGBColorSpace
+                                                                              bytesPerRow: 0
+                                                                             bitsPerPixel: 0]);
+  unsigned char *data = [rep bitmapData];
+  NSInteger x, y;
+
+  for (y = 0; y < pixels; y++)
+    {
+      for (x = 0; x < pixels; x++)
+        {
+          unsigned char *pixel = data + y * [rep bytesPerRow] + x * 4;
+
+          pixel[0] = pixel[1] = pixel[2] = 0;
+          pixel[3] = (striped && (x % 2) == 1) ? 0 : 255;
+        }
+    }
+  [rep setSize: NSMakeSize (pixels, pixels)];
+  return rep;
+}
+
+- (void) checkTintedImageReps
+{
+  typedef NSImage *(*TintFunction)(NSImage *, NSColor *);
+  TintFunction tint = (TintFunction)dlsym (RTLD_DEFAULT, "GnomeThemeTintedImage");
+  NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (32, 32)]);
+  NSImage *canvas = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (24, 24)]);
+  NSImage *tinted;
+  NSBitmapImageRep *rep;
+  NSInteger x, y, wrong = 0;
+  NSString *detail;
+
+  if (tint == NULL)
+    {
+      [self skip: @"tinted-image-reps" detail: @"GnomeThemeTintedImage not found"];
+      return;
+    }
+  [image addRepresentation: QuirkProbeStripedBitmap (24, YES)];
+  [image addRepresentation: QuirkProbeStripedBitmap (32, NO)];
+  tinted = tint (image, [NSColor colorWithCalibratedRed: 1.0 green: 0.0 blue: 0.0 alpha: 1.0]);
+  [canvas lockFocus];
+  [[NSColor whiteColor] set];
+  NSRectFill (NSMakeRect (0, 0, 24, 24));
+  [tinted drawInRect: NSMakeRect (0, 0, 24, 24) fromRect: NSZeroRect
+           operation: NSCompositeSourceOver fraction: 1.0];
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: NSMakeRect (0, 0, 24, 24)]);
+  [canvas unlockFocus];
+
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < [rep pixelsWide]; x++)
+        {
+          NSUInteger rgb[3];
+          BOOL red;
+
+          QuirkProbePixelAt (rep, x, y, rgb);
+          red = rgb[0] > 230 && rgb[1] < 25 && rgb[2] < 25;
+          if (red != ((x % 2) == 0) || (red == NO && (rgb[0] < 230 || rgb[1] < 230 || rgb[2] < 230)))
+            {
+              wrong++;
+            }
+        }
+    }
+  detail = [NSString stringWithFormat: @"%ld of %ldx%ld pixels not the 24pt bitmap's stripes in red; "
+    @"tinted image has %lu representation(s)",
+    (long)wrong, (long)[rep pixelsWide], (long)[rep pixelsHigh], (unsigned long)[[tinted representations] count]];
+  if (wrong == 0 && [rep pixelsWide] == 24)
+    {
+      [self pass: @"tinted-image-reps" detail: detail];
+    }
+  else
+    {
+      [self fail: @"tinted-image-reps" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6740,6 +6829,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
+  [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6818,6 +6908,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
+  [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];

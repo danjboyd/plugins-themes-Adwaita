@@ -57,8 +57,118 @@ GnomeThemeImageIsTemplate(NSImage *image)
   return [name hasSuffix: @"Template"] || [name hasSuffix: @"-symbolic"];
 }
 
+/* A bitmap's shape in `rgb`: the same pixels and size, each pixel the
+   colour at the source pixel's alpha (times the colour's). */
+static NSBitmapImageRep *
+GnomeThemeTintedBitmap(NSBitmapImageRep *source, NSColor *rgb)
+{
+  NSInteger width = [source pixelsWide];
+  NSInteger height = [source pixelsHigh];
+  NSInteger samples = [source samplesPerPixel];
+  NSInteger bits = [source bitsPerSample];
+  NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
+  BOOL hasAlpha = [source hasAlpha];
+  NSInteger alphaIndex = hasAlpha
+    ? ((([source bitmapFormat] & NSAlphaFirstBitmapFormat) != 0) ? 0 : samples - 1) : -1;
+  CGFloat red = [rgb redComponent], green = [rgb greenComponent], blue = [rgb blueComponent];
+  CGFloat alpha = [rgb alphaComponent];
+  NSBitmapImageRep *result;
+  unsigned char *data;
+  NSInteger bytesPerRow, x, y;
+  NSUInteger pixel[5];
+
+  if (width <= 0 || height <= 0 || samples < 1 || samples > 5 || bits < 1 || bits > 16)
+    {
+      return nil;
+    }
+  result = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                                pixelsWide: width
+                                                                pixelsHigh: height
+                                                             bitsPerSample: 8
+                                                           samplesPerPixel: 4
+                                                                  hasAlpha: YES
+                                                                  isPlanar: NO
+                                                            colorSpaceName: NSCalibratedRGBColorSpace
+                                                               bytesPerRow: 0
+                                                              bitsPerPixel: 0]);
+  data = [result bitmapData];
+  bytesPerRow = [result bytesPerRow];
+  if (data == NULL)
+    {
+      return nil;
+    }
+  for (y = 0; y < height; y++)
+    {
+      unsigned char *row = data + y * bytesPerRow;
+
+      for (x = 0; x < width; x++)
+        {
+          CGFloat a = 1.0;
+
+          if (alphaIndex >= 0)
+            {
+              [source getPixel: pixel atX: x y: y];
+              a = (CGFloat)pixel[alphaIndex] / (CGFloat)maxValue;
+            }
+          a *= alpha;
+          /* Premultiplied, NSBitmapImageRep's default. */
+          row[x * 4] = (unsigned char)floor (red * a * 255.0 + 0.5);
+          row[x * 4 + 1] = (unsigned char)floor (green * a * 255.0 + 0.5);
+          row[x * 4 + 2] = (unsigned char)floor (blue * a * 255.0 + 0.5);
+          row[x * 4 + 3] = (unsigned char)floor (a * 255.0 + 0.5);
+        }
+    }
+  [result setSize: [source size]];
+  return result;
+}
+
+/* An image made only of bitmaps, tinted one by one, so it keeps each of
+   them: drawn at 24pt, an icon with 24 and 32pt bitmaps still draws its
+   24pt one, not the 32pt one scaled down (#68). libs-gui's caches of
+   drawn bitmaps (NSCachedImageRep) are left out. Nil when the image has
+   any other kind of representation (PDF, EPS, drawn into). */
+static NSImage *
+GnomeThemeTintedBitmapImage(NSImage *image, NSColor *rgb)
+{
+  NSEnumerator *enumerator = [[image representations] objectEnumerator];
+  NSMutableArray *bitmaps = [NSMutableArray array];
+  NSImageRep *rep;
+  NSImage *result;
+
+  while ((rep = [enumerator nextObject]) != nil)
+    {
+      if ([rep isKindOfClass: [NSBitmapImageRep class]])
+        {
+          [bitmaps addObject: rep];
+        }
+      else if ([rep isKindOfClass: [NSCachedImageRep class]] == NO)
+        {
+          return nil;
+        }
+    }
+  if ([bitmaps count] == 0)
+    {
+      return nil;
+    }
+  result = AUTORELEASE ([[NSImage alloc] initWithSize: [image size]]);
+  enumerator = [bitmaps objectEnumerator];
+  while ((rep = [enumerator nextObject]) != nil)
+    {
+      NSBitmapImageRep *tinted = GnomeThemeTintedBitmap ((NSBitmapImageRep *)rep, rgb);
+
+      if (tinted == nil)
+        {
+          return nil;
+        }
+      [result addRepresentation: tinted];
+    }
+  return result;
+}
+
 /* The image's shape in `color`, kept with the image for each colour it's
-   drawn in (a few: the states of the palette in use). */
+   drawn in (a few: the states of the palette in use). Bitmaps are tinted
+   each at its own size; other images are drawn once, at the image's size,
+   and filled. */
 NSImage *
 GnomeThemeTintedImage(NSImage *image, NSColor *color)
 {
@@ -85,12 +195,16 @@ GnomeThemeTintedImage(NSImage *image, NSColor *color)
       tinted = [NSMutableDictionary dictionary];
       objc_setAssociatedObject (image, &GnomeThemeTintedImagesKey, tinted, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-  result = AUTORELEASE ([[NSImage alloc] initWithSize: size]);
-  [result lockFocus];
-  [image drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0];
-  [rgb set];
-  NSRectFillUsingOperation (rect, NSCompositeSourceIn);
-  [result unlockFocus];
+  result = GnomeThemeTintedBitmapImage (image, rgb);
+  if (result == nil)
+    {
+      result = AUTORELEASE ([[NSImage alloc] initWithSize: size]);
+      [result lockFocus];
+      [image drawInRect: rect fromRect: NSZeroRect operation: NSCompositeSourceOver fraction: 1.0];
+      [rgb set];
+      NSRectFillUsingOperation (rect, NSCompositeSourceIn);
+      [result unlockFocus];
+    }
   [tinted setObject: result forKey: key];
   return result;
 }
