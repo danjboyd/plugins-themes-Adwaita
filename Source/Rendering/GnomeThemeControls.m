@@ -1802,9 +1802,9 @@ GnomeThemeCenteredRect(NSRect frame, CGFloat width, CGFloat height)
 }
 
 static BOOL
-GnomeThemeUsesCustomTopTabs(NSTabViewType type)
+GnomeThemeUsesFlatTabs(NSTabViewType type)
 {
-  return (type == NSTopTabsBezelBorder);
+  return (type == NSTopTabsBezelBorder || type == NSBottomTabsBezelBorder);
 }
 
 static BOOL
@@ -3086,25 +3086,31 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   CGFloat tabHeight = [self tabHeightForType: type];
   NSColor *headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   NSColor *contentFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
-  NSColor *borderColor = GnomeThemeBlend (GnomeThemeColor (self,
-                                                           @"controlShadowColor",
-                                                           [NSColor controlShadowColor]),
-                                          headerFill,
-                                          0.43);
+  /* GtkNotebook's border, the foreground at 15% (the separator colour);
+     it had been controlShadowColor blended toward the window, which in
+     the dark palette all but vanished. */
+  NSColor *borderColor = GnomeThemeColor (self, @"GnomeThemeSeparatorColor",
+                                          GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor",
+                                                                            [NSColor controlShadowColor]),
+                                                           headerFill, 0.43));
   NSRect headerRect;
   NSRect contentRect;
   NSRect separatorRect;
+  BOOL top;
 
   GnomeThemeSetMetricsView (previous);
   if ([view isKindOfClass: [NSTabView class]] == NO
-    || GnomeThemeUsesCustomTopTabs (type) == NO)
+    || GnomeThemeUsesFlatTabs (type) == NO)
     {
       [super drawTabViewBezelRect: aRect tabViewType: type inView: view];
       return;
     }
 
-  NSDivideRect (aRect, &headerRect, &contentRect, tabHeight, flipped ? NSMinYEdge : NSMaxYEdge);
-  NSDivideRect (headerRect, &separatorRect, &headerRect, 1.0, flipped ? NSMaxYEdge : NSMinYEdge);
+  /* Bottom tabs are the same row below the content, its line on the
+     content's side. */
+  top = (type == NSTopTabsBezelBorder);
+  NSDivideRect (aRect, &headerRect, &contentRect, tabHeight, (top == flipped) ? NSMinYEdge : NSMaxYEdge);
+  NSDivideRect (headerRect, &separatorRect, &headerRect, 1.0, (top != flipped) ? NSMinYEdge : NSMaxYEdge);
 
   [headerFill set];
   NSRectFill (headerRect);
@@ -3139,10 +3145,16 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSTabViewItem *item = nil;
   CGFloat cursorX = NSMinX (bounds) + GnomeThemeTabStart;
   CGFloat underlineHeight;
+  /* Where the tab row is, and which of a tab's edges meets the content
+     (its line and the selected tab's underline): top tabs are above it,
+     bottom tabs below. */
+  BOOL top = (type == NSTopTabsBezelBorder);
+  BOOL rowAtMinY = (top == flipped);
+  BOOL contentAtMinY = (top != flipped);
 
   GnomeThemeSetMetricsView (previous);
   if ([view isKindOfClass: [NSTabView class]] == NO
-    || GnomeThemeUsesCustomTopTabs (type) == NO)
+    || GnomeThemeUsesFlatTabs (type) == NO)
     {
       [super drawTabViewRect: rect
                       inView: view
@@ -3155,8 +3167,10 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
   headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   /* As -drawTabViewBezelRect:... draws it. */
-  borderColor = GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]),
-                                 headerFill, 0.43);
+  borderColor = GnomeThemeColor (self, @"GnomeThemeSeparatorColor",
+                                 GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor",
+                                                                   [NSColor controlShadowColor]),
+                                                  headerFill, 0.43));
   textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   accentColor = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   font = [tabView font];
@@ -3180,9 +3194,10 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       NSString *label = [item label];
       NSSize labelSize = [item sizeOfLabel: truncate];
       CGFloat tabWidth = ceil (labelSize.width + 2.0 * GnomeThemeTabPadding);
-      /* Inside the frame, down to (and over) the line under the tabs. */
+      /* Inside the frame, up to (and over) the line between the tabs
+         and the content. */
       NSRect tabRect = NSMakeRect (cursorX,
-                                   flipped ? NSMinY (bounds) + 1.0 : NSMaxY (bounds) - tabHeight,
+                                   rowAtMinY ? NSMinY (bounds) + 1.0 : NSMaxY (bounds) - tabHeight,
                                    tabWidth,
                                    tabHeight - 1.0);
       NSRect labelRect = tabRect;
@@ -3196,7 +3211,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       [headerFill set];
       NSRectFill (tabRect);
       line.size.height = 1.0;
-      if (flipped)
+      if (contentAtMinY == NO)
         {
           line.origin.y = NSMaxY (tabRect) - 1.0;
         }
@@ -3205,7 +3220,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       if (underlineHeight < GnomeThemeTabUnderline)
         {
           labelRect.size.height -= underlineHeight + 1.0;
-          if (flipped == NO)
+          if (contentAtMinY)
             {
               labelRect.origin.y += underlineHeight + 1.0;
             }
@@ -3224,7 +3239,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
           NSRect underline = tabRect;
 
           underline.size.height = underlineHeight;
-          if (flipped)
+          if (contentAtMinY == NO)
             {
               underline.origin.y = NSMaxY (tabRect) - underlineHeight;
             }

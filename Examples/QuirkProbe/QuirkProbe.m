@@ -5978,6 +5978,61 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Bottom tabs are the top tabs' GtkNotebook row below the content, the
+   selected tab's underline on the content's side, above its label
+   (GNUstep's curved NeXT tabs were left). The frame is GtkNotebook's
+   border, the separator colour, visible in every palette (it all but
+   vanished in the dark one). */
+- (void) checkBottomTabs
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Bottom Tabs"];
+  NSTabView *tabView = AUTORELEASE ([[NSTabView alloc] initWithFrame: NSMakeRect (10, 10, 300, 120)]);
+  NSTabViewItem *one = AUTORELEASE ([[NSTabViewItem alloc] initWithIdentifier: @"one"]);
+  NSTabViewItem *two = AUTORELEASE ([[NSTabViewItem alloc] initWithIdentifier: @"two"]);
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], frameRGB[3];
+  QuirkProbeInk accent, label;
+  NSInteger height;
+  BOOL ok;
+  NSString *detail;
+
+  [one setLabel: @"General"];
+  [two setLabel: @"Advanced"];
+  [tabView setTabViewType: NSBottomTabsBezelBorder];
+  [tabView addTabViewItem: one];
+  [tabView addTabViewItem: two];
+  [[window contentView] addSubview: tabView];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (tabView);
+  height = [rep pixelsHigh];
+  QuirkProbePixelAt (rep, 150, 30, windowRGB);
+  QuirkProbePixelAt (rep, 0, 30, frameRGB);
+  accent = QuirkProbeMeasure (rep, QuirkProbeIsAccentBlue);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  /* The labels, below the underline's rows. */
+  label = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                               NSMakeRect (2, accent.minY + accent.height, 296, height - 2 - accent.minY - accent.height));
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"bottom-tabs"];
+  [window orderOut: nil];
+
+  ok = accent.count > 0 && accent.height <= 4 && accent.minY > height / 2
+    && label.count > 0 && label.height >= 8
+    && labs ((long)frameRGB[0] - (long)windowRGB[0]) >= 8;
+  detail = [NSString stringWithFormat: @"underline %ldx%ld from row %ld of %ld; label from row %ld; frame %@ on %@",
+    (long)accent.width, (long)accent.height, (long)accent.minY, (long)height, (long)label.minY,
+    QuirkProbeHex (frameRGB), QuirkProbeHex (windowRGB)];
+  if (ok)
+    {
+      [self pass: @"bottom-tabs" detail: detail];
+    }
+  else
+    {
+      [self fail: @"bottom-tabs" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7386,6 +7441,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
+  [self checkBottomTabs];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7472,6 +7528,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
+  [self checkBottomTabs];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
