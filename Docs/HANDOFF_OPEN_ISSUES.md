@@ -80,6 +80,11 @@ New traps:
   libraries) failed once at ccbb6eb with two resizes on maximise (an
   intermediate frame 30px outside the screen), then passed three reruns:
   a timing flake, not a regression.
+- A bundle keeps resource files from earlier builds: `make` copies
+  `Resources/ThemeImages` into `Adwaita.theme` but never deletes from it.
+  Before comparing with an older commit in another worktree, remove
+  `Adwaita.theme` and `obj` there first, or the old build shows newer
+  images.
 - The shell's `DISPLAY` is `:0`, Dan's desktop. Every helper that runs or
   screenshots something must set `DISPLAY` itself, including a
   background `import`.
