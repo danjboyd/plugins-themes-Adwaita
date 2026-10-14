@@ -5910,6 +5910,74 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Split view dividers are GtkPaned's: thick (6pt), a 1pt line at each
+   edge and the window between, no dimple; thin, one 1pt line. Both lines
+   the separator colour (15%, 50% in high contrast). */
+- (void) checkSplitViewDividers
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Split Views"];
+  NSSplitView *thick = AUTORELEASE ([[NSSplitView alloc] initWithFrame: NSMakeRect (10, 75, 300, 60)]);
+  NSSplitView *thin = AUTORELEASE ([[NSSplitView alloc] initWithFrame: NSMakeRect (10, 5, 300, 60)]);
+  NSSplitView *views[2] = { thick, thin };
+  NSUInteger windowRGB[3], first[3], middle[3], last[3], thinLine[3], thinNext[3];
+  NSBitmapImageRep *rep;
+  NSInteger x0, x1, t0;
+  QuirkProbeInk dimple;
+  BOOL thickOK, thinOK;
+  NSString *detail;
+  int i;
+
+  for (i = 0; i < 2; i++)
+    {
+      [views[i] addSubview: AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 140, 60)])];
+      [views[i] addSubview: AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 140, 60)])];
+      [views[i] setVertical: YES];
+      [[window contentView] addSubview: views[i]];
+      [views[i] adjustSubviews];
+    }
+  [thick setDividerStyle: NSSplitViewDividerStyleThick];
+  [thin setDividerStyle: NSSplitViewDividerStyleThin];
+  [thick adjustSubviews];
+  [thin adjustSubviews];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (thick);
+  x0 = (NSInteger)NSMaxX ([[[thick subviews] objectAtIndex: 0] frame]);
+  x1 = (NSInteger)NSMinX ([[[thick subviews] objectAtIndex: 1] frame]) - 1;
+  QuirkProbePixelAt (rep, 20, 30, windowRGB);
+  QuirkProbePixelAt (rep, x0, 30, first);
+  QuirkProbePixelAt (rep, (x0 + x1) / 2, 30, middle);
+  QuirkProbePixelAt (rep, x1, 30, last);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  /* Between the edge lines (in high contrast, 50%, as dark as ink). */
+  dimple = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (x0 + 1, 0, x1 - x0 - 1, 60));
+  QuirkProbeInkBackground = 750;
+  rep = QuirkProbeRender (thin);
+  t0 = (NSInteger)NSMaxX ([[[thin subviews] objectAtIndex: 0] frame]);
+  QuirkProbePixelAt (rep, t0, 30, thinLine);
+  QuirkProbePixelAt (rep, t0 + 2, 30, thinNext);
+  [self saveWindow: window named: @"split-views"];
+  [window orderOut: nil];
+
+  thickOK = x1 - x0 >= 4 && dimple.count == 0
+    && labs ((long)first[0] - (long)windowRGB[0]) >= 8 && labs ((long)last[0] - (long)windowRGB[0]) >= 8
+    && labs ((long)middle[0] - (long)windowRGB[0]) <= 2;
+  thinOK = labs ((long)thinLine[0] - (long)windowRGB[0]) >= 8
+    && labs ((long)thinLine[0] - (long)first[0]) <= 2
+    && labs ((long)thinNext[0] - (long)windowRGB[0]) <= 2;
+  detail = [NSString stringWithFormat: @"thick divider %ld to %ld: %@ %@ %@ on %@, %lu dark pixel(s); thin %@ then %@",
+    (long)x0, (long)x1, QuirkProbeHex (first), QuirkProbeHex (middle), QuirkProbeHex (last), QuirkProbeHex (windowRGB),
+    (unsigned long)dimple.count, QuirkProbeHex (thinLine), QuirkProbeHex (thinNext)];
+  if (thickOK && thinOK)
+    {
+      [self pass: @"split-view-dividers" detail: detail];
+    }
+  else
+    {
+      [self fail: @"split-view-dividers" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7317,6 +7385,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
+  [self checkSplitViewDividers];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7402,6 +7471,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
+  [self checkSplitViewDividers];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

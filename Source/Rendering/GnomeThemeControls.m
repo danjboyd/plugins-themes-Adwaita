@@ -3438,6 +3438,37 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
     }
 }
 
+/* NSSplitView's dividers as GtkPaned's separators: a thin divider is a
+   1pt line, the foreground at 15%; a thick or pane splitter divider (6pt)
+   is GtkPaned's wide handle, a line at each edge with the window between.
+   GNUstep drew NeXT's dimple in the middle of the thick ones, and the
+   thin one in whatever colour was set. */
+- (void) _overrideNSSplitViewMethod_drawDividerInRect: (NSRect)aRect
+{
+  NSSplitView *splitView = (NSSplitView *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  NSColor *line = GnomeThemeColor (theme, @"GnomeThemeSeparatorColor", [NSColor gridColor]);
+  BOOL vertical = [splitView isVertical];
+
+  [line set];
+  if ([splitView dividerStyle] == NSSplitViewDividerStyleThin
+    || (vertical ? NSWidth (aRect) : NSHeight (aRect)) <= 2.0)
+    {
+      NSRectFill (aRect);
+      return;
+    }
+  if (vertical)
+    {
+      NSRectFill (NSMakeRect (NSMinX (aRect), NSMinY (aRect), 1.0, NSHeight (aRect)));
+      NSRectFill (NSMakeRect (NSMaxX (aRect) - 1.0, NSMinY (aRect), 1.0, NSHeight (aRect)));
+    }
+  else
+    {
+      NSRectFill (NSMakeRect (NSMinX (aRect), NSMinY (aRect), NSWidth (aRect), 1.0));
+      NSRectFill (NSMakeRect (NSMinX (aRect), NSMaxY (aRect) - 1.0, NSWidth (aRect), 1.0));
+    }
+}
+
 - (void) _overrideNSScrollerMethod_drawRect: (NSRect)rect
 {
   typedef void (*DrawRectIMP)(id, SEL, NSRect);
