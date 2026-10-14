@@ -36,7 +36,18 @@
    - a 24pt close button 4pt from the tab's end, on the selected tab and
      the one under the pointer: an 8pt cross, a circle behind it on hover;
    - the "+" (the end action's flat button): 34pt, 6pt from the bar's
-     end, a 14pt cross with 2pt strokes. */
+     end, a 14pt cross with 2pt strokes.
+
+   Phase 2 (#65): drag and scroll.
+
+   - the dragged tab is AdwTabBar's tab:selected:active, the foreground at
+     19% over the bar, opaque, with its close button; no shadow in the bar
+     (the shadowed "dnd tab" is the drag icon outside it);
+   - where tabs are scrolled out of sight, the bar's colour masks them:
+     opaque for the 6pt at the edge of the tabs' area, fading out linearly
+     over the next 36pt;
+   - a tab from another window over the bar leaves an empty slot, as
+     AdwTabBox's placeholder: nothing to draw. */
 
 #import "../GnomeTheme.h"
 #import "GSWindowTabbing.h"
@@ -52,6 +63,9 @@ static const CGFloat GnomeThemeTabSeparatorHeight = 27.0;
 static const CGFloat GnomeThemeTabSelectedAlpha = 0.10;
 static const CGFloat GnomeThemeTabHoverAlpha = 0.07;
 static const CGFloat GnomeThemeTabPressedAlpha = 0.16;
+static const CGFloat GnomeThemeTabDraggedAlpha = 0.19;
+static const CGFloat GnomeThemeTabFadeClear = 6.0;
+static const CGFloat GnomeThemeTabFadeLength = 36.0;
 
 /* The foreground at alpha over the bar, as libadwaita's
    alpha(currentColor, …) fills. */
@@ -114,7 +128,7 @@ GnomeThemeTabShapeRect(NSRect tabRect)
 {
   NSRect shape = GnomeThemeTabShapeRect (tabRect);
 
-  if ((state & (GSWindowTabSelected | GSWindowTabHovered)) == 0
+  if ((state & (GSWindowTabSelected | GSWindowTabHovered | GSWindowTabDragged)) == 0
     || NSWidth (shape) < 2.0 * (GnomeThemeTabCloseSize + GnomeThemeTabCloseInset))
     {
       return NSZeroRect;
@@ -146,7 +160,11 @@ GnomeThemeTabShapeRect(NSRect tabRect)
   NSSize size;
   CGFloat room;
 
-  if (state & GSWindowTabSelected)
+  if (state & GSWindowTabDragged)
+    {
+      fill = GnomeThemeTabFill (self, GnomeThemeTabDraggedAlpha);
+    }
+  else if (state & GSWindowTabSelected)
     {
       fill = GnomeThemeTabFill (self, GnomeThemeTabSelectedAlpha);
     }
@@ -217,7 +235,9 @@ GnomeThemeTabShapeRect(NSRect tabRect)
       CGFloat alpha = (state & GSWindowTabClosePressed) ? GnomeThemeTabPressedAlpha
                                                         : GnomeThemeTabHoverAlpha;
       /* Over the tab's own fill: the flat button's alpha on top of it. */
-      NSColor *base = GnomeThemeTabFill (self, GnomeThemeTabSelectedAlpha);
+      NSColor *base = GnomeThemeTabFill (self, (state & GSWindowTabDragged)
+                                               ? GnomeThemeTabDraggedAlpha
+                                               : GnomeThemeTabSelectedAlpha);
       NSColor *foreground = GnomeThemeColor (self, @"GnomeThemeForegroundColor", [NSColor controlTextColor]);
 
       [[base blendedColorWithFraction: alpha
@@ -232,6 +252,39 @@ GnomeThemeTabShapeRect(NSRect tabRect)
   [cross setLineCapStyle: NSRoundLineCapStyle];
   [GnomeThemeHeaderBarTextColor (window) set];
   [cross stroke];
+}
+
+- (CGFloat) windowTabBarScrollFadeWidthForWindow: (NSWindow *)window
+{
+  return GnomeThemeTabFadeClear + GnomeThemeTabFadeLength;
+}
+
+/* The bar's colour over the tabs, opaque for 6pt at the edge, then fading
+   out linearly over 36pt; a narrower rect (the tabs' area less than twice
+   the fade wide) keeps the 6pt and shortens the fade. */
+- (void) drawWindowTabBarScrollFadeInRect: (NSRect)rect
+                                     edge: (NSRectEdge)edge
+                                   window: (NSWindow *)window
+{
+  NSColor *bar = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  CGFloat clear = MIN (GnomeThemeTabFadeClear, NSWidth (rect));
+  NSRect solid, fade;
+  NSGradient *gradient;
+
+  if (bar == nil)
+    {
+      return;
+    }
+  NSDivideRect (rect, &solid, &fade, clear, edge);
+  [bar set];
+  NSRectFillUsingOperation (solid, NSCompositeSourceOver);
+  if (NSWidth (fade) > 0.0)
+    {
+      gradient = [[NSGradient alloc] initWithStartingColor: bar
+                                               endingColor: [bar colorWithAlphaComponent: 0.0]];
+      [gradient drawInRect: fade angle: (edge == NSMinXEdge) ? 0.0 : 180.0];
+      RELEASE (gradient);
+    }
 }
 
 - (void) drawWindowTabNewTabButtonInRect: (NSRect)rect

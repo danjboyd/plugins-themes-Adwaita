@@ -41,6 +41,10 @@
 - (NSRect) closeButtonRectForTabAtIndex: (NSUInteger)index;
 - (NSUInteger) numberOfTabs;
 - (void) setSelectedWindow: (NSWindow *)window;
+- (CGFloat) windowTabBarScrollFadeWidthForWindow: (NSWindow *)window;
+- (void) drawWindowTabBarScrollFadeInRect: (NSRect)rect
+                                     edge: (NSRectEdge)edge
+                                   window: (NSWindow *)window;
 @end
 
 /* From the theme (GnomeThemeMenusAndData.m): a narrow menu bar's overflow
@@ -6715,6 +6719,148 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   }
 }
 
+/* Window tabs, phase 2 (#65). A dragged tab is AdwTabBar's
+   tab:selected:active: the foreground at 19% over the bar (nearly twice
+   the selected tab's 10%), opaque, with its close button. A scroll fade is
+   42pt: the bar's colour, opaque for 6pt at the edge, then fading out
+   linearly over 36pt. */
+- (void) checkWindowTabsDragAndFade
+{
+  typedef NSView *(*BarFunction)(NSWindow *);
+  BarFunction barFor = (BarFunction)dlsym (RTLD_DEFAULT, "GSWindowTabBarViewForWindow");
+  GSTheme *theme = [GSTheme theme];
+  NSWindow *windows[3];
+  NSView *bar;
+  NSBitmapImageRep *rep;
+  NSRect t0, t1, close1;
+  NSUInteger barRGB[3], selected[3], dragged[3];
+  NSInteger y, i;
+  CGFloat slotX;
+  double selectedStep, draggedStep;
+  BOOL dragOK, closeOK;
+  NSImage *canvas;
+  NSBitmapImageRep *fadeRep;
+  NSUInteger atEdge[3], inner[3], middle[3], outside[3], fadeBar[3];
+  CGFloat fadeWidth;
+  BOOL fadeOK;
+  NSString *detail;
+
+  if (barFor == NULL || [NSWindow instancesRespondToSelector: @selector(addTabbedWindow:ordered:)] == NO)
+    {
+      [self fail: @"window-tabs-drag" detail: @"the tabbing code isn't in the theme"];
+      return;
+    }
+  for (i = 0; i < 3; i++)
+    {
+      windows[i] = [self windowWithFrame: NSMakeRect (80 + 20 * i, 80, 500, 200)
+                                   title: [NSString stringWithFormat: @"Probe Drag %ld", (long)i + 1]];
+      [windows[i] setTabbingIdentifier: @"QuirkProbeDragTabs"];
+    }
+  [windows[0] orderFront: nil];
+  [windows[0] addTabbedWindow: windows[1] ordered: NSWindowAbove];
+  [windows[1] addTabbedWindow: windows[2] ordered: NSWindowAbove];
+  [[windows[0] tabGroup] setSelectedWindow: windows[0]];
+  bar = barFor (windows[0]);
+  slotX = (bar != nil) ? NSMinX ([bar rectForTabAtIndex: 1]) : 0.0;
+  /* Tab 2 as the bar has it while the pointer drags it. */
+  NS_DURING
+    {
+      [bar setValue: [NSNumber numberWithBool: YES] forKey: @"_dragging"];
+      [bar setValue: [NSNumber numberWithUnsignedInteger: 1] forKey: @"_dragIndex"];
+      [bar setValue: [NSNumber numberWithBool: NO] forKey: @"_dragDetached"];
+      /* Its slot kept, taken 40pt right, over the third tab. */
+      [bar setValue: [NSNumber numberWithUnsignedInteger: 1] forKey: @"_dragSlot"];
+      [bar setValue: [NSNumber numberWithDouble: slotX + 40.0] forKey: @"_dragX"];
+    }
+  NS_HANDLER
+    {
+      bar = nil;
+    }
+  NS_ENDHANDLER
+  if (bar == nil)
+    {
+      [self fail: @"window-tabs-drag" detail: @"no bar, or its drag state can't be set"];
+      for (i = 0; i < 3; i++)
+        {
+          [windows[i] orderOut: nil];
+        }
+      return;
+    }
+  [bar setNeedsDisplay: YES];
+  [windows[0] display];
+  rep = QuirkProbeRender (bar);
+  t0 = [bar rectForTabAtIndex: 0];
+  t1 = [bar rectForTabAtIndex: 1];
+  close1 = [bar closeButtonRectForTabAtIndex: 1];
+  y = (NSInteger)(NSHeight ([bar bounds]) / 2.0);
+  QuirkProbePixelAt (rep, (NSInteger)NSMaxX ([bar rectForTabAtIndex: 2]) + 2, y, barRGB);
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (t0) + 12, y, selected);
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (t1) + 12, y, dragged);
+  [self saveWindow: windows[0] named: @"window-tabs-drag"];
+  [bar setValue: [NSNumber numberWithBool: NO] forKey: @"_dragging"];
+  for (i = 0; i < 3; i++)
+    {
+      [windows[i] orderOut: nil];
+    }
+  selectedStep = (double)((long)selected[0] - (long)barRGB[0]);
+  draggedStep = (double)((long)dragged[0] - (long)barRGB[0]);
+  dragOK = fabs (selectedStep) >= 8 && fabs (draggedStep - 1.9 * selectedStep) <= 4.0;
+  closeOK = NSIsEmptyRect (close1) == NO
+    && QuirkProbeInkIn (rep, NSInsetRect (close1, 6, 6), dragged, 150);
+  detail = [NSString stringWithFormat: @"bar %@, selected %@, dragged %@ (red %+.0f against the selected's %+.0f; want 1.9 times); "
+    @"dragged tab's close button %@",
+    QuirkProbeHex (barRGB), QuirkProbeHex (selected), QuirkProbeHex (dragged), draggedStep, selectedStep,
+    closeOK ? @"drawn" : @"missing"];
+  if (dragOK && closeOK)
+    {
+      [self pass: @"window-tabs-drag" detail: detail];
+    }
+  else
+    {
+      [self fail: @"window-tabs-drag" detail: detail];
+    }
+
+  /* The fade at the end edge, over red, from x 0 to 100: 42pt from 58. */
+  fadeWidth = [(id)theme windowTabBarScrollFadeWidthForWindow: windows[0]];
+  canvas = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (100, 34)]);
+  [canvas lockFocus];
+  [[NSColor colorWithCalibratedRed: 1.0 green: 0.0 blue: 0.0 alpha: 1.0] set];
+  NSRectFill (NSMakeRect (0, 0, 100, 34));
+  [(id)theme drawWindowTabBarScrollFadeInRect: NSMakeRect (100 - fadeWidth, 0, fadeWidth, 34)
+                                         edge: NSMaxXEdge
+                                       window: windows[0]];
+  fadeRep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: NSMakeRect (0, 0, 100, 34)]);
+  [canvas unlockFocus];
+  {
+    NSColor *barColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+    fadeBar[0] = (NSUInteger)floor ([barColor redComponent] * 255.0 + 0.5);
+    fadeBar[1] = (NSUInteger)floor ([barColor greenComponent] * 255.0 + 0.5);
+    fadeBar[2] = (NSUInteger)floor ([barColor blueComponent] * 255.0 + 0.5);
+  }
+  QuirkProbePixelAt (fadeRep, 99, 17, atEdge);
+  QuirkProbePixelAt (fadeRep, 95, 17, inner);
+  QuirkProbePixelAt (fadeRep, 100 - 6 - 18, 17, middle);
+  QuirkProbePixelAt (fadeRep, 100 - (NSInteger)fadeWidth - 1, 17, outside);
+  /* Green goes from the bar's at the edge to 0 (red) where the fade ends. */
+  fadeOK = fabs (fadeWidth - 42.0) < 0.01
+    && labs ((long)atEdge[1] - (long)fadeBar[1]) <= 2 && labs ((long)inner[1] - (long)fadeBar[1]) <= 2
+    && labs ((long)middle[1] - (long)fadeBar[1] / 2) <= 12
+    && outside[0] > 240 && outside[1] < 10;
+  detail = [NSString stringWithFormat: @"%.0fpt (want 42); green %lu at the edge and %lu 5pt in (bar %lu), "
+    @"%lu halfway along the fade (want about %lu), %lu just outside it (want 0)",
+    fadeWidth, (unsigned long)atEdge[1], (unsigned long)inner[1], (unsigned long)fadeBar[1],
+    (unsigned long)middle[1], (unsigned long)(fadeBar[1] / 2), (unsigned long)outside[1]];
+  if (fadeOK)
+    {
+      [self pass: @"window-tabs-fade" detail: detail];
+    }
+  else
+    {
+      [self fail: @"window-tabs-fade" detail: detail];
+    }
+}
+
 - (void) checkFirstWindows: (NSTimer *)timer
 {
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"file-chooser"])
@@ -6836,6 +6982,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopoverPanel];
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
+  [self checkWindowTabsDragAndFade];
   [self checkDropDownList];
   [self checkDropDownEmpty];
   [self checkSourceList];
@@ -6915,6 +7062,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopoverPanel];
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
+  [self checkWindowTabsDragAndFade];
   [self checkDropDownList];
   [self checkDropDownEmpty];
   [self checkSourceList];
