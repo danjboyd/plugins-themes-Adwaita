@@ -1,4 +1,4 @@
-/* GSWindowTabBarLayout.m: how wide the tab bar's tabs are.
+/* GSWindowTabBarLayout.m: the tab bar's sizes, slots and scrolling.
 
    Copyright (C) 2026 Daniel Boyd
 
@@ -24,8 +24,9 @@
    Boston, MA 02110-1301, USA.
 */
 
-/* Upstream this function goes into GSWindowTabBarView.m; it is apart
-   here so the display-free tests can compile it in without the view. */
+/* Upstream these functions go into GSWindowTabBarView.m; they are apart
+   here so the display-free tests can compile them in without the
+   view. */
 
 #import "GSWindowTabBarView.h"
 
@@ -49,4 +50,63 @@ GSWindowTabWidth(NSUInteger count, CGFloat width,
       each = minimum;
     }
   return each;
+}
+
+/* The other tabs close up behind the dragged one and open a gap at the
+   slot it would drop into, as AdwTabBar's do; a tab pulled out of the
+   bar leaves no gap. */
+NSUInteger
+GSWindowTabSlot(NSUInteger index, NSUInteger dragged,
+                NSUInteger slot, BOOL detached)
+{
+  NSUInteger closed;
+
+  if (index == dragged)
+    {
+      return slot;
+    }
+  closed = (index > dragged) ? index - 1 : index;
+  if (detached == NO && closed >= slot)
+    {
+      closed++;
+    }
+  return closed;
+}
+
+NSUInteger
+GSWindowTabSlotAtOffset(CGFloat left, CGFloat width,
+                        CGFloat spacing, NSUInteger count)
+{
+  CGFloat step = width + spacing;
+  CGFloat slot;
+
+  if (count == 0 || step <= 0.0)
+    {
+      return 0;
+    }
+  slot = floor(left / step + 0.5);
+  if (slot < 0.0)
+    {
+      return 0;
+    }
+  if (slot > count - 1)
+    {
+      return count - 1;
+    }
+  return (NSUInteger)slot;
+}
+
+CGFloat
+GSWindowTabScrollToShow(CGFloat offset, CGFloat left, CGFloat width,
+                        CGFloat visible, CGFloat maximum)
+{
+  if (left < offset)
+    {
+      offset = left;
+    }
+  else if (left + width > offset + visible)
+    {
+      offset = left + width - visible;
+    }
+  return MAX(0.0, MIN(offset, maximum));
 }

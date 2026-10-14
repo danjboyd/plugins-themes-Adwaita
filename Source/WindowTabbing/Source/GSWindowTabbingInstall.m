@@ -36,16 +36,38 @@
    each wrapper is one call inside the method itself, and this file is
    deleted. */
 
-/* dladdr() */
-#ifndef _GNU_SOURCE
+/* dladdr() needs _GNU_SOURCE before any system header. */
+#if !defined(_WIN32) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
-#include <dlfcn.h>
 #include <stdlib.h>
+#include <math.h>
 
 #import "GSWindowTabbingPrivate.h"
 #import "GSWindowTabBarView.h"
+#import <GNUstepGUI/GSDisplayServer.h>
 #import <objc/runtime.h>
+
+/* Which loaded object holds an address: dladdr() where there is one,
+   GetModuleHandleExW() on Windows, whose MinGW toolchains have no
+   <dlfcn.h>.  <windows.h> comes after GNUstep's headers, which include
+   <winsock2.h> (it must precede <windows.h>). */
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+/* X11's types, for the window manager's maximized state; its functions
+   are looked up at run time (libs-back's X11 server has loaded Xlib), so
+   nothing links against it. */
+#if !defined(_WIN32) && defined(__has_include)
+#if __has_include(<X11/Xlib.h>)
+#define GSWT_HAVE_X11 1
+#include <X11/Xlib.h>
+#include <X11/Xatom.h>
+#endif
+#endif
 
 #ifndef GS_HAS_WINDOW_TABBING
 
@@ -68,6 +90,19 @@ static BOOL installed = NO;
 + (NSView *) _tabBarViewForWindow: (NSWindow *)window
 {
   return GSWindowTabBarViewForWindow(window);
+}
+
+/* NSWindowDidMoveNotification and NSWindowDidResizeNotification, for any
+   window: where un-maximizing a tab shown in its place returns.
+   Upstream, a line in -[NSWindow setFrame:display:]'s callers. */
++ (void) _windowFrameDidChange: (NSNotification *)notification
+{
+  NSWindow *window = [notification object];
+
+  if ([window isKindOfClass: [NSWindow class]] && [window isVisible])
+    {
+      [window _tabbingNoteNormalFrame];
+    }
 }
 
 - (void) dealloc
@@ -111,6 +146,418 @@ GSWindowTabbingForgetWindow(NSWindow *window)
     }
 }
 
+/* The window manager's maximized state.  Upstream this belongs in the
+   display server (libs-back), next to its other window manager hints;
+   here it is done for libs-back's X11 and Windows servers directly.
+
+   X11: EWMH's _NET_WM_STATE_MAXIMIZED_VERT and _HORZ, read from the
+   window's _NET_WM_STATE.  A window the group is about to show is
+   withdrawn (ordered out), and the window manager reads _NET_WM_STATE
+   when it maps one, so the property itself is changed (EWMH's rule for
+   withdrawn windows).
+   Windows: IsZoomed(), and SetWindowPlacement() once the window is
+   shown. */
+
+#if defined(GSWT_HAVE_X11)
+typedef Atom (*GSWTInternAtom)(Display *, const char *, Bool);
+typedef int (*GSWTGetWindowProperty)(Display *, Window, Atom, long, long,
+  Bool, Atom, Atom *, int *, unsigned long *, unsigned long *,
+  unsigned char **);
+typedef int (*GSWTChangeProperty)(Display *, Window, Atom, Atom, int, int,
+  const unsigned char *, int);
+typedef int (*GSWTFree)(void *);
+
+static struct
+{
+  BOOL looked;
+  GSWTInternAtom internAtom;
+  GSWTGetWindowProperty getWindowProperty;
+  GSWTChangeProperty changeProperty;
+  GSWTFree free;
+} x11;
+
+/* The X display and window of window, or NO when it has none (not
+   libs-back's X11 server, or not created yet). */
+static BOOL
+GSWindowTabbingX11Window(NSWindow *window, Display **display, Window *xwindow)
+{
+  GSDisplayServer *server = GSServerForWindow(window);
+  Class x11Server = NSClassFromString(@"XGServer");
+
+  if (x11.looked == NO)
+    {
+      x11.looked = YES;
+      x11.internAtom = (GSWTInternAtom)dlsym(RTLD_DEFAULT, "XInternAtom");
+      x11.getWindowProperty
+        = (GSWTGetWindowProperty)dlsym(RTLD_DEFAULT, "XGetWindowProperty");
+      x11.changeProperty
+        = (GSWTChangeProperty)dlsym(RTLD_DEFAULT, "XChangeProperty");
+      x11.free = (GSWTFree)dlsym(RTLD_DEFAULT, "XFree");
+    }
+  if (x11.internAtom == NULL || x11.getWindowProperty == NULL
+    || x11.changeProperty == NULL || x11.free == NULL
+    || server == nil || x11Server == Nil
+    || [server isKindOfClass: x11Server] == NO
+    || [window windowNumber] <= 0)
+    {
+      return NO;
+    }
+  *display = (Display *)[server serverDevice];
+  *xwindow = (Window)(uintptr_t)[server windowDevice: [window windowNumber]];
+  return (*display != NULL && *xwindow != None);
+}
+
+/* The atoms in the window's _NET_WM_STATE, at most max of them, or -1
+   when it can't be read. */
+static int
+GSWindowTabbingX11State(Display *display, Window xwindow, Atom *atoms, int max)
+{
+  Atom type;
+  int format;
+  unsigned long count, remaining, i;
+  unsigned char *data = NULL;
+  int n = 0;
+
+  if (x11.getWindowProperty(display, xwindow,
+        x11.internAtom(display, "_NET_WM_STATE", False), 0, max, False,
+        XA_ATOM, &type, &format, &count, &remaining, &data) != Success)
+    {
+      return -1;
+    }
+  if (data != NULL)
+    {
+      if (type == XA_ATOM && format == 32)
+        {
+          for (i = 0; i < count && n < max; i++)
+            {
+              atoms[n++] = ((Atom *)data)[i];
+            }
+        }
+      x11.free(data);
+    }
+  return n;
+}
+#endif
+
+BOOL
+GSWindowTabbingWindowIsMaximized(NSWindow *window, BOOL *known)
+{
+#if defined(_WIN32)
+  *known = ([window windowNumber] > 0);
+  return *known && IsZoomed((HWND)(intptr_t)[window windowNumber]);
+#elif defined(GSWT_HAVE_X11)
+  Display *display;
+  Window xwindow;
+  Atom atoms[32];
+  Atom vertical, horizontal;
+  BOOL hasVertical = NO, hasHorizontal = NO;
+  int n, i;
+
+  *known = NO;
+  if (GSWindowTabbingX11Window(window, &display, &xwindow) == NO)
+    {
+      return NO;
+    }
+  n = GSWindowTabbingX11State(display, xwindow, atoms, 32);
+  if (n < 0)
+    {
+      return NO;
+    }
+  *known = YES;
+  vertical = x11.internAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
+  horizontal = x11.internAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
+  for (i = 0; i < n; i++)
+    {
+      hasVertical = hasVertical || atoms[i] == vertical;
+      hasHorizontal = hasHorizontal || atoms[i] == horizontal;
+    }
+  return hasVertical && hasHorizontal;
+#else
+  *known = NO;
+  return NO;
+#endif
+}
+
+void
+GSWindowTabbingWillShowMaximized(NSWindow *window, BOOL maximized)
+{
+#if defined(GSWT_HAVE_X11)
+  Display *display;
+  Window xwindow;
+  Atom atoms[34];
+  Atom vertical, horizontal;
+  int n, i, kept = 0;
+
+  if ([window isVisible]
+    || GSWindowTabbingX11Window(window, &display, &xwindow) == NO)
+    {
+      return;
+    }
+  n = GSWindowTabbingX11State(display, xwindow, atoms, 32);
+  if (n < 0)
+    {
+      return;
+    }
+  vertical = x11.internAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", False);
+  horizontal = x11.internAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", False);
+  for (i = 0; i < n; i++)
+    {
+      if (atoms[i] != vertical && atoms[i] != horizontal)
+        {
+          atoms[kept++] = atoms[i];
+        }
+    }
+  if (maximized)
+    {
+      atoms[kept++] = vertical;
+      atoms[kept++] = horizontal;
+    }
+  x11.changeProperty(display, xwindow,
+    x11.internAtom(display, "_NET_WM_STATE", False), XA_ATOM, 32,
+    PropModeReplace, (const unsigned char *)atoms, kept);
+#endif
+}
+
+/* X11: a window is shown maximized by mapping it at its normal frame
+   with _NET_WM_STATE saying maximized (GSWindowTabbingWillShowMaximized):
+   the window manager maximizes it as it maps it, and keeps the frame it
+   was mapped at as the one to restore.  Mapped at the maximized frame,
+   un-maximizing it left it filling the screen.
+   Windows: the window is shown at frame, and the restore rect comes from
+   previous's placement in GSWindowTabbingDidShowMaximized. */
+NSRect
+GSWindowTabbingFrameToShow(NSWindow *window, NSRect frame, BOOL maximized,
+                           NSRect normal, BOOL hasNormal)
+{
+#if defined(GSWT_HAVE_X11)
+  if (maximized && hasNormal)
+    {
+      return normal;
+    }
+#endif
+  return frame;
+}
+
+/* Windows: the window takes previous's restore rect (rcNormalPosition,
+   which Windows keeps while it is hidden) with the maximized or normal
+   state, in one SetWindowPlacement().  ShowWindow(SW_MAXIMIZE) on a
+   window already at the maximized frame made that frame its restore
+   rect.  Ordering a window to the top makes it the foreground window
+   (libs-back's -orderwindow::: calls SetForegroundWindow()), and so does
+   showing it maximized, so when the tab wasn't to be key the window
+   that was in front before it was ordered in (front) gets the front
+   back, maximized or not. */
+void
+GSWindowTabbingDidShowMaximized(NSWindow *window, BOOL maximized,
+                                NSWindow *previous, BOOL makeKey,
+                                intptr_t front)
+{
+#if defined(_WIN32)
+  HWND hwnd = (HWND)(intptr_t)[window windowNumber];
+  WINDOWPLACEMENT placement;
+  WINDOWPLACEMENT from;
+  BOOL hasNormal = NO;
+  BOOL zoomed;
+
+  if ([window windowNumber] <= 0)
+    {
+      return;
+    }
+  placement.length = sizeof(placement);
+  if (GetWindowPlacement(hwnd, &placement) != 0)
+    {
+      if (previous != nil && [previous windowNumber] > 0)
+        {
+          from.length = sizeof(from);
+          hasNormal = (GetWindowPlacement(
+            (HWND)(intptr_t)[previous windowNumber], &from) != 0);
+        }
+      zoomed = (IsZoomed(hwnd) ? YES : NO);
+      if (zoomed != maximized || (maximized && hasNormal))
+        {
+          if (hasNormal)
+            {
+              placement.rcNormalPosition = from.rcNormalPosition;
+            }
+          placement.flags = 0;
+          if (maximized)
+            {
+              placement.showCmd = SW_SHOWMAXIMIZED;
+            }
+          else
+            {
+              placement.showCmd = makeKey ? SW_SHOWNORMAL : SW_SHOWNOACTIVATE;
+            }
+          SetWindowPlacement(hwnd, &placement);
+        }
+    }
+  if (makeKey == NO && front != 0 && (HWND)front != hwnd
+    && IsWindow((HWND)front) && GetForegroundWindow() == hwnd)
+    {
+      SetForegroundWindow((HWND)front);
+    }
+#endif
+}
+
+intptr_t
+GSWindowTabbingForegroundWindow(void)
+{
+#if defined(_WIN32)
+  return (intptr_t)GetForegroundWindow();
+#else
+  return 0;
+#endif
+}
+
+/* Windows: libs-back's server takes its messages off the thread's queue
+   with PeekMessage(), which calls a WH_GETMESSAGE hook with each one,
+   in the order the server turns them into events.  The hook keeps
+   libs-back's own record of the left button (process_mouse_event()'s
+   lDown) and notes each left mouse-up the server will post: a real one
+   for WM_LBUTTONUP, and a made-up one for a WM_MOUSEMOVE without
+   MK_LBUTTON while the button was down (the release went elsewhere,
+   after capture was lost).  Each is noted with the message's time,
+   which the server gives the event as its timestamp (GetMessageTime()
+   in seconds, as a float).  A mouse-up is told by the noted up nearest
+   its timestamp; one that matches nothing noted counts as real, as
+   before: the hook watches only while the bar tracks a press, and a
+   quick click's release can be taken off the queue before it starts. */
+#if defined(_WIN32)
+#define GSWT_NOTED_UPS 8
+static HHOOK pressWatchHook = NULL;
+static unsigned pressWatchDepth = 0;
+static BOOL pressWatchDown = NO;
+static struct
+{
+  LONG time;
+  BOOL madeUp;
+} notedUps[GSWT_NOTED_UPS];
+static unsigned notedUpCount = 0;
+
+static void
+GSWindowTabbingNoteUp(LONG time, BOOL madeUp)
+{
+  unsigned i = notedUpCount++ % GSWT_NOTED_UPS;
+
+  notedUps[i].time = time;
+  notedUps[i].madeUp = madeUp;
+}
+
+static LRESULT CALLBACK
+GSWindowTabbingPressWatchProc(int code, WPARAM wParam, LPARAM lParam)
+{
+  if (code == HC_ACTION && wParam == PM_REMOVE)
+    {
+      const MSG *msg = (const MSG *)lParam;
+
+      switch (msg->message)
+        {
+          case WM_LBUTTONDOWN:
+            pressWatchDown = YES;
+            break;
+          case WM_LBUTTONUP:
+            GSWindowTabbingNoteUp((LONG)msg->time, NO);
+            pressWatchDown = NO;
+            break;
+          case WM_MOUSEMOVE:
+            if (msg->wParam & MK_LBUTTON)
+              {
+                pressWatchDown = YES;
+              }
+            else if (pressWatchDown)
+              {
+                GSWindowTabbingNoteUp((LONG)msg->time, YES);
+                pressWatchDown = NO;
+              }
+            break;
+        }
+    }
+  return CallNextHookEx(pressWatchHook, code, wParam, lParam);
+}
+#endif
+
+void
+GSWindowTabbingBeginPressWatch(void)
+{
+#if defined(_WIN32)
+  if (pressWatchDepth++ == 0)
+    {
+      /* The bar tracks a press, so the button is down. */
+      pressWatchDown = YES;
+      notedUpCount = 0;
+      pressWatchHook = SetWindowsHookExW(WH_GETMESSAGE,
+                                         GSWindowTabbingPressWatchProc,
+                                         NULL, GetCurrentThreadId());
+    }
+#endif
+}
+
+BOOL
+GSWindowTabbingReleaseWasReal(NSEvent *event)
+{
+#if defined(_WIN32)
+  NSTimeInterval timestamp = [event timestamp];
+  NSTimeInterval best = 0.5;
+  BOOL madeUp = NO;
+  unsigned n = (notedUpCount < GSWT_NOTED_UPS) ? notedUpCount : GSWT_NOTED_UPS;
+  unsigned i;
+
+  for (i = 0; i < n; i++)
+    {
+      /* As libs-back computes it: time = ltime / 1000.0f. */
+      NSTimeInterval noted = notedUps[i].time / 1000.0f;
+      NSTimeInterval distance = fabs(noted - timestamp);
+
+      if (distance < best || (distance == best && notedUps[i].madeUp == NO))
+        {
+          best = distance;
+          madeUp = notedUps[i].madeUp;
+        }
+    }
+  return madeUp == NO;
+#else
+  return YES;
+#endif
+}
+
+void
+GSWindowTabbingEndPressWatch(void)
+{
+#if defined(_WIN32)
+  if (pressWatchDepth > 0 && --pressWatchDepth == 0 && pressWatchHook != NULL)
+    {
+      UnhookWindowsHookEx(pressWatchHook);
+      pressWatchHook = NULL;
+    }
+#endif
+}
+
+/* The base address of the loaded object (shared library, bundle or
+   executable) that holds address, or NULL when it can't be told. */
+static const void *
+GSWindowTabbingObjectBase(const void *address)
+{
+#if defined(_WIN32)
+  HMODULE module = NULL;
+
+  if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                         | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                         (LPCWSTR)address, &module) == 0)
+    {
+      return NULL;
+    }
+  return (const void *)module;
+#else
+  Dl_info info;
+
+  if (dladdr((void *)address, &info) == 0)
+    {
+      return NULL;
+    }
+  return info.dli_fbase;
+#endif
+}
+
 /* Is this copy of the code the one whose classes the runtime kept (see
    +[GSWindowTabbingState _installTabbing])?  The kept class's method
    lives in the same loaded object as this function only then. */
@@ -122,18 +569,22 @@ GSWindowTabbingClassesAreOurs(void)
   if (ours < 0)
     {
       Method method;
-      Dl_info classes;
-      Dl_info functions;
+      const void *classes;
+      const void *functions;
 
       method = class_getClassMethod([GSWindowTabbingState class],
                                     @selector(_installTabbing));
       ours = 1;
-      if (method != NULL
-        && dladdr((void *)method_getImplementation(method), &classes) != 0
-        && dladdr((void *)GSWindowTabbingClassesAreOurs, &functions) != 0
-        && classes.dli_fbase != functions.dli_fbase)
+      if (method != NULL)
         {
-          ours = 0;
+          classes = GSWindowTabbingObjectBase
+            ((const void *)method_getImplementation(method));
+          functions = GSWindowTabbingObjectBase
+            ((const void *)GSWindowTabbingClassesAreOurs);
+          if (classes != NULL && functions != NULL && classes != functions)
+            {
+              ours = 0;
+            }
         }
     }
   return ours == 1;
@@ -199,6 +650,7 @@ static IMP originalClose;
 static IMP originalValidateUserInterfaceItem;
 static IMP originalWindowDealloc;
 static IMP originalDecorationLayout;
+static IMP originalChangeWindowHeight;
 static IMP originalContentRectForFrameRect;
 static IMP originalFrameRectForContentRect;
 
@@ -309,6 +761,21 @@ GSTabbingDecorationLayout(GSWindowDecorationView *self, SEL _cmd)
   [self _layoutTabBar];
 }
 
+/* Upstream: -[GSWindowDecorationView changeWindowHeight:] keeps the
+   window's frame and ends
+   [window _tabbingDecorationsDidChangeFromFrame: frame]; */
+static void
+GSTabbingChangeWindowHeight(GSWindowDecorationView *self, SEL _cmd,
+                            CGFloat difference)
+{
+  NSWindow *window = [self window];
+  NSRect frame = [window frame];
+
+  ((void (*)(id, SEL, CGFloat))originalChangeWindowHeight)
+    (self, _cmd, difference);
+  [window _tabbingDecorationsDidChangeFromFrame: frame];
+}
+
 /* Upstream: GSWindowDecorationView's -contentRectForFrameRect:styleMask:
    leaves out the tab bar's row, and -frameRectForContentRect:styleMask:
    adds it, as they do for an in-window menu bar. */
@@ -364,6 +831,8 @@ GSWindowTabbingWrapMethods(void)
     (IMP)GSTabbingWindowDealloc, &originalWindowDealloc);
   GSWindowTabbingWrapMethod(decoration, @selector(layout),
     (IMP)GSTabbingDecorationLayout, &originalDecorationLayout);
+  GSWindowTabbingWrapMethod(decoration, @selector(changeWindowHeight:),
+    (IMP)GSTabbingChangeWindowHeight, &originalChangeWindowHeight);
   GSWindowTabbingWrapMethod(decoration,
     @selector(contentRectForFrameRect:styleMask:),
     (IMP)GSTabbingContentRectForFrameRect, &originalContentRectForFrameRect);
@@ -434,6 +903,16 @@ GSWindowTabbingInstall(void)
   GSWindowTabbingAddMissingMethods(NSClassFromString(@"GSWindowTabbingTheme"),
                                    [GSTheme class]);
   GSWindowTabbingWrapMethods();
+  [[NSNotificationCenter defaultCenter]
+    addObserver: [GSWindowTabbingState class]
+       selector: @selector(_windowFrameDidChange:)
+           name: NSWindowDidMoveNotification
+         object: nil];
+  [[NSNotificationCenter defaultCenter]
+    addObserver: [GSWindowTabbingState class]
+       selector: @selector(_windowFrameDidChange:)
+           name: NSWindowDidResizeNotification
+         object: nil];
   return YES;
 #endif /* GS_HAS_WINDOW_TABBING */
 }

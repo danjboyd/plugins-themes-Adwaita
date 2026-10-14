@@ -47,9 +47,17 @@
 - (BOOL) isKeyWindow;
 - (BOOL) isDocumentEdited;
 - (NSWindowTabbingIdentifier) tabbingIdentifier;
-/* Puts the window on screen at frame, key if makeKey, as the group's
-   selected window. */
-- (void) _tabbingShowWithFrame: (NSRect)frame makeKey: (BOOL)makeKey;
+/* Whether the window manager has the window maximized (on Windows, the
+   window is zoomed); NO where that can't be told.  GNUstep's own zoomed
+   state is its frame, which the group carries anyway. */
+- (BOOL) _tabbingIsMaximized;
+/* Puts the window on screen at frame, maximized or not, key if makeKey,
+   as the group's selected window, in place of previous (the window it
+   takes over from, which un-maximizing it returns to the frame of). */
+- (void) _tabbingShowWithFrame: (NSRect)frame
+                     maximized: (BOOL)maximized
+                       makeKey: (BOOL)makeKey
+                     inPlaceOf: (id)previous;
 /* Takes it off screen while it stays in its group. */
 - (void) _tabbingHide;
 /* The group's windows, selection or bar changed: redraw the bar and
@@ -99,6 +107,10 @@ enum
   /* The window has been ordered in at least once: only a window shown
      for the first time joins a group automatically. */
   BOOL shown;
+  /* Where it last was while the window manager didn't have it
+     maximized: where un-maximizing a tab shown in its place returns. */
+  NSRect normalFrame;
+  BOOL hasNormalFrame;
 }
 @end
 
@@ -108,6 +120,38 @@ GSWindowTabbingState *GSWindowTabbingStateForWindow(NSWindow *window,
                                                     BOOL create);
 /* Forgets window's state (it is being deallocated). */
 void GSWindowTabbingForgetWindow(NSWindow *window);
+
+/* The window manager's maximized state, from GSWindowTabbingInstall.m
+   (upstream: the display server's).  GSWindowTabbingWindowIsMaximized
+   sets *known to NO where it can't be told.  FrameToShow gives the frame
+   to put a window the group is about to show at, before WillShow is
+   called on it (ordered out), and DidShow once it is on screen, in place
+   of previous (nil for none); normal is where un-maximizing it should
+   return (hasNormal NO when that isn't known).  front is
+   GSWindowTabbingForegroundWindow() from before the window was ordered
+   in: what DidShow gives the front back to when the window wasn't to be
+   key. */
+BOOL GSWindowTabbingWindowIsMaximized(NSWindow *window, BOOL *known);
+NSRect GSWindowTabbingFrameToShow(NSWindow *window, NSRect frame,
+                                  BOOL maximized, NSRect normal,
+                                  BOOL hasNormal);
+void GSWindowTabbingWillShowMaximized(NSWindow *window, BOOL maximized);
+void GSWindowTabbingDidShowMaximized(NSWindow *window, BOOL maximized,
+                                     NSWindow *previous, BOOL makeKey,
+                                     intptr_t front);
+/* The window system's foreground window (Windows' HWND), 0 elsewhere. */
+intptr_t GSWindowTabbingForegroundWindow(void);
+
+/* Windows: whether a left mouse-up ending a press the bar tracks was a
+   real release.  libs-back's Windows server makes one up when the
+   pointer moves with the button no longer down (capture was lost and the
+   release went elsewhere); as an event it looks like a real one.  Begin
+   and End bracket the tracking (they nest); ReleaseWasReal tells a
+   mouse-up event from that time.  Elsewhere every release is real.
+   GSWindowTabbingInstall.m. */
+void GSWindowTabbingBeginPressWatch(void);
+BOOL GSWindowTabbingReleaseWasReal(NSEvent *event);
+void GSWindowTabbingEndPressWatch(void);
 
 /* NSWindow's private tabbing methods (GSWindowTabbingWindow.m).  The
    methods NSWindow already has call these: upstream each call is a line
@@ -129,14 +173,31 @@ void GSWindowTabbingForgetWindow(NSWindow *window);
 - (BOOL) _tabbingValidateUserInterfaceItem: (id)item valid: (BOOL *)valid;
 /* From -dealloc, first. */
 - (void) _tabbingDealloc;
+/* From -[GSWindowDecorationView changeWindowHeight:], last: an
+   in-window menu bar or a toolbar was added or removed, and the frame
+   was frame before. */
+- (void) _tabbingDecorationsDidChangeFromFrame: (NSRect)frame;
 /* The height the window gives up for its tab bar (0 for none). */
 - (CGFloat) _tabBarReservedHeight;
+/* Remembers the window's frame as where un-maximizing a tab shown in
+   its place returns, while the window manager doesn't have it maximized
+   (on its being ordered in, moved or resized). */
+- (void) _tabbingNoteNormalFrame;
 /* The tab bar's view while the bar is shown, else nil. */
 - (GSWindowTabBarView *) _tabBarView;
-/* The tab bar's "+" button: is there something to answer
-   -newWindowForTab:, and ask it. */
+/* The tab bar's "+" button: what answers -newWindowForTab: for this
+   window, key or not (nil for nothing), is there something, and ask
+   it. */
+- (id) _tabbingNewTabTarget;
 - (BOOL) _tabbingCanCreateNewTab;
 - (void) _tabbingCreateNewTab;
+/* A tab dragged out of the bar: the window leaves its group as a window
+   of its own with its frame's origin at origin (and -moveTabToNewWindow:,
+   a little below and to the right). */
+- (void) _tabbingMoveToNewWindowAt: (NSPoint)origin;
+/* Whether other can be tabbed with the window: both can be tabs, and
+   their tabbing identifiers match. */
+- (BOOL) _canBeTabbedWith: (NSWindow *)other;
 @end
 
 /* GSWindowDecorationView's private tabbing method

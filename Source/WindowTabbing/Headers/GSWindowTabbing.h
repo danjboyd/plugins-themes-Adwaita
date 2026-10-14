@@ -39,6 +39,16 @@
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
 
+/* GSWT_EXPORT declares this code's public functions and constants.  The
+   code is compiled into the theme or app that uses it, never into a DLL
+   of its own, so GS_EXPORT (dllimport on Windows outside GNUstep's own
+   libraries) is wrong here: it warns with clang and lld (LNK4217).  In
+   libs-gui these become APPKIT_EXPORT.  Define GSWT_EXPORT before
+   including this header to change it. */
+#ifndef GSWT_EXPORT
+#  define GSWT_EXPORT extern
+#endif
+
 /* libs-gui defines GS_HAS_WINDOW_TABBING once it implements the API
    itself; this code then declares and installs nothing. */
 #ifndef GS_HAS_WINDOW_TABBING
@@ -224,6 +234,9 @@ typedef enum
  * <term>GSWindowTabPreviousHighlighted</term>
  * <desc>The tab before this one is selected, hovered or pressed (a
  * theme may leave out the separator between them).</desc>
+ * <term>GSWindowTabDragged</term>
+ * <desc>The tab is being dragged: drawn last, over the others, where
+ * the pointer has taken it.</desc>
  * </deflist>
  */
 enum
@@ -237,7 +250,8 @@ enum
   GSWindowTabEdited = 1 << 6,
   GSWindowTabFirst = 1 << 7,
   GSWindowTabLast = 1 << 8,
-  GSWindowTabPreviousHighlighted = 1 << 9
+  GSWindowTabPreviousHighlighted = 1 << 9,
+  GSWindowTabDragged = 1 << 10
 };
 typedef unsigned int GSWindowTabState;
 
@@ -246,7 +260,7 @@ typedef unsigned int GSWindowTabState;
  * hidden or changes, for a theme that places the bar itself
  * (GSWindowTabBarInTitleBar).
  */
-GS_EXPORT NSString *const GSWindowTabBarDidChangeNotification;
+GSWT_EXPORT NSString *const GSWindowTabBarDidChangeNotification;
 
 /**
  * The theme's part of window tabbing.  GSTheme has a plain default for
@@ -331,6 +345,21 @@ GS_EXPORT NSString *const GSWindowTabBarDidChangeNotification;
                                    state: (GSWindowTabState)state
                                   window: (NSWindow *)window;
 
+/**
+ * Returns how wide the fade is at an end of the bar where tabs that
+ * don't fit are scrolled out of sight (default 24; 0 for none).
+ */
+- (CGFloat) windowTabBarScrollFadeWidthForWindow: (NSWindow *)window;
+
+/**
+ * Draws the fade over the tabs at the bar's edge (NSMinXEdge or
+ * NSMaxXEdge) where more tabs are scrolled out of sight.  The default
+ * fades the bar's background colour in towards the edge.
+ */
+- (void) drawWindowTabBarScrollFadeInRect: (NSRect)rect
+                                     edge: (NSRectEdge)edge
+                                   window: (NSWindow *)window;
+
 @end
 
 /**
@@ -347,19 +376,19 @@ GS_EXPORT NSString *const GSWindowTabBarDidChangeNotification;
  * not go upstream: in libs-gui the methods would be NSWindow's and
  * GSTheme's own.</p>
  */
-GS_EXPORT BOOL GSWindowTabbingInstall(void);
+GSWT_EXPORT BOOL GSWindowTabbingInstall(void);
 
 /**
  * Returns the tab bar's view for window, for a theme whose placement is
  * GSWindowTabBarInTitleBar; nil when the bar is hidden.
  */
-GS_EXPORT NSView *GSWindowTabBarViewForWindow(NSWindow *window);
+GSWT_EXPORT NSView *GSWindowTabBarViewForWindow(NSWindow *window);
 
 /**
  * Returns title shortened with an ellipsis at its end so it fits width
  * when drawn with attributes; the title itself if it fits.
  */
-GS_EXPORT NSString *GSWindowTabFittedTitle(NSString *title,
+GSWT_EXPORT NSString *GSWindowTabFittedTitle(NSString *title,
                                            NSDictionary *attributes,
                                            CGFloat width);
 

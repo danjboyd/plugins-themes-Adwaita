@@ -62,7 +62,6 @@ static NSWindow *newTabWindow = nil;
 /* Private helpers, used before they are defined. */
 @interface GSWindowTabbingWindow (Helpers)
 - (BOOL) _canBeTabbed;
-- (BOOL) _canBeTabbedWith: (NSWindow *)other;
 - (NSWindow *) _keyWindowForTabbing;
 - (NSWindow *) _windowToJoinAsTab;
 - (BOOL) _tabbingSelectsSelfInGroup;
@@ -203,24 +202,13 @@ static NSWindow *newTabWindow = nil;
   [[self tabGroup] _selectNextTab: NO];
 }
 
+/* A little below and to the right of the group, as macOS places it. */
 - (IBAction) moveTabToNewWindow: (id)sender
 {
-  NSWindowTabGroup *group = [self tabGroup];
-  NSRect frame;
+  NSPoint origin = [self frame].origin;
 
-  if ([[group windows] count] < 2)
-    {
-      return;
-    }
-  frame = [self frame];
-  [group removeWindow: self];
-  /* A little below and to the right of the group, as macOS places it. */
-  frame.origin.x += 30.0;
-  frame.origin.y -= 30.0;
-  internalOrdering++;
-  [self setFrame: frame display: NO];
-  [self makeKeyAndOrderFront: nil];
-  internalOrdering--;
+  [self _tabbingMoveToNewWindowAt: NSMakePoint(origin.x + 30.0,
+                                               origin.y - 30.0)];
 }
 
 /* A window that has been on screen, or is in a group, joins; windows
@@ -256,10 +244,40 @@ static NSWindow *newTabWindow = nil;
 
 /* GSWindowTabbable: how the tab group moves its windows. */
 
-- (void) _tabbingShowWithFrame: (NSRect)frame makeKey: (BOOL)makeKey
+- (BOOL) _tabbingIsMaximized
 {
+  BOOL known;
+
+  return GSWindowTabbingWindowIsMaximized(self, &known);
+}
+
+- (void) _tabbingShowWithFrame: (NSRect)frame
+                     maximized: (BOOL)maximized
+                       makeKey: (BOOL)makeKey
+                     inPlaceOf: (id)previous
+{
+  GSWindowTabbingState *from = GSWindowTabbingStateForWindow(previous, NO);
+  GSWindowTabbingState *state;
+  NSRect normal = frame;
+  BOOL hasNormal = NO;
+  intptr_t front;
+
+  /* A maximized tab carries the group's frame from before it was
+     maximized, so un-maximizing it returns there. */
+  if (maximized && from != nil && from->hasNormalFrame)
+    {
+      normal = from->normalFrame;
+      hasNormal = YES;
+      state = GSWindowTabbingStateForWindow(self, YES);
+      state->normalFrame = normal;
+      state->hasNormalFrame = YES;
+    }
   internalOrdering++;
-  [self setFrame: frame display: NO];
+  front = GSWindowTabbingForegroundWindow();
+  [self setFrame: GSWindowTabbingFrameToShow(self, frame, maximized,
+                                              normal, hasNormal)
+         display: NO];
+  GSWindowTabbingWillShowMaximized(self, maximized);
   if (makeKey)
     {
       [self makeKeyAndOrderFront: nil];
@@ -268,7 +286,32 @@ static NSWindow *newTabWindow = nil;
     {
       [self orderFront: nil];
     }
+  GSWindowTabbingDidShowMaximized(self, maximized, previous, makeKey,
+                                  front);
   internalOrdering--;
+}
+
+/* Remembers the window's frame as where un-maximizing returns, while
+   the window manager doesn't have it maximized; nothing where that
+   can't be told. */
+- (void) _tabbingNoteNormalFrame
+{
+  GSWindowTabbingState *state;
+  BOOL known;
+  BOOL maximized;
+
+  if ([self _canBeTabbed] == NO)
+    {
+      return;
+    }
+  maximized = GSWindowTabbingWindowIsMaximized(self, &known);
+  if (known == NO || maximized)
+    {
+      return;
+    }
+  state = GSWindowTabbingStateForWindow(self, YES);
+  state->normalFrame = [self frame];
+  state->hasNormalFrame = YES;
 }
 
 - (void) _tabbingHide
@@ -281,6 +324,26 @@ static NSWindow *newTabWindow = nil;
 - (void) _tabbingGroupDidChange
 {
   [self _updateTabBar];
+}
+
+/* The window leaves its group as a window of its own, its frame's origin
+   at origin, key; nothing happens unless the group has other windows. */
+- (void) _tabbingMoveToNewWindowAt: (NSPoint)origin
+{
+  NSWindowTabGroup *group = [self tabGroup];
+  NSRect frame;
+
+  if ([[group windows] count] < 2)
+    {
+      return;
+    }
+  frame = [self frame];
+  [group removeWindow: self];
+  frame.origin = origin;
+  internalOrdering++;
+  [self setFrame: frame display: NO];
+  [self makeKeyAndOrderFront: nil];
+  internalOrdering--;
 }
 
 - (NSWindowTabGroup *) _tabbingGroup
@@ -314,6 +377,7 @@ static NSWindow *newTabWindow = nil;
         }
     }
   GSWindowTabbingStateForWindow(self, YES)->shown = YES;
+  [self _tabbingNoteNormalFrame];
   return NO;
 }
 
@@ -427,6 +491,21 @@ static NSWindow *newTabWindow = nil;
   GSWindowTabbingForgetWindow(self);
 }
 
+/* A window with other tabs keeps the frame it shares with them when an
+   in-window menu bar or a toolbar comes or goes: the content gives up or
+   takes back the row, as for the tab bar.  GSWindowDecorationView keeps
+   the content's size and changes the frame, so a new tab, given the
+   group's frame before the theme or NSApp gave it its menu bar (on its
+   becoming key), grew the group by the bar's height, again with each new
+   tab. */
+- (void) _tabbingDecorationsDidChangeFromFrame: (NSRect)frame
+{
+  if ([self tabbedWindows] != nil && NSEqualRects([self frame], frame) == NO)
+    {
+      [self setFrame: frame display: YES];
+    }
+}
+
 - (CGFloat) _tabBarReservedHeight
 {
   NSWindowTabGroup *group = [self _tabbingGroup];
@@ -457,17 +536,101 @@ static NSWindow *newTabWindow = nil;
   return state->barView;
 }
 
+/* What the "+" button sends -newWindowForTab: to: the first object in
+   this window's responder chain that takes it, whether or not the window
+   is key: the button belongs to this window.  The order is Apple's for
+   one window's part of an action's search: the first
+   responder up to the window, the window's delegate, its window
+   controller and document, then the application, its delegate and the
+   document controller.  -[NSApplication targetForAction:to:from:]
+   searches only the key and main windows' chains (libs-gui takes the
+   sender's window only for toolbar items), so a group not in the key
+   window had no "+", or one that asked the key window's delegate. */
+- (id) _tabbingNewTabTarget
+{
+  SEL action = @selector(newWindowForTab:);
+  NSResponder *responder = [self firstResponder];
+  NSDocumentController *documents;
+  id candidate;
+
+  if (responder == nil)
+    {
+      responder = self;
+    }
+  while (responder != nil)
+    {
+      if ([responder respondsToSelector: action])
+        {
+          return responder;
+        }
+      if (responder == self)
+        {
+          break;
+        }
+      responder = [responder nextResponder];
+    }
+  if ([self respondsToSelector: action])
+    {
+      return self;
+    }
+  candidate = [self delegate];
+  if ([candidate respondsToSelector: action])
+    {
+      return candidate;
+    }
+  candidate = [self windowController];
+  if ([candidate respondsToSelector: action])
+    {
+      return candidate;
+    }
+  documents = [NSDocumentController sharedDocumentController];
+  if ([[documents documentClassNames] count] > 0)
+    {
+      candidate = [documents documentForWindow: self];
+      if ([candidate respondsToSelector: action])
+        {
+          return candidate;
+        }
+    }
+  if ([NSApp respondsToSelector: action])
+    {
+      return NSApp;
+    }
+  candidate = [NSApp delegate];
+  if ([candidate respondsToSelector: action])
+    {
+      return candidate;
+    }
+  for (responder = [NSApp nextResponder]; responder != nil;
+       responder = [responder nextResponder])
+    {
+      if ([responder respondsToSelector: action])
+        {
+          return responder;
+        }
+    }
+  if ([documents respondsToSelector: action])
+    {
+      return documents;
+    }
+  return nil;
+}
+
 - (BOOL) _tabbingCanCreateNewTab
 {
-  return [NSApp targetForAction: @selector(newWindowForTab:)
-                             to: nil
-                           from: self] != nil;
+  return [self _tabbingNewTabTarget] != nil;
 }
 
 - (void) _tabbingCreateNewTab
 {
+  id target = [self _tabbingNewTabTarget];
+
+  if (target == nil)
+    {
+      return;
+    }
   newTabWindow = self;
-  [NSApp sendAction: @selector(newWindowForTab:) to: nil from: self];
+  [NSApp sendAction: @selector(newWindowForTab:) to: target from: self];
   newTabWindow = nil;
 }
 

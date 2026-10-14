@@ -282,12 +282,13 @@ GSTabGroupWindowAt(NSArray *windows, NSUInteger index)
     }
 }
 
-/* Shows window in place of the selected one: at its frame, and key if
-   it was, as macOS does. */
+/* Shows window in place of the selected one: at its frame, maximized
+   if it was, and key if it was, as macOS does. */
 - (void) _switchToWindow: (id)window
 {
   id previous = _selectedWindow;
   NSRect frame;
+  BOOL maximized;
   BOOL key;
 
   if (window == previous)
@@ -300,9 +301,13 @@ GSTabGroupWindowAt(NSArray *windows, NSUInteger index)
       return;
     }
   frame = [previous frame];
+  maximized = [previous _tabbingIsMaximized];
   key = [previous isKeyWindow];
   [previous _tabbingHide];
-  [window _tabbingShowWithFrame: frame makeKey: key];
+  [window _tabbingShowWithFrame: frame
+                      maximized: maximized
+                        makeKey: key
+                      inPlaceOf: previous];
 }
 
 /* The window that takes the place of the window at index when it
@@ -350,7 +355,9 @@ GSTabGroupWindowAt(NSArray *windows, NSUInteger index)
 
           _selectedWindow = neighbour;
           [neighbour _tabbingShowWithFrame: [window frame]
-                                   makeKey: [window isKeyWindow]];
+                                 maximized: [window _tabbingIsMaximized]
+                                   makeKey: [window isKeyWindow]
+                                 inPlaceOf: window];
         }
       else
         {
