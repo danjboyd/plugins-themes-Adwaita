@@ -5119,6 +5119,65 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A disabled pop-up button is libadwaita's insensitive drop-down: button and
+   title at half opacity, so its fill is nearer the window's and its title
+   fainter than an enabled one's. It drew exactly as enabled (#69). */
+- (void) checkPopUpDisabled
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 180, 110) title: @"Probe Pop-Up Disabled"];
+  NSPopUpButton *enabled = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 60, 120, 34)
+                                                                  pullsDown: NO]);
+  NSPopUpButton *disabled = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 14, 120, 34)
+                                                                   pullsDown: NO]);
+  NSBitmapImageRep *windowRep, *enabledRep, *disabledRep;
+  NSUInteger windowFill[3], enabledFill[3], disabledFill[3];
+  NSUInteger windowSum, enabledSum, disabledSum, enabledContrast, disabledContrast;
+  NSInteger enabledDistance, disabledDistance;
+  QuirkProbeInk ink;
+  NSString *detail;
+
+  [enabled addItemWithTitle: @"Mm Title"];
+  [disabled addItemWithTitle: @"Mm Title"];
+  [disabled setEnabled: NO];
+  [[window contentView] addSubview: enabled];
+  [[window contentView] addSubview: disabled];
+  [window orderFront: nil];
+  [window display];
+  windowRep = QuirkProbeRender ([window contentView]);
+  enabledRep = QuirkProbeRender (enabled);
+  disabledRep = QuirkProbeRender (disabled);
+  QuirkProbePixelAt (windowRep, 4, 4, windowFill);
+  QuirkProbePixelAt (enabledRep, 6, [enabledRep pixelsHigh] / 2, enabledFill);
+  QuirkProbePixelAt (disabledRep, 6, [disabledRep pixelsHigh] / 2, disabledFill);
+  windowSum = windowFill[0] + windowFill[1] + windowFill[2];
+  enabledSum = enabledFill[0] + enabledFill[1] + enabledFill[2];
+  disabledSum = disabledFill[0] + disabledFill[1] + disabledFill[2];
+  enabledDistance = labs ((long)enabledSum - (long)windowSum);
+  disabledDistance = labs ((long)disabledSum - (long)windowSum);
+  ink = QuirkProbeMeasureIn (enabledRep, QuirkProbeIsAnyPixel,
+                             NSMakeRect (8, 6, 60, [enabledRep pixelsHigh] - 12));
+  enabledContrast = QuirkProbeContrast (ink, enabledSum);
+  ink = QuirkProbeMeasureIn (disabledRep, QuirkProbeIsAnyPixel,
+                             NSMakeRect (8, 6, 60, [disabledRep pixelsHigh] - 12));
+  disabledContrast = QuirkProbeContrast (ink, disabledSum);
+  [self saveWindow: window named: @"popup-disabled"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"fill %ld from the window's enabled, %ld disabled; "
+    @"title contrast %lu enabled, %lu disabled",
+    (long)enabledDistance, (long)disabledDistance,
+    (unsigned long)enabledContrast, (unsigned long)disabledContrast];
+  if (enabledContrast > 0 && disabledContrast * 10 <= enabledContrast * 7
+      && disabledDistance * 10 <= enabledDistance * 7 + 10)
+    {
+      [self pass: @"popup-disabled" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-disabled" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6374,6 +6433,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTableSelection];
   [self checkPopUpMenuArrowImage];
   [self checkPopUpTitleTruncation];
+  [self checkPopUpDisabled];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6447,6 +6507,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTableSelection];
   [self checkPopUpMenuArrowImage];
   [self checkPopUpTitleTruncation];
+  [self checkPopUpDisabled];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];

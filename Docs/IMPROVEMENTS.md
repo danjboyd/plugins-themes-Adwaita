@@ -88,6 +88,7 @@ it was found. Compare against the libadwaita reference with
 | A window with unsaved changes (`-setDocumentEdited: YES`) showed no sign of it in the header bar (plugins-themes-Adwaita#39) | a dot before the title ("• readme.md"), in the title's weight, as GNOME's document apps; the bar redraws when the state changes. QuirkProbe `header-bar-document-title` |
 | GNOME apps keep their toolbar's buttons in the header bar | `GnomeThemeHeaderBarToolbar` (a user default, or the app's Info.plist) puts the window's toolbar in the header bar's row: items before its flexible space at the start, after it at the end, the title in the space; icons without labels; the » menu for items that don't fit; mirrored right to left |
 | Print showed GNUstep's own print panel, while open and save were already GNOME's file chooser (plugins-themes-Adwaita#52) | `Source/Adapters/GnomeThemePrintDialog.m`: the print panel asks the portal's PreparePrint, maps its settings and page setup into the `NSPrintInfo`, and `-[GSPrintOperation deliverResult]` hands the drawn PDF to the portal's Print; GNUstep's panel without a portal, with accessories, or with `GnomeThemeNativePrintDialog NO`. `make check-print-dialog` |
+| A disabled pop-up button drew its title as an enabled one's, so it looked clickable (plugins-themes-Adwaita#69) | the title takes the disabled text colour when the button is disabled, not only when its item is (the selected item stays enabled); the fill already dimmed |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

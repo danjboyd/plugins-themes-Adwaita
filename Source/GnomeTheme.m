@@ -832,7 +832,11 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
       [attributes setObject: font forKey: NSFontAttributeName];
     }
 
-  if (![[cell menuItem] isEnabled])
+  /* A pop-up button's title is its selected item's, and that item stays
+     enabled when the button is disabled: the button's own state counts too,
+     or a disabled pop-up looked clickable (#69). */
+  if (![[cell menuItem] isEnabled]
+    || ([cell isKindOfClass: [NSPopUpButtonCell class]] && [cell isEnabled] == NO))
     {
       textColor = [NSColor disabledControlTextColor];
     }
