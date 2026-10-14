@@ -505,6 +505,34 @@ GnomeThemeDrawPopupChevron(NSRect rect, NSColor *color, BOOL flipped)
   [path stroke];
 }
 
+/* GtkExpander's arrow: pan-end-symbolic collapsed, pan-down-symbolic
+   expanded, the icons' 2pt chevron in a 16pt box centred in `rect`. */
+static void
+GnomeThemeDrawExpanderArrow(NSRect rect, BOOL expanded, NSColor *color, BOOL flipped)
+{
+  NSBezierPath *path = [NSBezierPath bezierPath];
+  NSPoint centre = NSMakePoint (floor (NSMidX (rect)), floor (NSMidY (rect)));
+  CGFloat down = flipped ? 1.0 : -1.0;
+
+  if (expanded)
+    {
+      [path moveToPoint: NSMakePoint (centre.x - 4.0, centre.y - 2.0 * down)];
+      [path lineToPoint: NSMakePoint (centre.x, centre.y + 2.0 * down)];
+      [path lineToPoint: NSMakePoint (centre.x + 4.0, centre.y - 2.0 * down)];
+    }
+  else
+    {
+      [path moveToPoint: NSMakePoint (centre.x - 2.0, centre.y - 4.0)];
+      [path lineToPoint: NSMakePoint (centre.x + 2.0, centre.y)];
+      [path lineToPoint: NSMakePoint (centre.x - 2.0, centre.y + 4.0)];
+    }
+  [path setLineWidth: 2.0];
+  [path setLineCapStyle: NSRoundLineCapStyle];
+  [path setLineJoinStyle: NSRoundLineJoinStyle];
+  [color set];
+  [path stroke];
+}
+
 static CGFloat
 GnomeThemeComboBoxButtonWidth(NSRect cellFrame)
 {
@@ -1955,8 +1983,6 @@ GnomeThemeDrawTabLabel(NSString *label,
   CGFloat radius = MIN (10.0, floor (buttonRect.size.height / 2.0));
   NSString *keyEquivalent = nil;
 
-  (void)style;
-
   if ([cell respondsToSelector: @selector(keyEquivalent)])
     {
       keyEquivalent = [(id)cell keyEquivalent];
@@ -2013,13 +2039,56 @@ GnomeThemeDrawTabLabel(NSString *label,
       strokeColor = outlineColor;
     }
 
+  /* A disclosure button is GtkExpander's arrow, with no bezel (GSTheme
+     drew nothing for it); a help or circular button is libadwaita's
+     .circular button, round, the help button with its "?" (both were
+     rounded squares, the "?" lost). */
+  if (style == NSDisclosureBezelStyle)
+    {
+      NSColor *arrow = disabled
+        ? GnomeThemeColor (self, @"disabledControlTextColor", [NSColor disabledControlTextColor])
+        : GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
+
+      GnomeThemeDrawExpanderArrow (frame, [cell state] == NSOnState, arrow, [view isFlipped]);
+      if (focused && disabled == NO)
+        {
+          GnomeThemeDrawFocusRing (self, NSInsetRect (frame, 1.25, 1.25), 4.0);
+        }
+      return;
+    }
+  if (style == NSHelpButtonBezelStyle || style == NSCircularBezelStyle)
+    {
+      CGFloat side = floor (MIN (NSWidth (buttonRect), NSHeight (buttonRect)));
+
+      buttonRect = NSMakeRect (floor (NSMidX (frame) - side / 2.0) + 0.5, floor (NSMidY (frame) - side / 2.0) + 0.5,
+                               side - 1.0, side - 1.0);
+      radius = floor (side / 2.0);
+    }
+
   GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, fillColor, strokeColor, 1.0);
+
+  if (style == NSHelpButtonBezelStyle && [[(NSButtonCell *)cell title] length] == 0
+    && [(NSButtonCell *)cell image] == nil)
+    {
+      NSFont *font = [NSFont boldSystemFontOfSize: 0];
+      NSColor *text = disabled
+        ? GnomeThemeColor (self, @"disabledControlTextColor", [NSColor disabledControlTextColor])
+        : GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
+      NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+        font, NSFontAttributeName, text, NSForegroundColorAttributeName, nil];
+      NSString *mark = @"?";
+      NSSize size = [mark sizeWithAttributes: attributes];
+
+      [mark drawAtPoint: NSMakePoint (floor (NSMidX (buttonRect) - size.width / 2.0),
+                                      floor (NSMidY (buttonRect) - size.height / 2.0))
+         withAttributes: attributes];
+    }
 
   /* Inside the edge, like libadwaita's focus ring (outline-offset: -2px):
      the button fills its frame, so a ring outside it would be clipped. */
   if (focused && disabled == NO)
     {
-      GnomeThemeDrawFocusRing (self, NSInsetRect (frame, 1.25, 1.25), MAX (0.0, radius - 0.75));
+      GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, 0.75, 0.75), MAX (0.0, radius - 0.75));
     }
 }
 

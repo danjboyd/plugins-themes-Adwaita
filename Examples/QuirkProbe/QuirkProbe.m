@@ -5636,6 +5636,85 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Buttons whose style is a shape: a disclosure button is GtkExpander's
+   arrow (pointing right closed, down open; GSTheme drew nothing), help and
+   circular buttons are round (.circular), the help button with its "?"
+   (they were rounded squares, the "?" lost). */
+- (void) checkShapedButtons
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 70) title: @"Probe Shaped Buttons"];
+  NSView *content = [window contentView];
+  NSButton *closed = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10, 20, 30, 30)]);
+  NSButton *open = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (50, 20, 30, 30)]);
+  NSButton *help = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (90, 20, 30, 30)]);
+  NSButton *circle = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (130, 20, 30, 30)]);
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], corner[3], centre[3];
+  QuirkProbeInk closedInk, openInk, helpInk;
+  BOOL arrowsOK, helpOK, circleOK;
+  NSString *detail;
+  NSInteger top = 70 - 50;
+
+  [closed setBezelStyle: NSDisclosureBezelStyle];
+  [closed setButtonType: NSOnOffButton];
+  [closed setTitle: @""];
+  [open setBezelStyle: NSDisclosureBezelStyle];
+  [open setButtonType: NSOnOffButton];
+  [open setTitle: @""];
+  [open setState: NSOnState];
+  [help setBezelStyle: NSHelpButtonBezelStyle];
+  [help setTitle: @""];
+  [circle setBezelStyle: NSCircularBezelStyle];
+  [circle setTitle: @""];
+  [content addSubview: closed];
+  [content addSubview: open];
+  [content addSubview: help];
+  [content addSubview: circle];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (content);
+  QuirkProbePixelAt (rep, 2, 2, windowRGB);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  /* Pixel rects from the top: the buttons are 30pt, 20pt up from the
+     bottom of a 70pt view. */
+  closedInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (10, top, 30, 30));
+  openInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (50, top, 30, 30));
+  QuirkProbePixelAt (rep, 92, top + 2, corner);
+  QuirkProbePixelAt (rep, 145, top + 15, centre);
+  helpOK = labs ((long)corner[0] - (long)windowRGB[0]) <= 3;
+  QuirkProbePixelAt (rep, 132, top + 2, corner);
+  circleOK = labs ((long)corner[0] - (long)windowRGB[0]) <= 3
+    && labs ((long)centre[0] - (long)windowRGB[0]) >= 6;
+  {
+    NSUInteger fill[3];
+
+    QuirkProbePixelAt (rep, 97, top + 15, fill);
+    QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+    helpInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (99, top + 6, 12, 18));
+  }
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"shaped-buttons"];
+  [window orderOut: nil];
+
+  arrowsOK = closedInk.count > 0 && openInk.count > 0
+    && closedInk.height > closedInk.width && openInk.width > openInk.height
+    && closedInk.height <= 12 && openInk.width <= 12;
+  helpOK = helpOK && helpInk.count > 0 && helpInk.height >= 6;
+  detail = [NSString stringWithFormat: @"disclosure arrow %ldx%ld closed, %ldx%ld open; help: corner %@, "
+    @"\"?\" %ldx%ld; circular: corner %@",
+    (long)closedInk.width, (long)closedInk.height, (long)openInk.width, (long)openInk.height,
+    helpOK ? @"window" : @"not the window", (long)helpInk.width, (long)helpInk.height,
+    circleOK ? @"window, filled inside" : @"not round"];
+  if (arrowsOK && helpOK && circleOK)
+    {
+      [self pass: @"shaped-buttons" detail: detail];
+    }
+  else
+    {
+      [self fail: @"shaped-buttons" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7039,6 +7118,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkShapedButtons];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7120,6 +7200,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkShapedButtons];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
