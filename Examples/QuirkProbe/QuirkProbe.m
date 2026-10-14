@@ -5860,6 +5860,56 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A slider's tick marks (libs-gui draws none) are GtkScale's: 1x6pt
+   lines 6pt below the trough, one per tick across the knob's travel. */
+- (void) checkSliderTickMarks
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 60) title: @"Probe Slider Ticks"];
+  NSSlider *slider = AUTORELEASE ([[NSSlider alloc] initWithFrame: NSMakeRect (20, 16, 220, 28)]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk marks;
+  NSInteger x, columns = 0;
+  BOOL inMark = NO;
+  NSString *detail;
+
+  [slider setNumberOfTickMarks: 5];
+  [slider setDoubleValue: 0.0];
+  [[window contentView] addSubview: slider];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (slider);
+  QuirkProbePixelAt (rep, 2, 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  /* Below the trough (its middle is the slider's), clear of the knob's
+     20pt. */
+  marks = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (24, 14 + 4, 220 - 24, 10));
+  for (x = 24; x < 220; x++)
+    {
+      QuirkProbeInk column = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (x, 14 + 4, 1, 10));
+
+      if (column.count > 0 && inMark == NO)
+        {
+          columns++;
+        }
+      inMark = column.count > 0;
+    }
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"slider-ticks"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%ld marks right of the knob (want 4), %ldpt high, from %ldpt below the top",
+    (long)columns, (long)marks.height, (long)marks.minY];
+  if (columns == 4 && marks.height >= 5 && marks.height <= 7)
+    {
+      [self pass: @"slider-tick-marks" detail: detail];
+    }
+  else
+    {
+      [self fail: @"slider-tick-marks" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7266,6 +7316,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkShapedButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
+  [self checkSliderTickMarks];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7350,6 +7401,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkShapedButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
+  [self checkSliderTickMarks];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

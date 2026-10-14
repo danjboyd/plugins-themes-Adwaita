@@ -2519,6 +2519,53 @@ GnomeThemeDrawTabLabel(NSString *label,
                                           nil,
                                           0.0);
     }
+
+  /* Tick marks (libs-gui draws none): GtkScale's marks, 1x6pt in the
+     foreground at 55%, 6pt from the trough on the cell's side of it, one
+     at each end of the knob's travel and evenly between. */
+  if ([sliderCell numberOfTickMarks] > 0)
+    {
+      NSInteger count = [sliderCell numberOfTickMarks];
+      BOOL after = ([sliderCell tickMarkPosition] == NSTickMarkBelow);
+      NSColor *markColor = GnomeThemeBlend (GnomeThemeColor (self, @"windowBackgroundColor",
+                                                             [NSColor windowBackgroundColor]),
+                                            GnomeThemeColor (self, @"GnomeThemeForegroundColor",
+                                                             [NSColor controlTextColor]),
+                                            0.55);
+      NSInteger i;
+
+      [markColor set];
+      for (i = 0; i < count; i++)
+        {
+          CGFloat t = (count > 1) ? (CGFloat)i / (count - 1) : 0.5;
+          NSRect mark;
+
+          if (horizontal)
+            {
+              /* On the trough's low-y side: below on screen unflipped,
+                 above it flipped. */
+              BOOL down = (after != flipped);
+              CGFloat x = floor (NSMinX (trackRect) + NSWidth (trackRect) * t);
+
+              mark = NSMakeRect (MIN (x, NSMaxX (trackRect) - 1.0),
+                                 down ? NSMinY (trackRect) - 6.0 - 6.0 : NSMaxY (trackRect) + 6.0,
+                                 1.0, 6.0);
+            }
+          else
+            {
+              CGFloat y = floor (NSMinY (trackRect) + NSHeight (trackRect) * t);
+
+              mark = NSMakeRect (after ? NSMaxX (trackRect) + 6.0 : NSMinX (trackRect) - 6.0 - 6.0,
+                                 MIN (y, NSMaxY (trackRect) - 1.0), 6.0, 1.0);
+            }
+          /* Outside the bar's rect, inside the slider. */
+          if ([cell controlView] != nil)
+            {
+              mark = NSIntersectionRect (mark, [[cell controlView] bounds]);
+            }
+          NSRectFill (mark);
+        }
+    }
 }
 
 /* libadwaita's slider knob: 20px, light in both styles (sliderKnobColor),
