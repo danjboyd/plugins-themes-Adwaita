@@ -2401,6 +2401,25 @@ GnomeThemeDrawTabLabel(NSString *label,
   [super drawProgressIndicator: progress withBounds: bounds withClip: rect atCount: count forValue: val];
 }
 
+/* An image view's frame (photo, grey bezel, groove) is GtkFrame's border:
+   1pt, the foreground at 15% (50% in high contrast), rounded 6pt, which
+   keeps the corners of an image 2pt inside clear of it. GNUstep drew NeXT
+   bevels, nearly invisible in the dark palette. The button style keeps
+   the theme's button. */
+- (void) drawBorderForImageFrameStyle: (NSImageFrameStyle)frameStyle
+                                frame: (NSRect)frame
+                                 view: (NSView *)view
+{
+  NSColor *border = GnomeThemeColor (self, @"GnomeThemeSeparatorColor", [NSColor gridColor]);
+
+  if (frameStyle == NSImageFrameNone || frameStyle == NSImageFrameButton)
+    {
+      [super drawBorderForImageFrameStyle: frameStyle frame: frame view: view];
+      return;
+    }
+  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (frame, 0.5, 0.5), 6.0, nil, border, 1.0);
+}
+
 - (NSRect) drawProgressIndicatorBezel: (NSRect)bounds withClip: (NSRect)rect
 {
   /* libadwaita's trough: the foreground at 15% over the window. */

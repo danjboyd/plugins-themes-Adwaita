@@ -6078,6 +6078,64 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* An image view's frame (photo, grey bezel, groove) is GtkFrame's
+   border: one line in the separator colour, the inside the window's. It
+   was NeXT's bevels: dark and light lines, nearly invisible in the dark
+   palette. */
+- (void) checkImageFrames
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 240, 80) title: @"Probe Image Frames"];
+  NSImageFrameStyle styles[3] = { NSImageFramePhoto, NSImageFrameGrayBezel, NSImageFrameGroove };
+  NSImageView *views[3];
+  NSUInteger windowRGB[3];
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok = YES;
+  int i;
+
+  for (i = 0; i < 3; i++)
+    {
+      views[i] = AUTORELEASE ([[NSImageView alloc] initWithFrame: NSMakeRect (10 + 75 * i, 10, 60, 60)]);
+      [views[i] setImageFrameStyle: styles[i]];
+      [[window contentView] addSubview: views[i]];
+    }
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 5, 5, windowRGB);
+  for (i = 0; i < 3; i++)
+    {
+      NSBitmapImageRep *rep = QuirkProbeRender (views[i]);
+      NSUInteger left[3], right[3], top[3], bottom[3], inside[3];
+
+      QuirkProbePixelAt (rep, 0, 30, left);
+      QuirkProbePixelAt (rep, 59, 30, right);
+      QuirkProbePixelAt (rep, 30, 0, top);
+      QuirkProbePixelAt (rep, 30, 59, bottom);
+      QuirkProbePixelAt (rep, 1, 30, inside);
+      /* The same line all round, against the window; nothing inside it. */
+      if (labs ((long)left[0] - (long)windowRGB[0]) < 8
+        || labs ((long)left[0] - (long)right[0]) > 2 || labs ((long)left[0] - (long)top[0]) > 2
+        || labs ((long)left[0] - (long)bottom[0]) > 2
+        || labs ((long)inside[0] - (long)windowRGB[0]) > 2)
+        {
+          ok = NO;
+        }
+      [detail appendFormat: @"%@ left %@ right %@ top %@ bottom %@ inside %@; ",
+        i == 0 ? @"photo" : (i == 1 ? @"grey bezel" : @"groove"),
+        QuirkProbeHex (left), QuirkProbeHex (right), QuirkProbeHex (top), QuirkProbeHex (bottom), QuirkProbeHex (inside)];
+    }
+  [self saveWindow: window named: @"image-frames"];
+  [window orderOut: nil];
+  [detail appendFormat: @"window %@", QuirkProbeHex (windowRGB)];
+  if (ok)
+    {
+      [self pass: @"image-frames" detail: detail];
+    }
+  else
+    {
+      [self fail: @"image-frames" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7488,6 +7546,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSplitViewDividers];
   [self checkBottomTabs];
   [self checkBorderlessPopUp];
+  [self checkImageFrames];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7576,6 +7635,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSplitViewDividers];
   [self checkBottomTabs];
   [self checkBorderlessPopUp];
+  [self checkImageFrames];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
