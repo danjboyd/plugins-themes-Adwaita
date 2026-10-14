@@ -1270,6 +1270,33 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
     }
 }
 
+/* NSBrowser's column titles (GNUstep's own Open panel, the font panel):
+   GSTheme's are white (windowFrameTextColor, the NeXT title bar's) on a
+   light grey bezel, so they didn't show (#72). GNOME has no browser; they
+   are drawn as the theme's table headers are, small bold text in the dim
+   header colour, straight on what is behind them. */
+- (NSColor *) browserHeaderTextColor
+{
+  return [self tableHeaderTextColorForState: GSThemeNormalState];
+}
+
+- (void) drawBrowserHeaderCell: (NSTableHeaderCell *)cell
+                     withFrame: (NSRect)rect
+                        inView: (NSView *)view
+{
+  (void)rect;
+  (void)view;
+  [cell setFont: GnomeThemePhase67HeaderFont (self)];
+  [cell setTextColor: [self browserHeaderTextColor]];
+}
+
+- (NSRect) browserHeaderDrawingRectForCell: (NSTableHeaderCell *)cell
+                                 withFrame: (NSRect)rect
+{
+  (void)cell;
+  return NSInsetRect (rect, 6.0, 2.0);
+}
+
 - (void) drawTableCornerView: (NSView *)cornerView
                     withClip: (NSRect)aRect
 {

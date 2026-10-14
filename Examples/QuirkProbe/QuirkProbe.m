@@ -543,6 +543,31 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
   return distance + (MAX ([a count], [b count]) - count) * 10;
 }
 
+/* Two columns of three rows, titled "Folder" and "Items". */
+@interface QuirkProbeBrowserDelegate : NSObject
+@end
+
+@implementation QuirkProbeBrowserDelegate
+- (NSInteger) browser: (NSBrowser *)browser numberOfRowsInColumn: (NSInteger)column
+{
+  return 3;
+}
+
+- (void) browser: (NSBrowser *)browser
+ willDisplayCell: (id)cell
+           atRow: (NSInteger)row
+          column: (NSInteger)column
+{
+  [cell setStringValue: [NSString stringWithFormat: @"Row %ld", (long)row]];
+  [cell setLeaf: column > 0];
+}
+
+- (NSString *) browser: (NSBrowser *)browser titleOfColumn: (NSInteger)column
+{
+  return column == 0 ? @"Folder" : @"Items";
+}
+@end
+
 @interface QuirkProbe ()
 - (void) after: (NSTimeInterval)delay perform: (SEL)selector;
 - (void) after: (NSTimeInterval)delay perform: (SEL)selector mode: (NSString *)mode;
@@ -5407,6 +5432,54 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* NSBrowser's column titles (GNUstep's own Open panel) are readable: dim
+   bold header text, well apart from what's behind it. They were white on
+   a light grey bezel (#72). */
+- (void) checkBrowserTitles
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Browser"];
+  NSBrowser *browser = AUTORELEASE ([[NSBrowser alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  QuirkProbeBrowserDelegate *delegate = AUTORELEASE ([QuirkProbeBrowserDelegate new]);
+  NSBitmapImageRep *rep;
+  NSRect titleFrame;
+  NSRect area;
+  NSUInteger fill[3];
+  QuirkProbeInk ink;
+  NSUInteger contrast;
+  NSString *detail;
+
+  [browser setDelegate: delegate];
+  [browser setTitled: YES];
+  [browser setMaxVisibleColumns: 2];
+  [[window contentView] addSubview: browser];
+  [browser loadColumnZero];
+  [browser selectRow: 0 inColumn: 0];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (browser);
+  titleFrame = [browser titleFrameOfColumn: 0];
+  /* In pixels from the top. */
+  area = NSMakeRect (NSMinX (titleFrame), [browser isFlipped] ? NSMinY (titleFrame)
+                     : NSHeight ([browser bounds]) - NSMaxY (titleFrame),
+                     NSWidth (titleFrame), NSHeight (titleFrame));
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (area) + 3, (NSInteger)NSMidY (area), fill);
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSInsetRect (area, 3, 2));
+  contrast = QuirkProbeContrast (ink, fill[0] + fill[1] + fill[2]);
+  [self saveWindow: window named: @"browser-titles"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"title %@ background %lu, strongest ink %lu from it",
+    NSStringFromRect (titleFrame), (unsigned long)(fill[0] + fill[1] + fill[2]), (unsigned long)contrast];
+  if (contrast >= 200)
+    {
+      [self pass: @"browser-titles" detail: detail];
+    }
+  else
+    {
+      [self fail: @"browser-titles" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6666,6 +6739,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSubmenuAtScreenEdge];
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
+  [self checkBrowserTitles];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6743,6 +6817,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSubmenuAtScreenEdge];
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
+  [self checkBrowserTitles];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
