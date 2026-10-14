@@ -22,7 +22,7 @@ Issues (each commit says "Fixes #n" or "Part of #n"):
 |---|---|---|
 | 69 | 182b5c8 | Disabled pop-up button titles dimmed |
 | 77 | 67da117 | Submenus flip left and stay on the screen |
-| 71 | caab687 | Part of: GTK 4's indicators for the named images, and storage on 0.32. libs-gui shows no indicator for the sort descriptors (upstream draft 16). **Decision:** branch `sort-indicator-from-descriptors` (ac8b2b7, on 466f0e1) adds the theme workaround that shows it, as Cocoa does, and says "Fixes #71" |
+| 71 | caab687 | Part of: GTK 4's indicators for the named images, and storage on 0.32. libs-gui shows no indicator for the sort descriptors (upstream draft 16). **Decision:** branch `sort-indicator-from-descriptors` (one commit on top of main, rebased and passing) adds the theme workaround that shows it, as Cocoa does, and says "Fixes #71" |
 | 70 | 190024f | Non-editable combo boxes keep their look when focused (no field editor); upstream draft 17 for `-selectItemAtIndex:` |
 | 72 | 0f8786a | Browser titles readable; the "Window" X windows are libs-gui's unmapped image caches, not a bug |
 | 68 | 99ff339 | Tinted images keep their bitmaps |
@@ -33,7 +33,10 @@ compact tab rows in nib windows (f0ecc09), browser columns and chevrons
 (cd97cee), disclosure/help/circular buttons (cc4052d), editable combo box
 weight (dfc5865), level indicators, ratings, pulse and spinner (c1a25ec),
 slider tick marks (a2ea7fb), split view dividers (28c7a12), bottom tabs and
-the dark tab frame (855a750).
+the dark tab frame (855a750), borderless pop-ups as flat drop-downs
+(a9db5c8), image view frames (ace6bd8), rulers (0bd33b2, c0f5861), the
+NeXT arrow on pop-up items from Gorm files (4131e12), and the high
+contrast level trough (16ca68c, f53687f).
 
 Still unthemed, left for a decision: GNUstep's About panel (AdwAboutDialog
 looks different), NSDatePicker (GNOME has none), NSPathControl's arrows,
@@ -59,6 +62,13 @@ New traps:
   in every palette).
 - `make check-quirks` stops at the first configuration that fails; read
   every SUMMARY line before committing.
+- `-[NSView cacheDisplayInRect:toBitmapImageRep:]` in GNUstep reads the
+  window's pixels back (`GSReadRect`); it doesn't draw the view again.
+  The ruler relies on that; QuirkProbe's renders do too, after
+  `-display`.
+- The shell's `DISPLAY` is `:0`, Dan's desktop. Every helper that runs or
+  screenshots something must set `DISPLAY` itself, including a
+  background `import`.
 
 ## Where things stand
 
