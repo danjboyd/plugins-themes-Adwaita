@@ -3607,6 +3607,11 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
   NSRectFill (aRect);
   [ruler drawHashMarksAndLabelsInRect: aRect];
   [ruler drawMarkersInRect: aRect];
+  /* Only a screen has pixels to read back (not a print context). */
+  if ([[NSGraphicsContext currentContext] isDrawingToScreen] == NO)
+    {
+      return;
+    }
   rep = [ruler bitmapImageRepForCachingDisplayInRect: aRect];
   if (rep != nil)
     {
