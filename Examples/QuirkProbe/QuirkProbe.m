@@ -5353,6 +5353,19 @@ QuirkProbeHex(const NSUInteger rgb[3])
   [table setIndicatorImage: down inTableColumn: name];
   [window display];
   ok = [self sortIndicatorIn: [table headerView] ascending: NO detail: detail] && ok;
+
+  /* No image set: the indicator follows the sort descriptors, as in Cocoa. */
+  [table setIndicatorImage: nil inTableColumn: name];
+  [name setSortDescriptorPrototype: AUTORELEASE ([[NSSortDescriptor alloc] initWithKey: @"name" ascending: YES])];
+  [size setSortDescriptorPrototype: AUTORELEASE ([[NSSortDescriptor alloc] initWithKey: @"size" ascending: YES])];
+  [detail appendString: @"from descriptors, "];
+  [table setSortDescriptors: [NSArray arrayWithObject: [name sortDescriptorPrototype]]];
+  [window display];
+  ok = [self sortIndicatorIn: [table headerView] ascending: YES detail: detail] && ok;
+  [detail appendString: @"from descriptors, "];
+  [table setSortDescriptors: [NSArray arrayWithObject: [[name sortDescriptorPrototype] reversedSortDescriptor]]];
+  [window display];
+  ok = [self sortIndicatorIn: [table headerView] ascending: NO detail: detail] && ok;
   [window orderOut: nil];
 
   if (ok && up != nil && down != nil)

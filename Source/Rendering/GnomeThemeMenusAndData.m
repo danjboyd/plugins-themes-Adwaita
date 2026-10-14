@@ -1216,6 +1216,18 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
       NSTableHeaderCell *cell = (NSTableHeaderCell *)[column headerCell];
       NSImage *indicator = [tableView indicatorImageInTableColumn: column];
       BOOL ascending = YES;
+      NSSortDescriptor *primary = ([[tableView sortDescriptors] count] > 0)
+        ? [[tableView sortDescriptors] objectAtIndex: 0] : nil;
+
+      /* As Cocoa: with no image of its own, the column the table is sorted
+         by shows the indicator for its primary sort descriptor. libs-gui
+         shows none (Docs/upstream-issues/17-…); remove when it does. */
+      if (indicator == nil && primary != nil && [primary key] != nil
+        && [[primary key] isEqual: [[column sortDescriptorPrototype] key]])
+        {
+          indicator = [NSImage imageNamed: [primary ascending]
+            ? @"NSAscendingSortIndicator" : @"NSDescendingSortIndicator"];
+        }
 
       drawingRect.size.width = [column width];
       [cell setHighlighted: (column == highlighted || [tableView isColumnSelected: i])];
@@ -1932,6 +1944,20 @@ GnomeThemeTableKeepsIndicatorImages(void)
     {
       objc_setAssociatedObject (aTableColumn, &GnomeThemeIndicatorImageKey,
                                 anImage, OBJC_ASSOCIATION_RETAIN);
+    }
+  [[(NSTableView *)self headerView] setNeedsDisplay: YES];
+}
+
+/* The header shows the sort indicator (see -drawTableHeaderRect:inView:),
+   so it redraws when the sort descriptors change; libs-gui doesn't ask. */
+- (void) _overrideNSTableViewMethod_setSortDescriptors: (NSArray *)sortDescriptors
+{
+  typedef void (*SetSortIMP)(id, SEL, NSArray *);
+  SetSortIMP originalIMP = (SetSortIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, sortDescriptors);
     }
   [[(NSTableView *)self headerView] setNeedsDisplay: YES];
 }
