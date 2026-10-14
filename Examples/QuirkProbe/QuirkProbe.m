@@ -5178,6 +5178,79 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A submenu that doesn't fit right of its menu opens to the left, its own
+   submenus go on left, and one that would leave the bottom of the screen is
+   moved up into it, as GTK places submenus. GNUstep opened them right
+   whatever the screen: at the right edge they ran off (#77). */
+- (void) checkSubmenuAtScreenEdge
+{
+  NSRect visible = [[NSScreen mainScreen] visibleFrame];
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Edge"]);
+  NSMenu *submenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Help"]);
+  NSMenu *nested = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"More"]);
+  NSMenuItem *item;
+  NSWindow *menuWindow, *submenuWindow;
+  NSRect menuFrame, submenuFrame, nestedFrame;
+  NSPoint right, left, bottom, deeper;
+  BOOL rightOK, leftOK, bottomOK, deeperOK;
+  NSString *detail;
+
+  [nested addItemWithTitle: @"Report a Bug in Something Long" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"Check for Updates Now" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"Documentation" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"Keyboard Shortcuts" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"Release Notes" action: NULL keyEquivalent: @""];
+  item = [submenu addItemWithTitle: @"More" action: NULL keyEquivalent: @""];
+  [submenu setSubmenu: nested forItem: item];
+  [menu addItemWithTitle: @"Preferences" action: NULL keyEquivalent: @""];
+  item = [menu addItemWithTitle: @"Help" action: NULL keyEquivalent: @""];
+  [menu setSubmenu: submenu forItem: item];
+  [menu sizeToFit];
+  [submenu sizeToFit];
+  [nested sizeToFit];
+  menuWindow = [[menu menuRepresentation] window];
+  submenuWindow = [[submenu menuRepresentation] window];
+  menuFrame = [menuWindow frame];
+  submenuFrame = [submenuWindow frame];
+  nestedFrame = [[[nested menuRepresentation] window] frame];
+
+  /* At the left: opens to the right, as before. */
+  [menuWindow setFrameOrigin: NSMakePoint (NSMinX (visible) + 20, NSMaxY (visible) - NSHeight (menuFrame) - 20)];
+  menuFrame = [menuWindow frame];
+  left = [[menu menuRepresentation] locationForSubmenu: submenu];
+  leftOK = left.x >= NSMaxX (menuFrame) - 10;
+
+  /* 10pt from the right edge: opens to the left, on the screen. */
+  [menuWindow setFrameOrigin: NSMakePoint (NSMaxX (visible) - NSWidth (menuFrame) - 10, NSMaxY (visible) - NSHeight (menuFrame) - 20)];
+  menuFrame = [menuWindow frame];
+  right = [[menu menuRepresentation] locationForSubmenu: submenu];
+  rightOK = right.x >= NSMinX (visible) && right.x + NSWidth (submenuFrame) <= NSMinX (menuFrame) + 10;
+
+  /* Its submenu goes on left, though there's room to the right of it. */
+  [submenuWindow setFrameOrigin: right];
+  deeper = [[submenu menuRepresentation] locationForSubmenu: nested];
+  deeperOK = deeper.x + NSWidth (nestedFrame) <= right.x + 10;
+
+  /* At the bottom: moved up onto the screen. */
+  [menuWindow setFrameOrigin: NSMakePoint (NSMinX (visible) + 20, NSMinY (visible))];
+  bottom = [[menu menuRepresentation] locationForSubmenu: submenu];
+  bottomOK = bottom.y >= NSMinY (visible);
+
+  detail = [NSString stringWithFormat: @"left of screen: submenu at x %.0f (menu ends %.0f); "
+    @"right edge: x %.0f to %.0f (menu starts %.0f, screen ends %.0f); nested ends %.0f; bottom: y %.0f (screen from %.0f)",
+    left.x, NSMaxX ([menuWindow frame]), right.x, right.x + NSWidth (submenuFrame),
+    NSMaxX (visible) - NSWidth (menuFrame) - 10, NSMaxX (visible),
+    deeper.x + NSWidth (nestedFrame), bottom.y, NSMinY (visible)];
+  if (leftOK && rightOK && deeperOK && bottomOK)
+    {
+      [self pass: @"submenu-screen-edge" detail: detail];
+    }
+  else
+    {
+      [self fail: @"submenu-screen-edge" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6434,6 +6507,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpMenuArrowImage];
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
+  [self checkSubmenuAtScreenEdge];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6508,6 +6582,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpMenuArrowImage];
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
+  [self checkSubmenuAtScreenEdge];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];

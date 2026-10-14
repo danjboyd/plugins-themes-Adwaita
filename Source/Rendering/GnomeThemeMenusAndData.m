@@ -1575,6 +1575,56 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   originalIMP (self, _cmd, index);
 }
 
+/* A submenu that doesn't fit right of its menu opens to the left of it,
+   and one that would leave the screen at the bottom (or top) is moved up
+   (or down) into it, as GTK places a submenu popover; GNUstep put it right
+   of the menu whatever the screen, so at the right edge it ran off (#77).
+   Once a submenu has gone left, its own submenus go left first too. */
+static NSPoint
+GnomeThemeSubmenuLocationOnScreen(NSMenuView *menuView, NSMenu *aSubmenu, NSPoint location)
+{
+  NSWindow *window = [menuView window];
+  NSRect frame = [window frame];
+  NSRect submenuFrame = [[[aSubmenu menuRepresentation] window] frame];
+  NSScreen *screen = [window screen];
+  NSRect visible;
+  CGFloat overlap = NSMaxX (frame) - location.x;
+  CGFloat leftX = NSMinX (frame) + overlap - NSWidth (submenuFrame);
+  NSMenu *supermenu = [[menuView menu] supermenu];
+  NSMenuView *superView = (NSMenuView *)[supermenu menuRepresentation];
+  BOOL goingLeft = NO;
+
+  if (screen == nil)
+    {
+      screen = [NSScreen mainScreen];
+    }
+  if (screen == nil || NSIsEmptyRect (submenuFrame))
+    {
+      return location;
+    }
+  visible = [screen visibleFrame];
+  if ([superView isKindOfClass: [NSMenuView class]] && [superView isHorizontal] == NO
+    && NSMinX ([[superView window] frame]) > NSMinX (frame))
+    {
+      goingLeft = YES;
+    }
+
+  if (goingLeft && leftX >= NSMinX (visible))
+    {
+      location.x = leftX;
+    }
+  else if (location.x + NSWidth (submenuFrame) > NSMaxX (visible)
+    && leftX >= NSMinX (visible))
+    {
+      location.x = leftX;
+    }
+  /* Fits on neither side: against the screen's right edge, over the menu. */
+  location.x = MAX (NSMinX (visible), MIN (location.x, NSMaxX (visible) - NSWidth (submenuFrame)));
+  location.y = MIN (location.y, NSMaxY (visible) - NSHeight (submenuFrame));
+  location.y = MAX (location.y, NSMinY (visible));
+  return location;
+}
+
 /* The main menu opens under its button, right edges aligned, as GNOME's
    main-menu popover does; GNUstep lines submenus up on the item's left edge,
    which at the end of the bar would hang past the window. */
@@ -1597,6 +1647,10 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
       submenuFrame = [[[aSubmenu menuRepresentation] window] frame];
       location.x = [[menuView window] convertBaseToScreen: NSMakePoint (NSMaxX (itemRect), 0.0)].x
         - NSWidth (submenuFrame);
+    }
+  else if ([menuView isHorizontal] == NO && aSubmenu != nil)
+    {
+      location = GnomeThemeSubmenuLocationOnScreen (menuView, aSubmenu, location);
     }
   return location;
 }
