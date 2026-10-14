@@ -5715,6 +5715,49 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* An editable combo box is an entry, its text in the regular weight the
+   field editor types in; only a drop-down (not editable) has a button's
+   bold label. Both were bold. Compares the ink of the same text. */
+- (void) checkEditableComboWeight
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 110) title: @"Probe Combo Weight"];
+  NSComboBox *editable = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 60, 220, 34)]);
+  NSComboBox *dropDown = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 14, 220, 34)]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk regular, bold;
+  NSString *detail;
+
+  [editable addItemWithObjectValue: @"Largest files"];
+  [editable setStringValue: @"Largest files"];
+  [dropDown addItemWithObjectValue: @"Largest files"];
+  [dropDown setStringValue: @"Largest files"];
+  [dropDown setEditable: NO];
+  [[window contentView] addSubview: editable];
+  [[window contentView] addSubview: dropDown];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (editable);
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  regular = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (6, 4, 150, [rep pixelsHigh] - 8));
+  rep = QuirkProbeRender (dropDown);
+  bold = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (6, 4, 150, [rep pixelsHigh] - 8));
+  QuirkProbeInkBackground = 750;
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"text ink %lu px (%ldpt wide) editable, %lu px (%ldpt) drop-down",
+    (unsigned long)regular.count, (long)regular.width, (unsigned long)bold.count, (long)bold.width];
+  if (regular.count > 0 && bold.count * 10 >= regular.count * 12 && regular.width < bold.width)
+    {
+      [self pass: @"editable-combo-weight" detail: detail];
+    }
+  else
+    {
+      [self fail: @"editable-combo-weight" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7119,6 +7162,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserTitles];
   [self checkBrowserLists];
   [self checkShapedButtons];
+  [self checkEditableComboWeight];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7201,6 +7245,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserTitles];
   [self checkBrowserLists];
   [self checkShapedButtons];
+  [self checkEditableComboWeight];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

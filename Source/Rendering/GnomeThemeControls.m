@@ -4420,7 +4420,11 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   if ([displayString length] > 0)
     {
       attributes = [[cell _nonAutoreleasedTypingAttributes] mutableCopy];
-      font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName], (NSCell *)self, controlView);
+      /* Bold is a drop-down's, a button's label; a combo box that can be
+         edited is an entry, in the field editor's regular weight. */
+      font = GnomeThemeIsDropDownComboBox (controlView)
+        ? GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName], (NSCell *)self, controlView)
+        : nil;
       if (font != nil)
         {
           [attributes setObject: font forKey: NSFontAttributeName];
