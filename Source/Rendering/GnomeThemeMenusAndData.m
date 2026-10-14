@@ -1213,7 +1213,7 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
   for (i = first; i <= last; i++)
     {
       NSTableColumn *column = [columns objectAtIndex: i];
-      NSTableHeaderCell *cell = [column headerCell];
+      NSTableHeaderCell *cell = (NSTableHeaderCell *)[column headerCell];
       NSImage *indicator = [tableView indicatorImageInTableColumn: column];
       BOOL ascending = YES;
 

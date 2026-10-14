@@ -141,6 +141,13 @@ QuirkProbeIsFocusBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
   return blue > 200 && blue > red + 30;
 }
 
+/* The accent in any palette: bluer than it is red or green. */
+static BOOL
+QuirkProbeIsAccentBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return blue > red + 30 && blue > green + 10;
+}
+
 static NSBitmapImageRep *
 QuirkProbeRender (NSView *view)
 {
@@ -5329,6 +5336,77 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A combo box that can't be edited is a GtkDropDown: focused by Tab it
+   keeps its bold label, with no field editor (no cursor, no lighter strip,
+   and its text didn't vanish), shows the ring after the key, and Tab moves
+   on. GNUstep started the field editor (#70). */
+- (void) checkDropDownComboFocus
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 120) title: @"Probe Drop-Down Focus"];
+  NSTextField *field = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (20, 70, 220, 34)]);
+  NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 20, 220, 34)]);
+  NSString *tab = @"\t";
+  NSEvent *tabKey;
+  QuirkProbeInk before, after, ring;
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  BOOL comboFocused, noEditor, movedOn;
+  NSString *detail;
+
+  [combo addItemsWithObjectValues: [NSArray arrayWithObjects: @"Largest files", @"Duplicates", nil]];
+  [combo selectItemAtIndex: 0];
+  [combo setEditable: NO];
+  [field setNextKeyView: combo];
+  [combo setNextKeyView: field];
+  [[window contentView] addSubview: field];
+  [[window contentView] addSubview: combo];
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: field];
+  [window display];
+  rep = QuirkProbeRender (combo);
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  before = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (6, 6, 150, [rep pixelsHigh] - 12));
+
+  tabKey = [NSEvent keyEventWithType: NSKeyDown location: NSZeroPoint modifierFlags: 0
+                           timestamp: 0 windowNumber: [window windowNumber] context: nil
+                          characters: tab charactersIgnoringModifiers: tab
+                           isARepeat: NO keyCode: 0x17];
+  [NSApp sendEvent: tabKey];
+  [window display];
+  comboFocused = ([window firstResponder] == combo);
+  noEditor = ([combo currentEditor] == nil);
+  rep = QuirkProbeRender (combo);
+  after = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (6, 6, 150, [rep pixelsHigh] - 12));
+  QuirkProbeInkBackground = 750;
+  ring = QuirkProbeMeasure (rep, QuirkProbeIsAccentBlue);
+  [self saveWindow: window named: @"dropdown-focus"];
+  [NSApp sendEvent: tabKey];
+  movedOn = ([window firstResponder] != combo);
+  /* Leave focus-visible off for later checks. */
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseUp);
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"after Tab: %@ first responder, field editor %@; "
+    @"label ink %ldx%ld (%lu px) closed, %ldx%ld (%lu px) focused; %lu ring pixels; next Tab %@",
+    comboFocused ? @"combo box" : @"not the combo box", noEditor ? @"none" : @"up",
+    (long)before.width, (long)before.height, (unsigned long)before.count,
+    (long)after.width, (long)after.height, (unsigned long)after.count,
+    (unsigned long)ring.count, movedOn ? @"moved on" : @"stayed"];
+  if (comboFocused && noEditor && movedOn && before.count > 0
+    && labs ((long)before.width - (long)after.width) <= 1
+    && labs ((long)before.count - (long)after.count) * 20 <= (long)before.count
+    && ring.count > 0)
+    {
+      [self pass: @"dropdown-combo-focus" detail: detail];
+    }
+  else
+    {
+      [self fail: @"dropdown-combo-focus" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6587,6 +6665,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
   [self checkSortIndicator];
+  [self checkDropDownComboFocus];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6663,6 +6742,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
   [self checkSortIndicator];
+  [self checkDropDownComboFocus];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];

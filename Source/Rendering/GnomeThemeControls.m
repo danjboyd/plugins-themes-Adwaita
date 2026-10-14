@@ -738,6 +738,8 @@ GnomeThemeDrawCancelGlyph(NSRect rect, NSColor *fillColor, NSColor *markColor)
   [path fill];
 }
 
+static BOOL GnomeThemeIsDropDownComboBox(id view);
+
 static NSString *
 GnomeThemeComboBoxDisplayString(NSComboBoxCell *cell)
 {
@@ -4221,7 +4223,10 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
   GnomeTheme *theme = GnomeThemeActiveTheme ();
   BOOL enabled = [(NSCell *)cell isEnabled] && GnomeThemeViewEnabled (controlView);
-  BOOL focused = (GnomeThemeViewHasFocus (controlView)
+  /* A drop-down's ring shows after a key press, as a button's. */
+  BOOL focused = ((GnomeThemeIsDropDownComboBox (controlView)
+                   ? GnomeThemeViewShowsFocusRing (controlView)
+                   : GnomeThemeViewHasFocus (controlView))
     || [(NSCell *)cell isHighlighted]) && enabled;
   NSRect buttonRect = GnomeThemeComboBoxButtonRect (cellFrame);
   NSColor *fillColor = nil;
@@ -4405,6 +4410,70 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   [controlView displayIfNeededIgnoringOpacity];
 
   (void)cellFrame;
+}
+
+/* A combo box that can't be edited is libadwaita's GtkDropDown: a button
+   with a bold label, and no text cursor. GNUstep started the field editor
+   when it took the focus (a click or Tab), which drew the text in the
+   editor's regular weight over a lighter strip, or nothing at all when the
+   cell had no string value yet (#70). It now keeps the focus itself, with
+   a ring after a key press as a button does, and Space, Return or an
+   arrow key opens its list. */
+static BOOL
+GnomeThemeIsDropDownComboBox(id view)
+{
+  return [view isKindOfClass: [NSComboBox class]] && [(NSComboBox *)view isEditable] == NO;
+}
+
+- (void) _overrideNSComboBoxMethod_selectText: (id)sender
+{
+  typedef void (*SelectTextIMP)(id, SEL, id);
+  SelectTextIMP originalIMP = (SelectTextIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBox class]);
+
+  if (GnomeThemeIsDropDownComboBox (self))
+    {
+      [(NSView *)self setNeedsDisplay: YES];
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, sender);
+    }
+}
+
+- (BOOL) _overrideNSComboBoxMethod_resignFirstResponder
+{
+  typedef BOOL (*ResignIMP)(id, SEL);
+  ResignIMP originalIMP = (ResignIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBox class]);
+  BOOL resigned = (originalIMP != NULL) ? originalIMP (self, _cmd) : YES;
+
+  if (resigned && GnomeThemeIsDropDownComboBox (self))
+    {
+      [(NSView *)self setNeedsDisplay: YES];
+    }
+  return resigned;
+}
+
+- (void) _overrideNSComboBoxMethod_keyDown: (NSEvent *)theEvent
+{
+  typedef void (*KeyDownIMP)(id, SEL, NSEvent *);
+  KeyDownIMP originalIMP = (KeyDownIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBox class]);
+  NSComboBox *comboBox = (NSComboBox *)self;
+  NSString *characters = [theEvent charactersIgnoringModifiers];
+  unichar key = ([characters length] > 0) ? [characters characterAtIndex: 0] : 0;
+
+  if (GnomeThemeIsDropDownComboBox (self) && [comboBox isEnabled]
+    && ([theEvent modifierFlags] & (NSCommandKeyMask | NSAlternateKeyMask | NSControlKeyMask)) == 0
+    && (key == ' ' || key == NSCarriageReturnCharacter || key == NSEnterCharacter
+      || key == NSDownArrowFunctionKey || key == NSUpArrowFunctionKey))
+    {
+      [[comboBox cell] _performClickWithFrame: [comboBox bounds] inView: comboBox];
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, theEvent);
+    }
 }
 
 - (void) _overrideNSComboBoxCellMethod__didClickWithinButton: (id)sender
