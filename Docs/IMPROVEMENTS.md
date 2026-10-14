@@ -103,6 +103,7 @@ it was found. Compare against the libadwaita reference with
 | Sliders drew no tick marks (`setNumberOfTickMarks:`; libs-gui has no drawing for them) | GtkScale's marks: 1x6pt lines in the foreground at 55%, 6pt from the trough on the cell's tick mark side, one at each end of the knob's travel and evenly between |
 | Split view dividers were NeXT's dimple (thick and pane splitter styles) or a line in whatever colour was set (thin) | GtkPaned's separators: a thin divider is a 1pt line in the separator colour (the foreground at 15%), a thick one GtkPaned's wide handle, a line at each edge with the window between |
 | Bottom tabs (`NSBottomTabsBezelBorder`) kept GNUstep's curved NeXT tabs; in the dark palette a tab view's frame and the line under its tabs all but vanished (controlShadowColor blended toward the window) | bottom tabs are the top tabs' GtkNotebook row below the content, the line and the selected tab's underline on the content's side; the frame and line are the separator colour, GtkNotebook's border (the foreground at 15%, 50% in high contrast). Left and right tabs keep GNUstep's |
+| A borderless pop-up button (`setBordered: NO`, as a table's pop-up cells usually are) drew a full button, making rows tall and busy: libs-gui's NSPopUpButtonCell asks for its bezel whether or not it is bordered | libadwaita's flat drop-down: its title and chevron on what is behind it, the pressed fill only while pressed |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

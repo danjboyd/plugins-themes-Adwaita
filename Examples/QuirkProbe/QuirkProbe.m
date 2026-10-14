@@ -6033,6 +6033,51 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A borderless pop-up button (as a table's pop-up cells are) is a flat
+   drop-down: its title and chevron on what is behind it, no button fill.
+   It drew a full button. A bordered one keeps its fill. */
+- (void) checkBorderlessPopUp
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 100) title: @"Probe Borderless Pop-Up"];
+  NSPopUpButton *flat = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 54, 200, 34) pullsDown: NO]);
+  NSPopUpButton *bordered = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 10, 200, 34) pullsDown: NO]);
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], flatRGB[3], borderedRGB[3];
+  QuirkProbeInk title;
+  BOOL ok;
+  NSString *detail;
+
+  [flat addItemWithTitle: @"High"];
+  [flat setBordered: NO];
+  [bordered addItemWithTitle: @"High"];
+  [[window contentView] addSubview: flat];
+  [[window contentView] addSubview: bordered];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender ([window contentView]);
+  QuirkProbePixelAt (rep, 5, 5, windowRGB);
+  /* Inside each button, left of its title. */
+  QuirkProbePixelAt (rep, 24, 100 - 71, flatRGB);
+  QuirkProbePixelAt (rep, 24, 100 - 27, borderedRGB);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (20, 100 - 88, 200, 34));
+  QuirkProbeInkBackground = 750;
+  [window orderOut: nil];
+
+  ok = labs ((long)flatRGB[0] - (long)windowRGB[0]) <= 2 && labs ((long)borderedRGB[0] - (long)windowRGB[0]) >= 6
+    && title.count > 0;
+  detail = [NSString stringWithFormat: @"window %@; inside the borderless one %@, the bordered one %@; borderless title ink %lu px",
+    QuirkProbeHex (windowRGB), QuirkProbeHex (flatRGB), QuirkProbeHex (borderedRGB), (unsigned long)title.count];
+  if (ok)
+    {
+      [self pass: @"borderless-popup" detail: detail];
+    }
+  else
+    {
+      [self fail: @"borderless-popup" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7442,6 +7487,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
   [self checkBottomTabs];
+  [self checkBorderlessPopUp];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7529,6 +7575,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
   [self checkBottomTabs];
+  [self checkBorderlessPopUp];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

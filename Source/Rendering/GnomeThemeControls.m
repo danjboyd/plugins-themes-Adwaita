@@ -1994,6 +1994,18 @@ GnomeThemeDrawTabLabel(NSString *label,
       isDefaultButton = ([[view window] defaultButtonCell] == cell);
     }
 
+  /* A borderless pop-up button (a table's pop-up cells, mostly) is
+     libadwaita's flat drop-down: no fill but while pressed. libs-gui's
+     NSPopUpButtonCell asks for its bezel whether or not it is bordered. */
+  if (popupButton && [cell isBordered] == NO)
+    {
+      if (highlighted && disabled == NO)
+        {
+          GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, pressedFill, nil, 0.0);
+        }
+      return;
+    }
+
   /* libadwaita's buttons have no outline; high contrast gives them one,
      the foreground at 50% (40% opacity disabled), but not the accent
      ones. */
