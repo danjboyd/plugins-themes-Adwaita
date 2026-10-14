@@ -1290,6 +1290,62 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
   [cell setTextColor: [self browserHeaderTextColor]];
 }
 
+/* A browser's columns are lists: GNUstep fills their rows with
+   controlColor (-[NSBrowser backgroundColor] is fixed), grey under rows
+   that end on the column's scroll view, white (#303030 dark). GNOME's
+   lists are the view's colour, rows and all: before the browser draws,
+   its columns' matrices and scroll views get the list colour. (Not by
+   overriding NSBrowser's methods: installing an override initializes
+   the class while the theme loads, and +[NSBrowser initialize] makes its
+   title cell, which fixed the app's system font before the theme's.) */
+- (void) drawBrowserRect: (NSRect)rect
+                  inView: (NSView *)view
+        withScrollerRect: (NSRect)scrollerRect
+              columnSize: (NSSize)columnSize
+{
+  NSBrowser *browser = (NSBrowser *)view;
+  NSColor *list = GnomeThemeColor (self, @"rowBackgroundColor", [NSColor controlBackgroundColor]);
+  NSInteger column;
+
+  [super drawBrowserRect: rect inView: view withScrollerRect: scrollerRect columnSize: columnSize];
+  for (column = 0; column <= [browser lastColumn]; column++)
+    {
+      NSMatrix *matrix = [browser matrixInColumn: column];
+      NSScrollView *scrollView = [matrix enclosingScrollView];
+
+      if (matrix != nil && [[matrix backgroundColor] isEqual: list] == NO)
+        {
+          [matrix setBackgroundColor: list];
+        }
+      if (scrollView != nil && [[scrollView backgroundColor] isEqual: list] == NO)
+        {
+          [scrollView setBackgroundColor: list];
+        }
+    }
+}
+
+/* A browser row with more inside: GtkTreeExpander's pan-end chevron
+   (16pt) for a row that has children, in the text colour, white on the
+   selected row's accent; GNUstep's was a NeXT 3D arrow. */
+- (NSImage *) branchImage
+{
+  NSImage *image = [NSImage imageNamed: @"GnomeThemeBranch-symbolic"];
+
+  return image != nil
+    ? GnomeThemeTintedImage (image, GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]))
+    : [super branchImage];
+}
+
+- (NSImage *) highlightedBranchImage
+{
+  NSImage *image = [NSImage imageNamed: @"GnomeThemeBranch-symbolic"];
+
+  return image != nil
+    ? GnomeThemeTintedImage (image, GnomeThemeColor (self, @"selectedControlTextColor",
+                                                     [NSColor selectedControlTextColor]))
+    : [super highlightedBranchImage];
+}
+
 - (NSRect) browserHeaderDrawingRectForCell: (NSTableHeaderCell *)cell
                                  withFrame: (NSRect)rect
 {

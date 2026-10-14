@@ -5573,6 +5573,69 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A browser's columns are GNOME lists: rows and the space below them in
+   the list colour (rows were controlColor, grey, over a white column), and
+   a row with more inside ends in GtkTreeExpander's pan-end chevron (about
+   6x10) in the text colour, not NeXT's 3D arrow. */
+- (void) checkBrowserLists
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Browser Lists"];
+  NSBrowser *browser = AUTORELEASE ([[NSBrowser alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  QuirkProbeBrowserDelegate *delegate = AUTORELEASE ([QuirkProbeBrowserDelegate new]);
+  NSMatrix *matrix;
+  NSScrollView *scrollView;
+  NSBitmapImageRep *rep;
+  NSRect row1, visible;
+  NSUInteger rowRGB[3], emptyRGB[3];
+  NSInteger y;
+  QuirkProbeInk chevron;
+  BOOL coloursOK, chevronOK;
+  NSString *detail;
+
+  [browser setDelegate: delegate];
+  [browser setTitled: NO];
+  [browser setMaxVisibleColumns: 2];
+  [[window contentView] addSubview: browser];
+  [browser loadColumnZero];
+  [browser selectRow: 0 inColumn: 0];
+  [window orderFront: nil];
+  [window display];
+  matrix = [browser matrixInColumn: 0];
+  scrollView = [matrix enclosingScrollView];
+  rep = QuirkProbeRender ([scrollView contentView]);
+  visible = [[scrollView contentView] bounds];
+  row1 = [matrix cellFrameAtRow: 1 column: 0];
+  y = (NSInteger)NSMidY ([matrix convertRect: row1 toView: [scrollView contentView]]) - (NSInteger)NSMinY (visible);
+  if ([[scrollView contentView] isFlipped] == NO)
+    {
+      y = [rep pixelsHigh] - 1 - y;
+    }
+  /* The row, between its text and its chevron; the column below the
+     rows. */
+  QuirkProbePixelAt (rep, [rep pixelsWide] / 2, y, rowRGB);
+  QuirkProbePixelAt (rep, [rep pixelsWide] / 2, [rep pixelsHigh] - 4, emptyRGB);
+  QuirkProbeInkBackground = rowRGB[0] + rowRGB[1] + rowRGB[2];
+  chevron = QuirkProbeMeasureIn (rep, QuirkProbeIsInk,
+                                 NSMakeRect ([rep pixelsWide] - 24, y - 9, 22, 18));
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"browser-lists"];
+  [window orderOut: nil];
+
+  coloursOK = labs ((long)rowRGB[0] - (long)emptyRGB[0]) <= 2 && labs ((long)rowRGB[2] - (long)emptyRGB[2]) <= 2;
+  chevronOK = chevron.count > 0 && chevron.width >= 4 && chevron.width <= 8
+    && chevron.height >= 8 && chevron.height <= 12;
+  detail = [NSString stringWithFormat: @"row %@, column below the rows %@; chevron ink %ldx%ld",
+    QuirkProbeHex (rowRGB), QuirkProbeHex (emptyRGB), (long)chevron.width, (long)chevron.height];
+  if (coloursOK && chevronOK)
+    {
+      [self pass: @"browser-lists" detail: detail];
+    }
+  else
+    {
+      [self fail: @"browser-lists" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6975,6 +7038,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
+  [self checkBrowserLists];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7055,6 +7119,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
+  [self checkBrowserLists];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
