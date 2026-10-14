@@ -46,13 +46,18 @@ QuirkProbeNibMetricsWindow(NSButton **buttonOut, NSTabView **tabViewOut)
   NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10, 10, 120, 32)]);
   NSTabView *tabView = AUTORELEASE ([[NSTabView alloc] initWithFrame: NSMakeRect (10, 50, 300, 140)]);
   NSTabViewItem *item = AUTORELEASE ([[NSTabViewItem alloc] initWithIdentifier: @"one"]);
+  NSTabViewItem *second = AUTORELEASE ([[NSTabViewItem alloc] initWithIdentifier: @"two"]);
 
   [window setTitle: @"QuirkProbe Nib Metrics"];
   [button setTitle: @"Apply"];
   [button setBezelStyle: NSRoundedBezelStyle];
   [[window contentView] addSubview: button];
-  [item setLabel: @"General"];
+  /* GNUstep's Page Layout panel's first two tabs; descenders, to see them
+     clear the underline. */
+  [item setLabel: @"Page Attributes"];
   [tabView addTabViewItem: item];
+  [second setLabel: @"Custom Paper Size"];
+  [tabView addTabViewItem: second];
   [[window contentView] addSubview: tabView];
   if (buttonOut != NULL)
     {
@@ -98,6 +103,50 @@ QuirkProbeNibMetricsDescription(NSButton *button, NSTabView *tabView)
 }
 
 @implementation QuirkProbe (NibMetrics)
+
+/* In a tab view's tab row (`rowHeight` from the top), the rows holding
+   the label's text (dark or light against the row's colour, not the
+   accent) and the accent underline's first row; -1 when there is none. */
+static void
+QuirkProbeTabRowInk(NSTabView *tabView, CGFloat rowHeight,
+                    NSInteger *textTop, NSInteger *textBottom, NSInteger *accentTop)
+{
+  NSRect bounds = [tabView bounds];
+  NSBitmapImageRep *rep = [tabView bitmapImageRepForCachingDisplayInRect: bounds];
+  NSInteger x, y, rows = (NSInteger)rowHeight;
+  NSColor *background;
+  CGFloat backgroundSum;
+
+  [tabView cacheDisplayInRect: bounds toBitmapImageRep: rep];
+  background = [[rep colorAtX: (NSInteger)NSWidth (bounds) - 4 y: rows / 2]
+    colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  backgroundSum = [background redComponent] + [background greenComponent] + [background blueComponent];
+  *textTop = *textBottom = *accentTop = -1;
+  for (y = 0; y < rows && y < [rep pixelsHigh]; y++)
+    {
+      for (x = 2; x < [rep pixelsWide] - 2; x++)
+        {
+          NSColor *c = [[rep colorAtX: x y: y] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+          CGFloat r = [c redComponent], g = [c greenComponent], b = [c blueComponent];
+
+          if (b > r + 0.12 && b > g + 0.04)
+            {
+              if (*accentTop < 0)
+                {
+                  *accentTop = y;
+                }
+            }
+          else if (fabs (r + g + b - backgroundSum) > 0.9)
+            {
+              if (*textTop < 0)
+                {
+                  *textTop = y;
+                }
+              *textBottom = y;
+            }
+        }
+    }
+}
 
 - (void) checkNibMetrics
 {
@@ -206,6 +255,29 @@ QuirkProbeNibMetricsDescription(NSButton *button, NSTabView *tabView)
     {
       [self fail: @"nib-metrics-per-window" detail: detail];
     }
+
+  /* The Gorm window's tab row is GNUstep's, 17pt: the label clear of the
+     frame above it and of the selected tab's underline (it touched both,
+     and GNUstep's own label showed at the top). */
+  {
+    NSInteger textTop, textBottom, accentTop;
+    CGFloat rowHeight = NSMinY ([nibTabView contentRect]);
+
+    [nibWindow orderFront: nil];
+    [nibWindow display];
+    QuirkProbeTabRowInk (nibTabView, rowHeight, &textTop, &textBottom, &accentTop);
+    detail = [NSString stringWithFormat: @"%@: tab row %gpt; label rows %ld to %ld, underline from %ld",
+      choice != nil ? choice : @"auto", rowHeight, (long)textTop, (long)textBottom, (long)accentTop];
+    if (textTop >= 2 && accentTop > textBottom)
+      {
+        [self pass: @"nib-metrics-tab-label" detail: detail];
+      }
+    else
+      {
+        [self fail: @"nib-metrics-tab-label" detail: detail];
+      }
+    [nibWindow orderOut: nil];
+  }
 
   /* Loaded without asking for the top level objects, as NSBundle's
      +loadNibNamed:owner: does: the window is still the Gorm file's. */

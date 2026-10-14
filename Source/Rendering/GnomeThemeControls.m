@@ -1799,6 +1799,8 @@ static const CGFloat GnomeThemeTabPadding = 13.0;
 static const CGFloat GnomeThemeTabGap = 7.0;
 static const CGFloat GnomeThemeTabStart = 9.0;
 static const CGFloat GnomeThemeTabUnderline = 4.0;
+/* Shorter tab rows are GNUstep's (nib windows): see -drawTabViewRect:... */
+static const CGFloat GnomeThemeTabCompactHeight = 24.0;
 
 static void
 GnomeThemeDrawTabLabel(NSString *label,
@@ -1822,7 +1824,18 @@ GnomeThemeDrawTabLabel(NSString *label,
   labelSize = [label sizeWithAttributes: attributes];
   labelRect = NSInsetRect (tabRect, GnomeThemeTabPadding, 0.0);
   labelRect.origin.x = floor (NSMidX (labelRect) - (MIN (labelSize.width, labelRect.size.width) / 2.0));
-  labelRect.origin.y = floor (NSMidY (labelRect) - (labelSize.height / 2.0));
+  if (ceil (labelSize.height) >= NSHeight (tabRect))
+    {
+      /* Taller than the tab (GNUstep's short tab row): its line's bottom,
+         the descenders', at the tab's bottom; above it is only the
+         ascent, room the capitals don't use. */
+      labelRect.origin.y = [[NSView focusView] isFlipped]
+        ? NSMaxY (tabRect) - ceil (labelSize.height) : NSMinY (tabRect);
+    }
+  else
+    {
+      labelRect.origin.y = floor (NSMidY (labelRect) - (labelSize.height / 2.0));
+    }
   labelRect.size.height = ceil (labelSize.height);
 
   [label drawInRect: labelRect withAttributes: attributes];
@@ -2938,12 +2951,14 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   NSView *previous = GnomeThemeSetMetricsView (view);
   CGFloat tabHeight = [self tabHeightForType: type];
   NSColor *headerFill = nil;
+  NSColor *borderColor = nil;
   NSColor *textColor = nil;
   NSColor *accentColor = nil;
   NSFont *font = nil;
   NSEnumerator *enumerator = nil;
   NSTabViewItem *item = nil;
   CGFloat cursorX = NSMinX (bounds) + GnomeThemeTabStart;
+  CGFloat underlineHeight;
 
   GnomeThemeSetMetricsView (previous);
   if ([view isKindOfClass: [NSTabView class]] == NO
@@ -2959,6 +2974,9 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   [self drawTabViewBezelRect: bounds tabViewType: type inView: view];
 
   headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  /* As -drawTabViewBezelRect:... draws it. */
+  borderColor = GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]),
+                                 headerFill, 0.43);
   textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   accentColor = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   font = [tabView font];
@@ -2971,6 +2989,11 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       font = [NSFont systemFontOfSize: [NSFont systemFontSize]];
     }
 
+  /* GNUstep's tab row in a nib window (17pt, #24) has no room for the
+     4pt underline and the text clear of it and of the frame: there the
+     underline is 2pt, and the label is centred above it. */
+  underlineHeight = (tabHeight < GnomeThemeTabCompactHeight) ? 2.0 : GnomeThemeTabUnderline;
+
   enumerator = [items objectEnumerator];
   while ((item = [enumerator nextObject]) != nil)
     {
@@ -2982,13 +3005,31 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
                                    flipped ? NSMinY (bounds) + 1.0 : NSMaxY (bounds) - tabHeight,
                                    tabWidth,
                                    tabHeight - 1.0);
+      NSRect labelRect = tabRect;
+      NSRect line = tabRect;
 
       /* NSTabViewItem records its hit rect while drawing its label; its
-         own label is then painted over. */
+         own label is then painted over, the whole tab, and the line under
+         the tabs drawn again (bits of GNUstep's label showed above and
+         below the theme's in a short tab row). */
       [item drawLabel: truncate inRect: tabRect];
       [headerFill set];
-      NSRectFill (NSIntersectionRect (tabRect,
-                                      NSInsetRect (tabRect, 0.0, GnomeThemeTabUnderline)));
+      NSRectFill (tabRect);
+      line.size.height = 1.0;
+      if (flipped)
+        {
+          line.origin.y = NSMaxY (tabRect) - 1.0;
+        }
+      [borderColor set];
+      NSRectFill (line);
+      if (underlineHeight < GnomeThemeTabUnderline)
+        {
+          labelRect.size.height -= underlineHeight + 1.0;
+          if (flipped == NO)
+            {
+              labelRect.origin.y += underlineHeight + 1.0;
+            }
+        }
 
       if (truncate
         && labelSize.width > NSWidth (tabRect) - 2.0 * GnomeThemeTabPadding
@@ -2996,16 +3037,16 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
         {
           label = [item _truncatedLabel];
         }
-      GnomeThemeDrawTabLabel (label, tabRect, font, textColor);
+      GnomeThemeDrawTabLabel (label, labelRect, font, textColor);
 
       if (item == selectedItem)
         {
           NSRect underline = tabRect;
 
-          underline.size.height = GnomeThemeTabUnderline;
+          underline.size.height = underlineHeight;
           if (flipped)
             {
-              underline.origin.y = NSMaxY (tabRect) - GnomeThemeTabUnderline;
+              underline.origin.y = NSMaxY (tabRect) - underlineHeight;
             }
           [accentColor set];
           NSRectFill (underline);
