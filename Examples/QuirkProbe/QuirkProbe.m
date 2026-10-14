@@ -6306,6 +6306,38 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* GNUstep's Open and Save panels' Home, Mount and Unmount buttons show
+   GNOME's symbolic icons (user-home, drive-removable-media, media-eject),
+   drawn as templates in the text colour; they were NeXT's icons. */
+- (void) checkPanelIcons
+{
+  typedef BOOL (*TemplateFunction)(NSImage *);
+  TemplateFunction isTemplate = (TemplateFunction)dlsym (RTLD_DEFAULT, "GnomeThemeImageIsTemplate");
+  NSArray *names = [NSArray arrayWithObjects: @"common_Home", @"common_Mount", @"common_Unmount", nil];
+  NSEnumerator *enumerator = [names objectEnumerator];
+  NSMutableString *detail = [NSMutableString string];
+  NSString *name;
+  BOOL ok = (isTemplate != NULL);
+
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      NSImage *image = [NSImage imageNamed: name];
+      NSSize size = [image size];
+      BOOL symbolic = (image != nil && isTemplate != NULL && isTemplate (image));
+
+      [detail appendFormat: @"%@ %gx%g%@; ", name, size.width, size.height, symbolic ? @" template" : @""];
+      ok = ok && symbolic && size.width == 16 && size.height == 16;
+    }
+  if (ok)
+    {
+      [self pass: @"panel-icons" detail: detail];
+    }
+  else
+    {
+      [self fail: @"panel-icons" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7720,6 +7752,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkRulerMarks];
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
+  [self checkPanelIcons];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7812,6 +7845,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkRulerMarks];
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
+  [self checkPanelIcons];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

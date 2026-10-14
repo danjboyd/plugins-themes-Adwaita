@@ -40,6 +40,22 @@
 
 static char GnomeThemeTintedImagesKey;
 
+/* GNUstep images the theme replaces with GNOME symbolic icons, under
+   their GNUstep names (Resources/ThemeImages): drawn as templates, in the
+   text colour. GNUstep's own Open and Save panels' buttons: Home
+   (user-home), Mount (drive-removable-media), Unmount (media-eject). */
+static NSSet *
+GnomeThemeSymbolicReplacements(void)
+{
+  static NSSet *names = nil;
+
+  if (names == nil)
+    {
+      names = [[NSSet alloc] initWithObjects: @"common_Home", @"common_Mount", @"common_Unmount", nil];
+    }
+  return names;
+}
+
 BOOL
 GnomeThemeImageIsTemplate(NSImage *image)
 {
@@ -54,7 +70,8 @@ GnomeThemeImageIsTemplate(NSImage *image)
       return YES;
     }
   name = [image name];
-  return [name hasSuffix: @"Template"] || [name hasSuffix: @"-symbolic"];
+  return [name hasSuffix: @"Template"] || [name hasSuffix: @"-symbolic"]
+    || [GnomeThemeSymbolicReplacements () containsObject: name];
 }
 
 /* A bitmap's shape in `rgb`: the same pixels and size, each pixel the
