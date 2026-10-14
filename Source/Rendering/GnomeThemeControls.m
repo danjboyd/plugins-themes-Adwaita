@@ -3489,6 +3489,154 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
    is GtkPaned's wide handle, a line at each edge with the window between.
    GNUstep drew NeXT's dimple in the middle of the thick ones, and the
    thin one in whatever colour was set. */
+/* Dark ink drawn over `background` in `source`, as a bitmap of `ink` at
+   each pixel's coverage: how far the pixel is from the background towards
+   black. For drawing that only comes in black (libs-gui's ruler). */
+static NSBitmapImageRep *
+GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
+{
+  NSColor *bg = [background colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *rgb = [ink colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSInteger width = [source pixelsWide], height = [source pixelsHigh];
+  CGFloat bgLevel, red, green, blue, alpha;
+  BOOL clear;
+  NSInteger samples = [source samplesPerPixel];
+  NSInteger bits = [source bitsPerSample];
+  NSUInteger maxValue = (bits >= 16) ? 65535 : ((1u << bits) - 1);
+  BOOL alphaFirst = [source hasAlpha] && ([source bitmapFormat] & NSAlphaFirstBitmapFormat) != 0;
+  NSInteger first = alphaFirst ? 1 : 0;
+  NSInteger alphaIndex = [source hasAlpha] ? (alphaFirst ? 0 : samples - 1) : -1;
+  NSBitmapImageRep *mask;
+  unsigned char *data;
+  NSInteger x, y, bytesPerRow;
+
+  if (bg == nil || rgb == nil || width <= 0 || height <= 0)
+    {
+      return nil;
+    }
+  bgLevel = ([bg redComponent] + [bg greenComponent] + [bg blueComponent]) / 3.0;
+  /* A clear background: the coverage is the pixel's alpha. */
+  clear = [bg alphaComponent] < 0.5;
+  if (clear == NO && bgLevel <= 0.02)
+    {
+      return nil;
+    }
+  red = [rgb redComponent];
+  green = [rgb greenComponent];
+  blue = [rgb blueComponent];
+  alpha = [rgb alphaComponent];
+  mask = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+                                                              pixelsWide: width
+                                                              pixelsHigh: height
+                                                           bitsPerSample: 8
+                                                         samplesPerPixel: 4
+                                                                hasAlpha: YES
+                                                                isPlanar: NO
+                                                          colorSpaceName: NSCalibratedRGBColorSpace
+                                                             bytesPerRow: 0
+                                                            bitsPerPixel: 0]);
+  data = [mask bitmapData];
+  bytesPerRow = [mask bytesPerRow];
+  if (data == NULL)
+    {
+      return nil;
+    }
+  if (samples < 3 || samples > 5 || bits < 1 || bits > 16)
+    {
+      return nil;
+    }
+  for (y = 0; y < height; y++)
+    {
+      for (x = 0; x < width; x++)
+        {
+          NSUInteger raw[5];
+          CGFloat level, a;
+          unsigned char *pixel = data + y * bytesPerRow + x * 4;
+
+          [source getPixel: raw atX: x y: y];
+          level = ((CGFloat)raw[first] + raw[first + 1] + raw[first + 2]) / (3.0 * maxValue);
+          a = clear
+            ? (alphaIndex >= 0 ? (CGFloat)raw[alphaIndex] / maxValue : 1.0)
+            : MAX (0.0, MIN (1.0, (bgLevel - level) / bgLevel));
+          a *= alpha;
+
+          pixel[0] = (unsigned char)floor (red * a * 255.0 + 0.5);
+          pixel[1] = (unsigned char)floor (green * a * 255.0 + 0.5);
+          pixel[2] = (unsigned char)floor (blue * a * 255.0 + 0.5);
+          pixel[3] = (unsigned char)floor (a * 255.0 + 0.5);
+        }
+    }
+  [mask setSize: [source size]];
+  return mask;
+}
+
+/* NSRulerView (a text view's ruler) on the window's colour with a line
+   along its edge, its marks, labels and markers in the foreground at 55%.
+   libs-gui fills it with controlColor and draws the marks and labels in
+   blackColor, which in the dark palette all but vanished. The marks are
+   libs-gui's own: drawn in black on the window's colour, read back
+   (-cacheDisplayInRect: reads the window's pixels), and drawn again as a
+   mask in the theme's colour over a fresh background. */
+- (void) _overrideNSRulerViewMethod_drawRect: (NSRect)aRect
+{
+  NSRulerView *ruler = (NSRulerView *)self;
+  GnomeTheme *theme = GnomeThemeActiveTheme ();
+  NSColor *window = GnomeThemeColor (theme, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+  NSColor *marks = GnomeThemeBlend (window, GnomeThemeColor (theme, @"GnomeThemeForegroundColor",
+                                                             [NSColor controlTextColor]), 0.55);
+  NSColor *line = GnomeThemeColor (theme, @"GnomeThemeSeparatorColor", [NSColor gridColor]);
+  NSRect bounds = [ruler bounds];
+  NSRect edge;
+  NSBitmapImageRep *rep, *mask = nil;
+
+  [window set];
+  NSRectFill (aRect);
+  [ruler drawHashMarksAndLabelsInRect: aRect];
+  [ruler drawMarkersInRect: aRect];
+  rep = [ruler bitmapImageRepForCachingDisplayInRect: aRect];
+  if (rep != nil)
+    {
+      [ruler cacheDisplayInRect: aRect toBitmapImageRep: rep];
+      mask = GnomeThemeInkMask (rep, window, marks);
+    }
+  if (mask == nil)
+    {
+      /* Left as libs-gui drew it, on the window's colour. */
+      return;
+    }
+
+  [window set];
+  NSRectFill (aRect);
+  /* The line between the ruler and the text. */
+  edge = bounds;
+  if ([ruler orientation] == NSHorizontalRuler)
+    {
+      edge.size.height = 1.0;
+      if ([ruler isFlipped])
+        {
+          edge.origin.y = NSMaxY (bounds) - 1.0;
+        }
+    }
+  else
+    {
+      edge.origin.x = NSMaxX (bounds) - 1.0;
+      edge.size.width = 1.0;
+    }
+  [line set];
+  NSRectFill (NSIntersectionRect (edge, aRect));
+  {
+    NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: aRect.size]);
+
+    [image addRepresentation: mask];
+    [image drawInRect: aRect
+             fromRect: NSZeroRect
+            operation: NSCompositeSourceOver
+             fraction: 1.0
+       respectFlipped: YES
+                hints: nil];
+  }
+}
+
 - (void) _overrideNSSplitViewMethod_drawDividerInRect: (NSRect)aRect
 {
   NSSplitView *splitView = (NSSplitView *)self;

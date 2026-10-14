@@ -6136,6 +6136,70 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A text view's ruler is on the window's colour, its marks in a dimmed
+   text colour: lighter than the background in the dark palettes, darker in
+   the light ones. libs-gui fills it with controlColor and draws its marks
+   in black, all but lost in the dark palette. */
+- (void) checkRulerMarks
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 420, 120) title: @"Probe Ruler"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: [[window contentView] bounds]]);
+  NSTextView *textView = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 400, 120)]);
+  NSRulerView *ruler;
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], rulerRGB[3];
+  NSColor *text = [[NSColor controlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL darkPalette = [text redComponent] > 0.5;
+  QuirkProbeInk marks;
+  BOOL ok;
+  NSString *detail;
+
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setDocumentView: textView];
+  [scrollView setHasHorizontalRuler: YES];
+  [scrollView setRulersVisible: YES];
+  [window setContentView: scrollView];
+  [window orderFront: nil];
+  [window display];
+  ruler = [scrollView horizontalRulerView];
+  {
+    NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+    windowRGB[0] = (NSUInteger)floor ([windowColor redComponent] * 255.0 + 0.5);
+    windowRGB[1] = (NSUInteger)floor ([windowColor greenComponent] * 255.0 + 0.5);
+    windowRGB[2] = (NSUInteger)floor ([windowColor blueComponent] * 255.0 + 0.5);
+  }
+  if (ruler == nil)
+    {
+      [window orderOut: nil];
+      [self fail: @"ruler-marks" detail: @"no ruler"];
+      return;
+    }
+  rep = QuirkProbeRender (ruler);
+  QuirkProbePixelAt (rep, [rep pixelsWide] - 30, 2, rulerRGB);
+  QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
+  marks = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSZeroRect);
+  QuirkProbeInkBackground = 750;
+  [self saveWindow: window named: @"ruler"];
+  [window orderOut: nil];
+
+  /* The ink runs the text colour's way from the background. */
+  ok = labs ((long)rulerRGB[0] - (long)windowRGB[0]) <= 2 && marks.count > 50
+    && (darkPalette ? marks.lightest > windowRGB[0] + windowRGB[1] + windowRGB[2] + 150
+                    : marks.darkest + 150 < windowRGB[0] + windowRGB[1] + windowRGB[2]);
+  detail = [NSString stringWithFormat: @"window %@, ruler %@; %lu mark pixels, r+g+b %lu to %lu",
+    QuirkProbeHex (windowRGB), QuirkProbeHex (rulerRGB), (unsigned long)marks.count,
+    (unsigned long)marks.darkest, (unsigned long)marks.lightest];
+  if (ok)
+    {
+      [self pass: @"ruler-marks" detail: detail];
+    }
+  else
+    {
+      [self fail: @"ruler-marks" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7547,6 +7611,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBottomTabs];
   [self checkBorderlessPopUp];
   [self checkImageFrames];
+  [self checkRulerMarks];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7636,6 +7701,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBottomTabs];
   [self checkBorderlessPopUp];
   [self checkImageFrames];
+  [self checkRulerMarks];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
