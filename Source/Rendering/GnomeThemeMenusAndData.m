@@ -37,6 +37,7 @@
    GSBackPopoverCornerRadius in Info-gnustep.plist). */
 static const CGFloat GnomeThemeMenuCornerRadius = 15.0;
 static char GnomeThemeTableGridMaskKey;
+static char GnomeThemeIndicatorImageKey;
 
 static inline GnomeTheme *
 GnomeThemeActivePhase67Theme(void)
@@ -1129,6 +1130,146 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     }
 }
 
+/* GTK 4's sort indicator (pan-up-symbolic ascending, pan-down-symbolic
+   descending): a 16pt box 6pt after the column's title, in the title's
+   colour; its chevron is the icon's 2pt stroke. `box` is in a view whose
+   flippedness is `flipped`. */
+static void
+GnomeThemeDrawSortIndicator(NSRect box, BOOL ascending, BOOL flipped, NSColor *color)
+{
+  NSBezierPath *path = [NSBezierPath bezierPath];
+  /* The icon's centre line, from the top of its 16pt box. */
+  CGFloat tipY = ascending ? 6.0 : 10.6;
+  CGFloat endY = ascending ? 9.9 : 6.7;
+
+  if (flipped == NO)
+    {
+      tipY = 16.0 - tipY;
+      endY = 16.0 - endY;
+    }
+  [path moveToPoint: NSMakePoint (NSMinX (box) + 4.0, NSMinY (box) + endY)];
+  [path lineToPoint: NSMakePoint (NSMinX (box) + 8.0, NSMinY (box) + tipY)];
+  [path lineToPoint: NSMakePoint (NSMinX (box) + 12.0, NSMinY (box) + endY)];
+  [path setLineWidth: 2.0];
+  [path setLineCapStyle: NSRoundLineCapStyle];
+  [path setLineJoinStyle: NSRoundLineJoinStyle];
+  [color set];
+  [path stroke];
+}
+
+/* Whether `image` is the named ascending or descending indicator (the
+   theme's NSAscendingSortIndicator and NSDescendingSortIndicator, which
+   GNUstep itself doesn't have). */
+static BOOL
+GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
+{
+  NSString *name = [image name];
+
+  if ([name isEqualToString: @"NSAscendingSortIndicator"])
+    {
+      *ascending = YES;
+      return YES;
+    }
+  if ([name isEqualToString: @"NSDescendingSortIndicator"])
+    {
+      *ascending = NO;
+      return YES;
+    }
+  return NO;
+}
+
+/* GSTheme's, but with GTK 4's sort indicators (#71): the named indicator
+   images an app sets (-setIndicatorImage:inTableColumn:, as in Cocoa) are
+   drawn as GNOME's pan-up and pan-down after the title, in the title's
+   colour; GSTheme drew the image at the column's end. Other images go
+   where the indicator would. */
+- (void) drawTableHeaderRect: (NSRect)aRect
+                      inView: (NSView *)view
+{
+  NSTableHeaderView *headerView = (NSTableHeaderView *)view;
+  NSTableView *tableView = [headerView tableView];
+  NSArray *columns = [tableView tableColumns];
+  NSTableColumn *highlighted = [tableView highlightedTableColumn];
+  NSInteger first, last, i;
+  NSRect drawingRect;
+  BOOL flipped = [view isFlipped];
+
+  if (tableView == nil || [columns count] == 0)
+    {
+      return;
+    }
+  first = [headerView columnAtPoint: NSMakePoint (NSMinX (aRect), NSMinY (aRect))];
+  if (first == -1)
+    {
+      first = 0;
+    }
+  last = [headerView columnAtPoint: NSMakePoint (NSMaxX (aRect), NSMinY (aRect))];
+  if (last == -1)
+    {
+      last = [columns count] - 1;
+    }
+  drawingRect = [headerView headerRectOfColumn: first];
+
+  for (i = first; i <= last; i++)
+    {
+      NSTableColumn *column = [columns objectAtIndex: i];
+      NSTableHeaderCell *cell = [column headerCell];
+      NSImage *indicator = [tableView indicatorImageInTableColumn: column];
+      BOOL ascending = YES;
+
+      drawingRect.size.width = [column width];
+      [cell setHighlighted: (column == highlighted || [tableView isColumnSelected: i])];
+      [cell drawWithFrame: drawingRect inView: headerView];
+
+      if (indicator != nil)
+        {
+          NSRect titleRect = [cell titleRectForBounds: drawingRect];
+          NSFont *font = [cell font];
+          NSString *title = [cell stringValue];
+          CGFloat titleWidth = 0.0;
+          NSRect box;
+
+          if (font != nil && [title length] > 0)
+            {
+              titleWidth = ceil ([title sizeWithAttributes:
+                [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName]].width);
+            }
+          titleWidth = MIN (titleWidth, NSWidth (titleRect));
+          box = NSMakeRect (0.0, floor (NSMidY (drawingRect) - 8.0), 16.0, 16.0);
+          if ([cell alignment] == GnomeThemeRightTextAlignment ())
+            {
+              /* A right-aligned title (a number column): before it. */
+              box.origin.x = NSMaxX (titleRect) - titleWidth - 6.0 - 16.0;
+            }
+          else
+            {
+              box.origin.x = NSMinX (titleRect) + titleWidth + 6.0;
+            }
+          box.origin.x = floor (MAX (NSMinX (drawingRect), MIN (NSMinX (box), NSMaxX (drawingRect) - 6.0 - 16.0)));
+
+          if (GnomeThemeIsSortIndicatorImage (indicator, &ascending))
+            {
+              GnomeThemeDrawSortIndicator (box, ascending, flipped, [cell textColor]);
+            }
+          else
+            {
+              NSSize size = [indicator size];
+              NSRect imageRect = NSMakeRect (NSMidX (box) - size.width / 2.0,
+                                             NSMidY (box) - size.height / 2.0,
+                                             size.width, size.height);
+
+              [indicator drawInRect: imageRect
+                           fromRect: NSZeroRect
+                          operation: NSCompositeSourceOver
+                           fraction: 1.0
+                     respectFlipped: YES
+                              hints: nil];
+            }
+        }
+      drawingRect.origin.x += [column width];
+    }
+}
+
 - (void) drawTableCornerView: (NSView *)cornerView
                     withClip: (NSRect)aRect
 {
@@ -1653,6 +1794,54 @@ GnomeThemeSubmenuLocationOnScreen(NSMenuView *menuView, NSMenu *aSubmenu, NSPoin
       location = GnomeThemeSubmenuLocationOnScreen (menuView, aSubmenu, location);
     }
   return location;
+}
+
+/* libs-gui 0.32's -setIndicatorImage:inTableColumn: and
+   -indicatorImageInTableColumn: are stubs that log "not implemented" and
+   keep nothing, so an app's sort indicator never showed (#71). Where
+   NSTableColumn has no storage for it (master has, since 7eec43e3b), the
+   theme keeps the image on the column. Remove with 0.32 (#28). */
+static BOOL
+GnomeThemeTableKeepsIndicatorImages(void)
+{
+  return [NSTableColumn instancesRespondToSelector: NSSelectorFromString (@"_indicatorImage")];
+}
+
+- (void) _overrideNSTableViewMethod_setIndicatorImage: (NSImage *)anImage
+                                        inTableColumn: (NSTableColumn *)aTableColumn
+{
+  typedef void (*SetIndicatorIMP)(id, SEL, NSImage *, NSTableColumn *);
+  SetIndicatorIMP originalIMP = (SetIndicatorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+
+  if (GnomeThemeTableKeepsIndicatorImages ())
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, anImage, aTableColumn);
+        }
+    }
+  else if (aTableColumn != nil)
+    {
+      objc_setAssociatedObject (aTableColumn, &GnomeThemeIndicatorImageKey,
+                                anImage, OBJC_ASSOCIATION_RETAIN);
+    }
+  [[(NSTableView *)self headerView] setNeedsDisplay: YES];
+}
+
+- (NSImage *) _overrideNSTableViewMethod_indicatorImageInTableColumn: (NSTableColumn *)aTableColumn
+{
+  typedef NSImage *(*IndicatorIMP)(id, SEL, NSTableColumn *);
+  IndicatorIMP originalIMP = (IndicatorIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTableView class]);
+
+  if (GnomeThemeTableKeepsIndicatorImages ())
+    {
+      return (originalIMP != NULL) ? originalIMP (self, _cmd, aTableColumn) : nil;
+    }
+  if (aTableColumn == nil)
+    {
+      return nil;
+    }
+  return objc_getAssociatedObject (aTableColumn, &GnomeThemeIndicatorImageKey);
 }
 
 /* Tables built in code start with GTK's list density: 34pt rows and no

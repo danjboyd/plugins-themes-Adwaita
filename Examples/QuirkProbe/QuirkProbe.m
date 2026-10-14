@@ -5251,6 +5251,84 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* The named sort indicators an app sets on a column are GTK 4's: pan-up
+   ascending, pan-down descending, about 10x6, 6pt after the title in a
+   16pt box. GNUstep has no NSAscendingSortIndicator or
+   NSDescendingSortIndicator, so they were nil and nothing showed (#71). */
+- (BOOL) sortIndicatorIn: (NSTableHeaderView *)header
+               ascending: (BOOL)ascending
+                  detail: (NSMutableString *)detail
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (header);
+  NSInteger height = [rep pixelsHigh];
+  NSUInteger fill[3];
+  QuirkProbeInk all, title, arrow, middle, side;
+  NSInteger gap;
+  BOOL pointsUp, ok;
+
+  QuirkProbePixelAt (rep, 150, height / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  /* Lighter ink than the tests' usual threshold: header text is dim. */
+  all = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (0, 0, 140, height));
+  title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (0, 0, all.minX + 30, height));
+  arrow = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (all.minX + 34, 0, 140 - all.minX - 34, height));
+  middle = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (arrow.minX + arrow.width / 2 - 1, 0, 2, height));
+  side = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (arrow.minX, 0, 2, height));
+  QuirkProbeInkBackground = 750;
+  gap = arrow.minX - (title.minX + title.width);
+  pointsUp = middle.minY < side.minY;
+  [detail appendFormat: @"%@: title ink %ld to %ld, arrow %ldx%ld from %ld (gap %ld), points %@; ",
+    ascending ? @"ascending" : @"descending",
+    (long)title.minX, (long)(title.minX + title.width), (long)arrow.width, (long)arrow.height,
+    (long)arrow.minX, (long)gap, pointsUp ? @"up" : @"down"];
+  ok = arrow.count > 0 && arrow.width >= 8 && arrow.width <= 12 && arrow.height >= 4 && arrow.height <= 8
+    && gap >= 6 && gap <= 13 && pointsUp == ascending;
+  return ok;
+}
+
+- (void) checkSortIndicator
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Sort Indicator"];
+  NSScrollView *scroll = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 300, 120)]);
+  NSTableColumn *name = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"name"]);
+  NSTableColumn *size = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"size"]);
+  NSImage *up = [NSImage imageNamed: @"NSAscendingSortIndicator"];
+  NSImage *down = [NSImage imageNamed: @"NSDescendingSortIndicator"];
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok;
+
+  [[name headerCell] setStringValue: @"Name"];
+  [[size headerCell] setStringValue: @"Size"];
+  [name setWidth: 150];
+  [size setWidth: 150];
+  [table addTableColumn: name];
+  [table addTableColumn: size];
+  [scroll setHasVerticalScroller: YES];
+  [scroll setDocumentView: table];
+  [[window contentView] addSubview: scroll];
+  [window orderFront: nil];
+
+  [detail appendFormat: @"named images %@ and %@; ", up != nil ? @"found" : @"missing", down != nil ? @"found" : @"missing"];
+  [table setIndicatorImage: up inTableColumn: name];
+  [window display];
+  ok = [self sortIndicatorIn: [table headerView] ascending: YES detail: detail];
+  [self saveWindow: window named: @"sort-indicator"];
+  [table setIndicatorImage: down inTableColumn: name];
+  [window display];
+  ok = [self sortIndicatorIn: [table headerView] ascending: NO detail: detail] && ok;
+  [window orderOut: nil];
+
+  if (ok && up != nil && down != nil)
+    {
+      [self pass: @"sort-indicator" detail: detail];
+    }
+  else
+    {
+      [self fail: @"sort-indicator" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -6508,6 +6586,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
+  [self checkSortIndicator];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];
@@ -6583,6 +6662,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
+  [self checkSortIndicator];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
   [self checkStringValueWhileTyping];

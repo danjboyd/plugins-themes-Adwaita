@@ -90,6 +90,7 @@ it was found. Compare against the libadwaita reference with
 | Print showed GNUstep's own print panel, while open and save were already GNOME's file chooser (plugins-themes-Adwaita#52) | `Source/Adapters/GnomeThemePrintDialog.m`: the print panel asks the portal's PreparePrint, maps its settings and page setup into the `NSPrintInfo`, and `-[GSPrintOperation deliverResult]` hands the drawn PDF to the portal's Print; GNUstep's panel without a portal, with accessories, or with `GnomeThemeNativePrintDialog NO`. `make check-print-dialog` |
 | A disabled pop-up button drew its title as an enabled one's, so it looked clickable (plugins-themes-Adwaita#69) | the title takes the disabled text colour when the button is disabled, not only when its item is (the selected item stays enabled); the fill already dimmed |
 | Submenus opened right of their menu whatever the screen: from a ☰ popover near the right edge they ran off it, their items out of reach (plugins-themes-Adwaita#77) | as GTK places submenus: one that doesn't fit to the right opens to the left (and its own submenus go on left), and one that would leave the screen at the bottom or top is moved into it (`-[NSMenuView locationForSubmenu:]`) |
+| A column's sort indicator never showed, and GNUstep has no `NSAscendingSortIndicator` or `NSDescendingSortIndicator` image, so the Cocoa idiom set nil; libs-gui 0.32 doesn't even keep an indicator image (plugins-themes-Adwaita#71) | the theme has both images (GNOME's pan-up and pan-down), keeps a column's indicator image on 0.32, and draws the named indicators as GTK 4 does: a 16pt chevron 6pt after the title, in the title's colour. libs-gui shows no indicator for the sort descriptors by itself (Cocoa does): `Docs/upstream-issues/16-libs-gui-sort-indicator-not-shown.md` |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).
@@ -147,7 +148,10 @@ window, compared with the GNUstep theme). Still open:
   release lacks a84b42471 (upstream item 8), drop the release-dropping
   `-[NSApplication nextEventMatchingMask:...]` hook for 0.32 in
   GnomeThemePrimaryMenu.m (keep the Escape timer and the press outside:
-  GNUstep's menu tracking ignores keys and passes that press on).
+  GNUstep's menu tracking ignores keys and passes that press on). Once no
+  supported libs-gui release lacks 7eec43e3b (indicator image accessors),
+  drop the `-setIndicatorImage:inTableColumn:` and
+  `-indicatorImageInTableColumn:` overrides for 0.32 (#71).
 
 ## GNUstep issues to report upstream
 
