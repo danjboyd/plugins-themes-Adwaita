@@ -36,7 +36,13 @@ slider tick marks (a2ea7fb), split view dividers (28c7a12), bottom tabs and
 the dark tab frame (855a750), borderless pop-ups as flat drop-downs
 (a9db5c8), image view frames (ace6bd8), rulers (0bd33b2, c0f5861), the
 NeXT arrow on pop-up items from Gorm files (4131e12), and the high
-contrast level trough (16ca68c, f53687f).
+contrast level trough (16ca68c, f53687f), the browser scroller's bezel
+(449a1c9), GNOME icons on the GNUstep file panels (ccbb6eb). A code review
+of the whole range led to ccff30a (ruler read once, level thresholds at or
+below 0, a borderless pop-up's focus ring, narrower arrow matching,
+disabled slider marks, cleanups); its one finding in vendored code, the
+tab bar's "+" creating the shared NSDocumentController in apps without
+documents, is for gnustep-window-tabbing.
 
 Still unthemed, left for a decision: GNUstep's About panel (AdwAboutDialog
 looks different), NSDatePicker (GNOME has none), NSPathControl's arrows,
@@ -66,6 +72,10 @@ New traps:
   window's pixels back (`GSReadRect`); it doesn't draw the view again.
   The ruler relies on that; QuirkProbe's renders do too, after
   `-display`.
+- `kwin-shadow-few-resizes` (`check-wms`, KWin with the patched
+  libraries) failed once at ccbb6eb with two resizes on maximise (an
+  intermediate frame 30px outside the screen), then passed three reruns:
+  a timing flake, not a regression.
 - The shell's `DISPLAY` is `:0`, Dan's desktop. Every helper that runs or
   screenshots something must set `DISPLAY` itself, including a
   background `import`.
