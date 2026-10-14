@@ -3351,7 +3351,11 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
   BOOL enabled = [cell isEnabled];
   NSColor *window = GnomeThemeColor (theme, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   NSColor *foreground = GnomeThemeColor (theme, @"GnomeThemeForegroundColor", [NSColor controlTextColor]);
-  NSColor *trough = GnomeThemeBlend (window, foreground, 0.15);
+  /* High contrast (the theme's outline colour is set only there): the
+     trough at 30% with the outline round its empty part, as libadwaita's
+     base-hc.css. */
+  NSColor *outline = GnomeThemeColor (theme, @"GnomeThemeOutlineColor", nil);
+  NSColor *trough = GnomeThemeBlend (window, foreground, (outline != nil) ? 0.30 : 0.15);
   NSColor *fill = GnomeThemeLevelFillColor (theme, cell, value);
   NSRect bar;
 
@@ -3457,6 +3461,11 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
             }
           [(i < lit ? fill : trough) set];
           NSRectFill (block);
+          if (outline != nil && i >= lit)
+            {
+              [outline set];
+              NSFrameRect (block);
+            }
         }
       [NSGraphicsContext restoreGraphicsState];
       return;
@@ -3464,6 +3473,11 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
 
   /* Continuous (and anything else): a pill trough, the level a pill. */
   GnomeThemeFillPill (bar, trough);
+  if (outline != nil)
+    {
+      [outline set];
+      [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect (bar, 0.5, 0.5) xRadius: 3.5 yRadius: 3.5] stroke];
+    }
   if (fraction > 0.0)
     {
       NSRect level = bar;
