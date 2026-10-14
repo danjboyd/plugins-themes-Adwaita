@@ -22,11 +22,11 @@ Issues (each commit says "Fixes #n" or "Part of #n"):
 |---|---|---|
 | 69 | 182b5c8 | Disabled pop-up button titles dimmed |
 | 77 | 67da117 | Submenus flip left and stay on the screen |
-| 71 | caab687 | Part of: GTK 4's indicators for the named images, and storage on 0.32. libs-gui shows no indicator for the sort descriptors (upstream draft 16). **Decision:** branch `sort-indicator-from-descriptors` (one commit on top of main, rebased and passing) adds the theme workaround that shows it, as Cocoa does, and says "Fixes #71" |
-| 70 | 190024f | Non-editable combo boxes keep their look when focused (no field editor); upstream draft 17 for `-selectItemAtIndex:` |
+| 71 | caab687 | Part of: GTK 4's indicators for the named images, and storage on 0.32. libs-gui shows no indicator for the sort descriptors (upstream draft 17). **Decision:** branch `sort-indicator-from-descriptors` (one commit on top of main, rebased and passing) adds the theme workaround that shows it, as Cocoa does, and says "Fixes #71" |
+| 70 | 190024f | Non-editable combo boxes keep their look when focused (no field editor); upstream draft 18 for `-selectItemAtIndex:` |
 | 72 | 0f8786a | Browser titles readable; the "Window" X windows are libs-gui's unmapped image caches, not a bug |
 | 68 | 99ff339 | Tinted images keep their bitmaps |
-| 65 | 800180f, 466f0e1 | Re-vendored gnustep-window-tabbing at a052823; dragged tab and fades. The shared code scrolls a selected tab partly under a fade (`Docs/Screenshots/window-tabs/README.md`); that is for gnustep-window-tabbing |
+| 65 | 800180f, 466f0e1 | Re-vendored gnustep-window-tabbing at a052823; dragged tab and fades. The shared code scrolls a selected tab partly under a fade (`Docs/Screenshots/window-tabs/README.md`); that is for gnustep-window-tabbing. An earlier, unmerged branch, `window-tabs-phase2-tabbing-fixes` (2026-10-08), does the same phase 2 at gnustep-window-tabbing fd064ee; it leaves the close button off the dragged tab (#65 asks for it) and also lets a tab's title use the tab's width when there is no close button, which main doesn't have yet |
 
 Found in GNUstep's own panels and a control gallery (no issues filed):
 compact tab rows in nib windows (f0ecc09), browser columns and chevrons
@@ -53,9 +53,11 @@ Still unthemed, left for a decision: NSDatePicker (GNOME has none), NSPathContro
 left and right tabs, recessed and textured buttons (Cocoa's scope bar and
 toolbar styles; libadwaita would make them flat).
 
-Upstream drafts added, not filed: 16 (no sort indicator from the sort
-descriptors), 17 (`-selectItemAtIndex:` leaves the combo box's string
-empty). Both say to confirm Cocoa's behaviour on macOS first. Not filed:
+Upstream drafts added, not filed: 17 (no sort indicator from the sort
+descriptors), 18 (`-selectItemAtIndex:` leaves the combo box's string
+empty); 16 is taken by the win32 capture draft on the unmerged branch
+`upstream-draft-16-win32-capture`. 17 and 18 both say to confirm Cocoa's
+behaviour on macOS first. Not filed:
 NSTokenField raises on 0.32 (`defaultCompletionDelay`), fixed on master.
 
 New traps:
