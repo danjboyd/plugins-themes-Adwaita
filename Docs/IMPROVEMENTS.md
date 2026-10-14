@@ -107,6 +107,7 @@ it was found. Compare against the libadwaita reference with
 | Image views' frames (photo, grey bezel, groove) were NeXT bevels, nearly invisible in the dark palette | GtkFrame's border: 1pt in the separator colour (the foreground at 15%, 50% in high contrast), rounded 6pt so an image's corners stay clear of it; the button style keeps the theme's button |
 | A text view's ruler (NSRulerView) was a controlColor band with marks and labels in black, all but lost in the dark palette | the ruler is on the window's colour with a separator line along the text, and libs-gui's marks, labels and markers are redrawn in the foreground at 55%: drawn in black, read back from the window and drawn again as a mask (`GnomeThemeInkMask`) |
 | A pop-up item carrying GNUstep's arrow image, as items archived in a Gorm file do, showed it beside the chevron (the Page Layout panel's empty Custom pop-up) | GNUstep's pop-up and pull-down arrow images (`common_Nibble`, `common_3DArrow…`) are left out by name, as the arrow put on an item at run time already was |
+| A browser's horizontal scroller (GNUstep's Open and Save panels) sat in a grey bezel box, round the theme's thin overlay indicator | no box: the theme draws the browser's titles itself and leaves GSTheme's scroller bezel out (browsers whose columns aren't separated keep GSTheme's drawing) |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

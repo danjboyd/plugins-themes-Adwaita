@@ -6252,6 +6252,60 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Below a browser's columns, where its horizontal scroller is, there is
+   only the window: the theme's scrollers are overlay indicators (hidden
+   when nothing overflows, as here), and GSTheme's grey bezel round the
+   scroller is left out. */
+- (void) checkBrowserScrollerBezel
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Browser Scroller"];
+  NSBrowser *browser = AUTORELEASE ([[NSBrowser alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  QuirkProbeBrowserDelegate *delegate = AUTORELEASE ([QuirkProbeBrowserDelegate new]);
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSBitmapImageRep *rep;
+  NSInteger top, x, y, marked = 0;
+  NSInteger windowSum = (NSInteger)floor ([windowColor redComponent] * 255.0 + 0.5)
+    + (NSInteger)floor ([windowColor greenComponent] * 255.0 + 0.5)
+    + (NSInteger)floor ([windowColor blueComponent] * 255.0 + 0.5);
+  NSString *detail;
+
+  [browser setDelegate: delegate];
+  [browser setMaxVisibleColumns: 2];
+  [browser setHasHorizontalScroller: YES];
+  [[window contentView] addSubview: browser];
+  [browser loadColumnZero];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (browser);
+  /* From just below the columns (the browser isn't flipped) down. */
+  top = [rep pixelsHigh] - (NSInteger)NSMinY ([browser frameOfColumn: 0]) + 2;
+  for (y = top; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < [rep pixelsWide]; x++)
+        {
+          NSUInteger rgb[3];
+
+          QuirkProbePixelAt (rep, x, y, rgb);
+          if (labs ((long)(rgb[0] + rgb[1] + rgb[2]) - (long)windowSum) > 12)
+            {
+              marked++;
+            }
+        }
+    }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"%ld pixel(s) other than the window's in rows %ld to %ld",
+    (long)marked, (long)top, (long)[rep pixelsHigh] - 1];
+  if (marked == 0)
+    {
+      [self pass: @"browser-scroller-bezel" detail: detail];
+    }
+  else
+    {
+      [self fail: @"browser-scroller-bezel" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7665,6 +7719,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkImageFrames];
   [self checkRulerMarks];
   [self checkPopUpArchivedArrow];
+  [self checkBrowserScrollerBezel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7756,6 +7811,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkImageFrames];
   [self checkRulerMarks];
   [self checkPopUpArchivedArrow];
+  [self checkBrowserScrollerBezel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

@@ -1307,7 +1307,32 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
   NSColor *list = GnomeThemeColor (self, @"rowBackgroundColor", [NSColor controlBackgroundColor]);
   NSInteger column;
 
-  [super drawBrowserRect: rect inView: view withScrollerRect: scrollerRect columnSize: columnSize];
+  /* GSTheme's, without the grey bezel round the horizontal scroller: the
+     theme's scrollers are GNOME's overlay indicators, with no trough or
+     box. Columns that aren't separated keep GSTheme's NeXT drawing. */
+  if ([browser separatesColumns] == NO)
+    {
+      [super drawBrowserRect: rect inView: view withScrollerRect: scrollerRect columnSize: columnSize];
+    }
+  else
+    {
+      if ([browser isLoaded] == NO)
+        {
+          [browser loadColumnZero];
+        }
+      if ([browser isTitled])
+        {
+          for (column = [browser firstVisibleColumn]; column <= [browser lastVisibleColumn]; column++)
+            {
+              NSRect titleRect = [browser titleFrameOfColumn: column];
+
+              if (NSIntersectsRect (titleRect, rect))
+                {
+                  [browser drawTitleOfColumn: column inRect: titleRect];
+                }
+            }
+        }
+    }
   for (column = 0; column <= [browser lastColumn]; column++)
     {
       NSMatrix *matrix = [browser matrixInColumn: column];
