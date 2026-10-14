@@ -106,6 +106,7 @@ it was found. Compare against the libadwaita reference with
 | A borderless pop-up button (`setBordered: NO`, as a table's pop-up cells usually are) drew a full button, making rows tall and busy: libs-gui's NSPopUpButtonCell asks for its bezel whether or not it is bordered | libadwaita's flat drop-down: its title and chevron on what is behind it, the pressed fill only while pressed |
 | Image views' frames (photo, grey bezel, groove) were NeXT bevels, nearly invisible in the dark palette | GtkFrame's border: 1pt in the separator colour (the foreground at 15%, 50% in high contrast), rounded 6pt so an image's corners stay clear of it; the button style keeps the theme's button |
 | A text view's ruler (NSRulerView) was a controlColor band with marks and labels in black, all but lost in the dark palette | the ruler is on the window's colour with a separator line along the text, and libs-gui's marks, labels and markers are redrawn in the foreground at 55%: drawn in black, read back from the window and drawn again as a mask (`GnomeThemeInkMask`) |
+| A pop-up item carrying GNUstep's arrow image, as items archived in a Gorm file do, showed it beside the chevron (the Page Layout panel's empty Custom pop-up) | GNUstep's pop-up and pull-down arrow images (`common_Nibble`, `common_3DArrow…`) are left out by name, as the arrow put on an item at run time already was |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

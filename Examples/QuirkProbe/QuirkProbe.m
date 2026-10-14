@@ -6200,6 +6200,48 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A pop-up item carrying GNUstep's arrow image (common_Nibble), as items
+   archived in a Gorm file do, shows only the theme's chevron: the Page
+   Layout panel's empty Custom pop-up drew the nibble beside it. */
+- (void) checkPopUpArchivedArrow
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 70) title: @"Probe Pop-Up Arrow"];
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 18, 200, 34) pullsDown: NO]);
+  NSImage *nibble = [NSImage imageNamed: @"common_Nibble"];
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk ink;
+  NSString *detail;
+
+  [popUp addItemWithTitle: @""];
+  [[popUp itemAtIndex: 0] setImage: nibble];
+  [[window contentView] addSubview: popUp];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (popUp);
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  /* Everything before the chevron's box. */
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (4, 4, 200 - 8 - 24 - 6, [rep pixelsHigh] - 8));
+  QuirkProbeInkBackground = 750;
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"nibble image %@; %lu ink pixel(s) before the chevron",
+    nibble != nil ? @"found" : @"missing", (unsigned long)ink.count];
+  if (nibble == nil)
+    {
+      [self skip: @"popup-archived-arrow" detail: detail];
+    }
+  else if (ink.count == 0)
+    {
+      [self pass: @"popup-archived-arrow" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-archived-arrow" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -7612,6 +7654,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBorderlessPopUp];
   [self checkImageFrames];
   [self checkRulerMarks];
+  [self checkPopUpArchivedArrow];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -7702,6 +7745,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBorderlessPopUp];
   [self checkImageFrames];
   [self checkRulerMarks];
+  [self checkPopUpArchivedArrow];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];

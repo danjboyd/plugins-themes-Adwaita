@@ -4763,6 +4763,16 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
     }
 }
 
+/* GNUstep's pop-up and pull-down arrows (NSPopUpButtonCell's images). */
+static BOOL
+GnomeThemeIsPopUpArrowImage(NSImage *image)
+{
+  NSString *name = [image name];
+
+  return [name isEqualToString: @"common_Nibble"] || [name isEqualToString: @"common_3DArrowDown"]
+    || [name isEqualToString: @"common_3DArrowRight"] || [name isEqualToString: @"common_3DArrowUp"];
+}
+
 - (void) _overrideNSPopUpButtonCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
                                                          inView: (NSView *)controlView
 {
@@ -4779,8 +4789,12 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSRect chevronFrame;
 
   /* The theme's -_currentArrowImage is nil, so only an image put on the
-     item before the theme loaded can be the arrow. */
-  if (item != nil && arrowImage != nil && [item image] == arrowImage)
+     item before the theme loaded can be the arrow: that one, or one of
+     GNUstep's arrow images by name, as items archived in a Gorm file carry
+     it (the Page Layout panel's empty Custom pop-up showed the nibble
+     beside the chevron). */
+  if (item != nil && [item image] != nil
+    && ([item image] == arrowImage || GnomeThemeIsPopUpArrowImage ([item image])))
     {
       savedImage = RETAIN ([item image]);
       [item setImage: nil];
