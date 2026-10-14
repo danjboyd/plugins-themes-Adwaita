@@ -44,8 +44,12 @@ disabled slider marks, cleanups); its one finding in vendored code, the
 tab bar's "+" creating the shared NSDocumentController in apps without
 documents, is for gnustep-window-tabbing.
 
-Still unthemed, left for a decision: GNUstep's About panel (AdwAboutDialog
-looks different), NSDatePicker (GNOME has none), NSPathControl's arrows,
+Proposal on a branch: `about-dialog` (one commit on top of main) makes
+the standard About panel AdwAboutWindow's first page, with the Details and
+Legal contents inline; `Docs/Screenshots/about/` on the branch compares it
+with libadwaita.
+
+Still unthemed, left for a decision: NSDatePicker (GNOME has none), NSPathControl's arrows,
 left and right tabs, recessed and textured buttons (Cocoa's scope bar and
 toolbar styles; libadwaita would make them flat).
 
