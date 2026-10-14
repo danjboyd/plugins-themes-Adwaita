@@ -72,7 +72,8 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeSymbolicImages.m \
 	Source/Rendering/GnomeThemeOverlayScrollers.m \
 	Source/Rendering/GnomeThemeNibMetrics.m \
-	Source/Rendering/GnomeThemeWindowTabs.m
+	Source/Rendering/GnomeThemeWindowTabs.m \
+	Source/Rendering/GnomeThemeAboutPanel.m
 
 # Window tabs: Apple's NSWindow tabbing API from the shared code in
 # danjboyd/gnustep-window-tabbing, copied into Source/WindowTabbing at the
