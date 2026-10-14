@@ -5775,7 +5775,8 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   NSProgressIndicator *pulse = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 60, 300, 20)]);
   NSProgressIndicator *spinner = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 10, 32, 32)]);
   NSBitmapImageRep *rep;
-  NSUInteger accentRGB[3], warnRGB[3], windowRGB[3];
+  NSUInteger accentRGB[3], warnRGB[3], windowRGB[3], troughEnd[3], troughInside[3];
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
   NSColor *accent = [[NSColor selectedControlColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
   QuirkProbeInk plainInk, ratingInk, pulseInk, spinnerInk;
   NSInteger x, gaps = 0;
@@ -5833,6 +5834,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   pulseInk = QuirkProbeMeasureIn (rep, QuirkProbeIsAccentBlue, NSMakeRect (10, 200 - 80, 300, 20));
   spinnerInk = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (10, 200 - 42, 32, 32));
   QuirkProbeInkBackground = 750;
+  /* The plain level's empty trough (the 8pt bar is rows 17 to 24 from
+     the top): its top row and its middle, away from the rounded end. In
+     high contrast the edge is the outline (libadwaita's base-hc.css). */
+  QuirkProbePixelAt (rep, 190, 200 - 183, troughEnd);
+  QuirkProbePixelAt (rep, 190, 200 - 179, troughInside);
   [self saveWindow: window named: @"levels"];
   [window orderOut: nil];
 
@@ -5845,9 +5851,13 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   pulseOK = pulseInk.count > 0 && pulseInk.width >= 50 && pulseInk.width <= 70;
   /* The turning quarter; the ring is dimmer than ink. */
   spinnerOK = spinnerInk.count > 0 && spinnerInk.width >= 10 && spinnerInk.height >= 10;
-  detail = [NSString stringWithFormat: @"level %ldx%ld in %@ (accent), warned %@; discrete gaps %ld; "
+  levelsOK = levelsOK && (highContrast
+    ? labs ((long)troughEnd[0] - (long)troughInside[0]) >= 20
+    : labs ((long)troughEnd[0] - (long)troughInside[0]) <= 3);
+  detail = [NSString stringWithFormat: @"level %ldx%ld in %@ (accent), warned %@, trough edge %@ inside %@; discrete gaps %ld; "
     @"rating ink %ldx%ld; pulse %ldpt of 298; spinner ink %ldx%ld",
     (long)plainInk.width, (long)plainInk.height, QuirkProbeHex (accentRGB), QuirkProbeHex (warnRGB),
+    QuirkProbeHex (troughEnd), QuirkProbeHex (troughInside),
     (long)gaps, (long)ratingInk.width, (long)ratingInk.height, (long)pulseInk.width,
     (long)spinnerInk.width, (long)spinnerInk.height];
   if (levelsOK && ratingOK && pulseOK && spinnerOK)
