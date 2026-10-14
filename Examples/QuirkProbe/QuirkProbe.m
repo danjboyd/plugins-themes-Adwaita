@@ -5772,10 +5772,12 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   NSLevelIndicator *warned = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 145, 200, 18)]);
   NSLevelIndicator *discrete = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 120, 200, 18)]);
   NSLevelIndicator *rating = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (10, 95, 100, 18)]);
+  /* Thresholds at or below 0 count: -1 is past a critical value of -2. */
+  NSLevelIndicator *negative = AUTORELEASE ([[NSLevelIndicator alloc] initWithFrame: NSMakeRect (220, 170, 90, 18)]);
   NSProgressIndicator *pulse = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 60, 300, 20)]);
   NSProgressIndicator *spinner = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 10, 32, 32)]);
   NSBitmapImageRep *rep;
-  NSUInteger accentRGB[3], warnRGB[3], windowRGB[3], troughEnd[3], troughInside[3];
+  NSUInteger accentRGB[3], warnRGB[3], windowRGB[3], troughEnd[3], troughInside[3], negativeRGB[3];
   BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
   NSColor *accent = [[NSColor selectedControlColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
   QuirkProbeInk plainInk, ratingInk, pulseInk, spinnerInk;
@@ -5797,6 +5799,13 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   [[rating cell] setLevelIndicatorStyle: NSRatingLevelIndicatorStyle];
   [rating setMaxValue: 5];
   [rating setDoubleValue: 3];
+  [[negative cell] setLevelIndicatorStyle: NSContinuousCapacityLevelIndicatorStyle];
+  [negative setMinValue: -10];
+  [negative setMaxValue: 0];
+  [negative setWarningValue: -5];
+  [negative setCriticalValue: -2];
+  [negative setDoubleValue: -1];
+  [content addSubview: negative];
   [pulse setIndeterminate: YES];
   [spinner setStyle: NSProgressIndicatorSpinningStyle];
   [spinner setIndeterminate: YES];
@@ -5815,6 +5824,7 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   /* Rows from the top of the 200pt view. */
   QuirkProbePixelAt (rep, 20, 200 - 179, accentRGB);
   QuirkProbePixelAt (rep, 20, 200 - 154, warnRGB);
+  QuirkProbePixelAt (rep, 224, 200 - 179, negativeRGB);
   QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
   plainInk = QuirkProbeMeasureIn (rep, QuirkProbeIsAccentBlue, NSMakeRect (10, 200 - 188, 200, 18));
   for (x = 10; x < 210; x++)
@@ -5851,13 +5861,15 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   pulseOK = pulseInk.count > 0 && pulseInk.width >= 50 && pulseInk.width <= 70;
   /* The turning quarter; the ring is dimmer than ink. */
   spinnerOK = spinnerInk.count > 0 && spinnerInk.width >= 10 && spinnerInk.height >= 10;
+  /* The error colour: red well above green and blue. */
+  levelsOK = levelsOK && negativeRGB[0] > negativeRGB[1] + 100 && negativeRGB[0] > negativeRGB[2] + 100;
   levelsOK = levelsOK && (highContrast
     ? labs ((long)troughEnd[0] - (long)troughInside[0]) >= 20
     : labs ((long)troughEnd[0] - (long)troughInside[0]) <= 3);
-  detail = [NSString stringWithFormat: @"level %ldx%ld in %@ (accent), warned %@, trough edge %@ inside %@; discrete gaps %ld; "
+  detail = [NSString stringWithFormat: @"level %ldx%ld in %@ (accent), warned %@, negative critical %@, trough edge %@ inside %@; discrete gaps %ld; "
     @"rating ink %ldx%ld; pulse %ldpt of 298; spinner ink %ldx%ld",
     (long)plainInk.width, (long)plainInk.height, QuirkProbeHex (accentRGB), QuirkProbeHex (warnRGB),
-    QuirkProbeHex (troughEnd), QuirkProbeHex (troughInside),
+    QuirkProbeHex (negativeRGB), QuirkProbeHex (troughEnd), QuirkProbeHex (troughInside),
     (long)gaps, (long)ratingInk.width, (long)ratingInk.height, (long)pulseInk.width,
     (long)spinnerInk.width, (long)spinnerInk.height];
   if (levelsOK && ratingOK && pulseOK && spinnerOK)
@@ -5880,7 +5892,7 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   NSUInteger fill[3];
   QuirkProbeInk marks;
   NSInteger x, columns = 0;
-  BOOL inMark = NO;
+  BOOL inMark = NO, dimmed = NO;
   NSString *detail;
 
   [slider setNumberOfTickMarks: 5];
@@ -5906,11 +5918,35 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
   QuirkProbeInkBackground = 750;
   [self saveWindow: window named: @"slider-ticks"];
+  /* Disabled, the marks are fainter. */
+  {
+    NSUInteger on[3], off[3];
+    NSInteger markX = 24 + (220 - 22) / 2;
+    NSBitmapImageRep *enabledRep = rep, *disabledRep;
+    NSInteger x2;
+
+    /* The middle mark's column (the slider is 220 wide, the knob at 0). */
+    for (x2 = 110; x2 < 130; x2++)
+      {
+        QuirkProbePixelAt (enabledRep, x2, 14 + 10, on);
+        if (labs ((long)on[0] - (long)fill[0]) > 20)
+          {
+            markX = x2;
+            break;
+          }
+      }
+    QuirkProbePixelAt (enabledRep, markX, 14 + 10, on);
+    [slider setEnabled: NO];
+    [window display];
+    disabledRep = QuirkProbeRender (slider);
+    QuirkProbePixelAt (disabledRep, markX, 14 + 10, off);
+    dimmed = labs ((long)off[0] - (long)fill[0]) < labs ((long)on[0] - (long)fill[0]) - 10;
+  }
   [window orderOut: nil];
 
-  detail = [NSString stringWithFormat: @"%ld marks right of the knob (want 4), %ldpt high, from %ldpt below the top",
-    (long)columns, (long)marks.height, (long)marks.minY];
-  if (columns == 4 && marks.height >= 5 && marks.height <= 7)
+  detail = [NSString stringWithFormat: @"%ld marks right of the knob (want 4), %ldpt high, from %ldpt below the top; "
+    @"disabled %@", (long)columns, (long)marks.height, (long)marks.minY, dimmed ? @"fainter" : @"not fainter"];
+  if (columns == 4 && marks.height >= 5 && marks.height <= 7 && dimmed)
     {
       [self pass: @"slider-tick-marks" detail: detail];
     }
@@ -6053,7 +6089,7 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   NSPopUpButton *bordered = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 10, 200, 34) pullsDown: NO]);
   NSBitmapImageRep *rep;
   NSUInteger windowRGB[3], flatRGB[3], borderedRGB[3];
-  QuirkProbeInk title;
+  QuirkProbeInk title, ring;
   BOOL ok;
   NSString *detail;
 
@@ -6072,12 +6108,22 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
   title = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (20, 100 - 88, 200, 34));
   QuirkProbeInkBackground = 750;
+  /* Focused after a key press, it shows the ring all the same. */
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: flat];
+  QuirkProbeSendApplicationEvent (window, NSKeyDown);
+  [window display];
+  ring = QuirkProbeMeasure (QuirkProbeRender (flat), QuirkProbeIsAccentBlue);
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (window, NSLeftMouseUp);
   [window orderOut: nil];
 
   ok = labs ((long)flatRGB[0] - (long)windowRGB[0]) <= 2 && labs ((long)borderedRGB[0] - (long)windowRGB[0]) >= 6
-    && title.count > 0;
-  detail = [NSString stringWithFormat: @"window %@; inside the borderless one %@, the bordered one %@; borderless title ink %lu px",
-    QuirkProbeHex (windowRGB), QuirkProbeHex (flatRGB), QuirkProbeHex (borderedRGB), (unsigned long)title.count];
+    && title.count > 0 && ring.count > 0;
+  detail = [NSString stringWithFormat: @"window %@; inside the borderless one %@, the bordered one %@; borderless title ink %lu px, "
+    @"%lu focus ring pixels",
+    QuirkProbeHex (windowRGB), QuirkProbeHex (flatRGB), QuirkProbeHex (borderedRGB), (unsigned long)title.count,
+    (unsigned long)ring.count];
   if (ok)
     {
       [self pass: @"borderless-popup" detail: detail];
@@ -6215,9 +6261,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
    Layout panel's empty Custom pop-up drew the nibble beside it. */
 - (void) checkPopUpArchivedArrow
 {
-  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 70) title: @"Probe Pop-Up Arrow"];
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 120) title: @"Probe Pop-Up Arrow"];
   NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 18, 200, 34) pullsDown: NO]);
+  NSPopUpButton *iconPopUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (20, 70, 200, 34) pullsDown: NO]);
   NSImage *nibble = [NSImage imageNamed: @"common_Nibble"];
+  QuirkProbeInk icon;
   NSBitmapImageRep *rep;
   NSUInteger fill[3];
   QuirkProbeInk ink;
@@ -6226,6 +6274,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   [popUp addItemWithTitle: @""];
   [[popUp itemAtIndex: 0] setImage: nibble];
   [[window contentView] addSubview: popUp];
+  /* An item whose icon is a 3D arrow (not a pull-down's arrow here) keeps
+     it. */
+  [iconPopUp addItemWithTitle: @""];
+  [[iconPopUp itemAtIndex: 0] setImage: [NSImage imageNamed: @"common_3DArrowRight"]];
+  [[window contentView] addSubview: iconPopUp];
   [window orderFront: nil];
   [window display];
   rep = QuirkProbeRender (popUp);
@@ -6233,16 +6286,18 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
   /* Everything before the chevron's box. */
   ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (4, 4, 200 - 8 - 24 - 6, [rep pixelsHigh] - 8));
+  icon = QuirkProbeMeasureIn (QuirkProbeRender (iconPopUp), QuirkProbeIsInk,
+                              NSMakeRect (4, 4, 200 - 8 - 24 - 6, [rep pixelsHigh] - 8));
   QuirkProbeInkBackground = 750;
   [window orderOut: nil];
 
-  detail = [NSString stringWithFormat: @"nibble image %@; %lu ink pixel(s) before the chevron",
-    nibble != nil ? @"found" : @"missing", (unsigned long)ink.count];
+  detail = [NSString stringWithFormat: @"nibble image %@; %lu ink pixel(s) before the chevron; a 3D arrow icon %lu",
+    nibble != nil ? @"found" : @"missing", (unsigned long)ink.count, (unsigned long)icon.count];
   if (nibble == nil)
     {
       [self skip: @"popup-archived-arrow" detail: detail];
     }
-  else if (ink.count == 0)
+  else if (ink.count == 0 && icon.count > 0)
     {
       [self pass: @"popup-archived-arrow" detail: detail];
     }

@@ -1801,6 +1801,19 @@ GnomeThemeCenteredRect(NSRect frame, CGFloat width, CGFloat height)
                     height);
 }
 
+/* A tab view's frame and the line between its tabs and content:
+   GtkNotebook's border, the separator colour (the foreground at 15%, 50%
+   in high contrast). It had been controlShadowColor blended toward the
+   window, which in the dark palette all but vanished. */
+static NSColor *
+GnomeThemeTabBorderColor(GSTheme *theme, NSColor *headerFill)
+{
+  return GnomeThemeColor (theme, @"GnomeThemeSeparatorColor",
+                          GnomeThemeBlend (GnomeThemeColor (theme, @"controlShadowColor",
+                                                            [NSColor controlShadowColor]),
+                                           headerFill, 0.43));
+}
+
 static BOOL
 GnomeThemeUsesFlatTabs(NSTabViewType type)
 {
@@ -2002,6 +2015,10 @@ GnomeThemeDrawTabLabel(NSString *label,
       if (highlighted && disabled == NO)
         {
           GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, pressedFill, nil, 0.0);
+        }
+      if (focused && disabled == NO)
+        {
+          GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, 0.75, 0.75), MAX (0.0, radius - 0.75));
         }
       return;
     }
@@ -2558,11 +2575,12 @@ GnomeThemeDrawTabLabel(NSString *label,
     {
       NSInteger count = [sliderCell numberOfTickMarks];
       BOOL after = ([sliderCell tickMarkPosition] == NSTickMarkBelow);
+      /* Half that disabled, as libadwaita's insensitive scale. */
       NSColor *markColor = GnomeThemeBlend (GnomeThemeColor (self, @"windowBackgroundColor",
                                                              [NSColor windowBackgroundColor]),
                                             GnomeThemeColor (self, @"GnomeThemeForegroundColor",
                                                              [NSColor controlTextColor]),
-                                            0.55);
+                                            [cell isEnabled] ? 0.55 : 0.275);
       NSInteger i;
 
       [markColor set];
@@ -3117,13 +3135,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
   CGFloat tabHeight = [self tabHeightForType: type];
   NSColor *headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   NSColor *contentFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
-  /* GtkNotebook's border, the foreground at 15% (the separator colour);
-     it had been controlShadowColor blended toward the window, which in
-     the dark palette all but vanished. */
-  NSColor *borderColor = GnomeThemeColor (self, @"GnomeThemeSeparatorColor",
-                                          GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor",
-                                                                            [NSColor controlShadowColor]),
-                                                           headerFill, 0.43));
+  NSColor *borderColor = GnomeThemeTabBorderColor (self, headerFill);
   NSRect headerRect;
   NSRect contentRect;
   NSRect separatorRect;
@@ -3198,10 +3210,7 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
   headerFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
   /* As -drawTabViewBezelRect:... draws it. */
-  borderColor = GnomeThemeColor (self, @"GnomeThemeSeparatorColor",
-                                 GnomeThemeBlend (GnomeThemeColor (self, @"controlShadowColor",
-                                                                   [NSColor controlShadowColor]),
-                                                  headerFill, 0.43));
+  borderColor = GnomeThemeTabBorderColor (self, headerFill);
   textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   accentColor = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   font = [tabView font];
@@ -3284,11 +3293,11 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 
 @end
 
-/* A level indicator's fill colour, as Cocoa picks it: past the critical
-   value libadwaita's error colour, past the warning value its warning
+/* A level indicator's fill colour, as Cocoa picks it: from the critical
+   value up libadwaita's error colour, from the warning value its warning
    colour, else the accent. With the critical value below the warning
-   value, the low values are the bad ones. With neither set, the accent
-   (GNUstep drew everything red then). */
+   value, the values below them are the bad ones. With the two equal
+   (neither set), the accent (GNUstep drew everything red then). */
 static NSColor *
 GnomeThemeLevelFillColor(GSTheme *theme, NSLevelIndicatorCell *cell, double value)
 {
@@ -3298,23 +3307,26 @@ GnomeThemeLevelFillColor(GSTheme *theme, NSLevelIndicatorCell *cell, double valu
   NSColor *warningColor = GnomeThemeColor (theme, @"GnomeThemeWarningColor", [NSColor orangeColor]);
   NSColor *errorColor = GnomeThemeColor (theme, @"GnomeThemeErrorColor", [NSColor redColor]);
 
+  /* Equal (both left at 0, say): no thresholds. */
   if (warning == critical)
     {
       return accent;
     }
   if (warning < critical)
     {
-      if (critical > 0.0 && value >= critical)
+      if (value >= critical)
         {
           return errorColor;
         }
-      return (warning > 0.0 && value >= warning) ? warningColor : accent;
+      return (value >= warning) ? warningColor : accent;
     }
-  if (value <= critical)
+  /* Low values are the bad ones: below the threshold, not at it (an
+     empty level with the critical value left at 0 isn't an error). */
+  if (value < critical)
     {
       return errorColor;
     }
-  return (value <= warning) ? warningColor : accent;
+  return (value < warning) ? warningColor : accent;
 }
 
 /* A pill of `rect` (the shorter side its diameter) in `color`. */
@@ -3498,11 +3510,6 @@ GnomeThemeFillPill(NSRect rect, NSColor *color)
     }
 }
 
-/* NSSplitView's dividers as GtkPaned's separators: a thin divider is a
-   1pt line, the foreground at 15%; a thick or pane splitter divider (6pt)
-   is GtkPaned's wide handle, a line at each edge with the window between.
-   GNUstep drew NeXT's dimple in the middle of the thick ones, and the
-   thin one in whatever colour was set. */
 /* Dark ink drawn over `background` in `source`, as a bitmap of `ink` at
    each pixel's coverage: how far the pixel is from the background towards
    black. For drawing that only comes in black (libs-gui's ruler). */
@@ -3524,7 +3531,8 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
   unsigned char *data;
   NSInteger x, y, bytesPerRow;
 
-  if (bg == nil || rgb == nil || width <= 0 || height <= 0)
+  if (bg == nil || rgb == nil || width <= 0 || height <= 0
+    || samples < 3 || samples > 5 || bits < 1 || bits > 16)
     {
       return nil;
     }
@@ -3552,10 +3560,6 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
   data = [mask bitmapData];
   bytesPerRow = [mask bytesPerRow];
   if (data == NULL)
-    {
-      return nil;
-    }
-  if (samples < 3 || samples > 5 || bits < 1 || bits > 16)
     {
       return nil;
     }
@@ -3588,9 +3592,9 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
    along its edge, its marks, labels and markers in the foreground at 55%.
    libs-gui fills it with controlColor and draws the marks and labels in
    blackColor, which in the dark palette all but vanished. The marks are
-   libs-gui's own: drawn in black on the window's colour, read back
-   (-cacheDisplayInRect: reads the window's pixels), and drawn again as a
-   mask in the theme's colour over a fresh background. */
+   libs-gui's own: drawn in black on the window's colour, read back from
+   the window (-initWithFocusedViewRect:), and drawn again as a mask in the
+   theme's colour over a fresh background. */
 - (void) _overrideNSRulerViewMethod_drawRect: (NSRect)aRect
 {
   NSRulerView *ruler = (NSRulerView *)self;
@@ -3612,10 +3616,10 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
     {
       return;
     }
-  rep = [ruler bitmapImageRepForCachingDisplayInRect: aRect];
+  /* The ruler has the focus here: read its pixels back once. */
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: aRect]);
   if (rep != nil)
     {
-      [ruler cacheDisplayInRect: aRect toBitmapImageRep: rep];
       mask = GnomeThemeInkMask (rep, window, marks);
     }
   if (mask == nil)
@@ -3656,6 +3660,11 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
   }
 }
 
+/* NSSplitView's dividers as GtkPaned's separators: a thin divider is a
+   1pt line, the foreground at 15%; a thick or pane splitter divider (6pt)
+   is GtkPaned's wide handle, a line at each edge with the window between.
+   GNUstep drew NeXT's dimple in the middle of the thick ones, and the
+   thin one in whatever colour was set. */
 - (void) _overrideNSSplitViewMethod_drawDividerInRect: (NSRect)aRect
 {
   NSSplitView *splitView = (NSSplitView *)self;
@@ -4782,14 +4791,20 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
     }
 }
 
-/* GNUstep's pop-up and pull-down arrows (NSPopUpButtonCell's images). */
+/* GNUstep's arrow for this kind of cell (NSPopUpButtonCell's images): the
+   nibble for a pop-up, a 3D arrow for a pull-down. Only that one, so an
+   item that shows another of these images as its icon keeps it. */
 static BOOL
-GnomeThemeIsPopUpArrowImage(NSImage *image)
+GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
 {
   NSString *name = [image name];
 
-  return [name isEqualToString: @"common_Nibble"] || [name isEqualToString: @"common_3DArrowDown"]
-    || [name isEqualToString: @"common_3DArrowRight"] || [name isEqualToString: @"common_3DArrowUp"];
+  if ([cell pullsDown] == NO)
+    {
+      return [name isEqualToString: @"common_Nibble"];
+    }
+  return [name isEqualToString: @"common_3DArrowDown"] || [name isEqualToString: @"common_3DArrowRight"]
+    || [name isEqualToString: @"common_3DArrowUp"];
 }
 
 - (void) _overrideNSPopUpButtonCellMethod_drawInteriorWithFrame: (NSRect)cellFrame
@@ -4813,7 +4828,7 @@ GnomeThemeIsPopUpArrowImage(NSImage *image)
      it (the Page Layout panel's empty Custom pop-up showed the nibble
      beside the chevron). */
   if (item != nil && [item image] != nil
-    && ([item image] == arrowImage || GnomeThemeIsPopUpArrowImage ([item image])))
+    && ([item image] == arrowImage || GnomeThemeIsPopUpArrowImage (cell, [item image])))
     {
       savedImage = RETAIN ([item image]);
       [item setImage: nil];
@@ -5017,8 +5032,7 @@ GnomeThemeIsPopUpArrowImage(NSImage *image)
   typedef BOOL (*TrackMouseIMP)(id, SEL, NSEvent *, NSRect, NSView *, BOOL);
   TrackMouseIMP originalIMP = (TrackMouseIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBoxCell class]);
   NSPoint point = [controlView convertPoint: [theEvent locationInWindow] fromView: nil];
-  BOOL nonEditableCombo = ([controlView isKindOfClass: [NSComboBox class]]
-    && [(NSComboBox *)controlView isEditable] == NO);
+  BOOL nonEditableCombo = GnomeThemeIsDropDownComboBox (controlView);
   NSRect themedButtonRect = GnomeThemeComboBoxButtonRect (cellFrame);
   NSComboBoxCell *cell = (NSComboBoxCell *)self;
 
