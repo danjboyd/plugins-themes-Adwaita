@@ -2510,6 +2510,70 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
       }
   }
 
+  /* The title keeps 100pt of the toolbar's flexible space as the window
+     narrows: the items after it go into the » menu first, and the space
+     isn't squeezed to nothing (ScreenshotTool at 860pt). */
+  {
+    NSMutableArray *failures = [NSMutableArray array];
+    NSString *roomDetail;
+    int widths = 0;
+    CGFloat w;
+
+    for (w = 200.0; w <= 700.0; w += 20.0)
+      {
+        NSWindow *sized = [self windowWithFrame: NSMakeRect (40, 200, w, 200) title: @"Probe Toolbar Title Room"];
+        NSString *identifier = [NSString stringWithFormat: @"QuirkProbeHeaderToolbarRoom%g", w];
+        NSToolbar *sizedToolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: identifier]);
+        NSView *sizedToolbarView;
+        NSRect space = NSZeroRect;
+        CGFloat startEnd = 0.0;
+        BOOL beforeSpace = YES;
+
+        [sizedToolbar setDelegate: delegate];
+        [sized setToolbar: sizedToolbar];
+        [sized orderFront: nil];
+        [sized display];
+        sizedToolbarView = [sizedToolbar _toolbarView];
+        enumerator = [[sizedToolbar items] objectEnumerator];
+        while ((item = [enumerator nextObject]) != nil)
+          {
+            NSView *backView = [item _backView];
+
+            if ([[item itemIdentifier] isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
+              {
+                space = [sizedToolbarView convertRect: [backView bounds] fromView: backView];
+                beforeSpace = NO;
+              }
+            else if (beforeSpace)
+              {
+                startEnd = NSMaxX ([sizedToolbarView convertRect: [backView bounds] fromView: backView]);
+              }
+          }
+        /* Room for the start items, the title and the » at least. */
+        if (NSWidth ([sizedToolbarView frame]) >= startEnd + 100.0 + 28.0)
+          {
+            widths++;
+            if (NSWidth (space) < 99.5 || NSMaxX (space) > NSWidth ([sizedToolbarView frame]) + 0.5)
+              {
+                [failures addObject: [NSString stringWithFormat: @"%g: space %g-%g in %g", w,
+                  NSMinX (space), NSMaxX (space), NSWidth ([sizedToolbarView frame])]];
+              }
+          }
+        [sized orderOut: nil];
+      }
+    roomDetail = [NSString stringWithFormat: @"%d window widths with room, %lu with less than 100pt for the title%@%@",
+      widths, (unsigned long)[failures count], [failures count] ? @": " : @"",
+      [failures componentsJoinedByString: @"; "]];
+    if (widths > 0 && [failures count] == 0)
+      {
+        [self pass: @"header-bar-toolbar-title-room" detail: roomDetail];
+      }
+    else
+      {
+        [self fail: @"header-bar-toolbar-title-room" detail: roomDetail];
+      }
+  }
+
   /* Right to left, as GTK mirrors its header bar: the first item at the
      right end, the items after the flexible space at the left. */
   {

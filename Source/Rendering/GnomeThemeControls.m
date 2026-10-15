@@ -4731,10 +4731,12 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
   NSEnumerator *enumerator;
   NSToolbarItem *item;
 
+  GnomeThemeHeaderBarReserveTitleRoom ((NSView *)self);
   if (originalIMP != NULL)
     {
       originalIMP (self, _cmd);
     }
+  GnomeThemeHeaderBarGiveTitleRoom ((NSView *)self);
   if (GnomeThemeLaysOutToolbar (toolbar) == NO)
     {
       return;

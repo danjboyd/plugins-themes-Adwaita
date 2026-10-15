@@ -53,6 +53,14 @@ static const CGFloat GnomeThemeWindowButtonSpacing = 3.0;
 static const CGFloat GnomeThemeWindowButtonCircle = 24.0;
 /* Title: kept this far from the buttons at either end. */
 static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
+/* With the toolbar in the bar, the title's flexible space keeps this much
+   room: a short title, or a long one shortened with "…". Toolbar items go
+   into the » menu first. */
+static const CGFloat GnomeThemeHeaderBarMinimumTitleWidth = 100.0;
+/* libs-gui's » button and the inset on each side of an item's view
+   (ClippedItemsViewWidth and InsetItemViewX in GSToolbarView.m). */
+static const CGFloat GnomeThemeToolbarClippedItemsWidth = 28.0;
+static const CGFloat GnomeThemeToolbarItemViewInset = 10.0;
 /* Resizing: a strip this wide inside each edge (there's no shadow margin
    outside the window to put it in), and corners this long. */
 static const CGFloat GnomeThemeResizeEdge = 5.0;
@@ -108,6 +116,7 @@ enum
 
 @interface NSToolbarItem (GnomeThemeHeaderBarPrivate)
 - (NSView *) _backView;
+- (BOOL) _isFlexibleSpace;
 @end
 
 @interface NSView (GnomeThemeHeaderBarToolbarView)
@@ -115,6 +124,7 @@ enum
 - (void) setBorderMask: (unsigned int)borderMask;
 - (unsigned int) borderMask;
 - (CGFloat) _heightFromLayout;
+- (NSToolbar *) toolbar;
 - (NSToolbarItem *) toolbarItem;
 - (BOOL) holdsToolbarInBar;
 @end
@@ -1882,6 +1892,130 @@ GnomeThemeHeaderBarDesktopSettingsChanged(void)
         }
     }
 }
+
+/* The width libs-gui counts for an item when it decides which items fit
+   (-_visibleBackViews in GSToolbarView.m); a flexible space counts as
+   `space`. */
+static CGFloat
+GnomeThemeToolbarItemCountedWidth(NSToolbarItem *item, CGFloat space)
+{
+  if ([item _isFlexibleSpace])
+    {
+      return space;
+    }
+  if ([item view] != nil)
+    {
+      return [item minSize].width + 2.0 * GnomeThemeToolbarItemViewInset;
+    }
+  return NSWidth ([[item _backView] frame]);
+}
+
+/* In the bar, the title is drawn in the toolbar's widest flexible space.
+   libs-gui shrinks the flexible spaces to nothing before it moves items
+   into the » menu, and the title went with them (ScreenshotTool's toolbar
+   at 860pt). Around libs-gui's share-out of the flexible width
+   (GnomeThemeControls.m's -_takeInAccountFlexibleSpaces): the first
+   flexible space counts as GnomeThemeHeaderBarMinimumTitleWidth when
+   libs-gui decides which items fit, so the items at the end go into the »
+   menu first, and gets back the room left at the end afterwards. */
+static NSToolbarItem *
+GnomeThemeHeaderBarTitleSpace(NSView *toolbarView, NSUInteger *index)
+{
+  NSView *superview = [toolbarView superview];
+  NSArray *items;
+  NSUInteger i, n;
+
+  if ([superview respondsToSelector: @selector(holdsToolbarInBar)] == NO || [superview holdsToolbarInBar] == NO)
+    {
+      return nil;
+    }
+  items = [[toolbarView toolbar] items];
+  n = [items count];
+  for (i = 0; i < n; i++)
+    {
+      if ([[items objectAtIndex: i] _isFlexibleSpace])
+        {
+          *index = i;
+          return [items objectAtIndex: i];
+        }
+    }
+  return nil;
+}
+
+void
+GnomeThemeHeaderBarReserveTitleRoom(NSView *toolbarView)
+{
+  NSUInteger index;
+  NSToolbarItem *space = GnomeThemeHeaderBarTitleSpace (toolbarView, &index);
+  NSView *backView = [space _backView];
+  NSRect frame;
+
+  if (space == nil)
+    {
+      return;
+    }
+  frame = [backView frame];
+  frame.size.width = GnomeThemeHeaderBarMinimumTitleWidth;
+  [backView setFrame: frame];
+}
+
+void
+GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
+{
+  NSUInteger titleIndex = 0;
+  NSToolbarItem *titleSpace = GnomeThemeHeaderBarTitleSpace (toolbarView, &titleIndex);
+  NSArray *items = [[toolbarView toolbar] items];
+  NSToolbarItem *item;
+  NSView *backView;
+  CGFloat width = NSWidth ([toolbarView frame]);
+  CGFloat counted = 0.0, others = 0.0, end, x = 0.0;
+  NSUInteger i, n = [items count], visible = 0;
+
+  if (titleSpace == nil)
+    {
+      return;
+    }
+  /* The items libs-gui found room for, as it counted them, and their
+     widths but the title's space. */
+  for (i = 0; i < n; i++)
+    {
+      item = [items objectAtIndex: i];
+      counted += GnomeThemeToolbarItemCountedWidth (item, item == titleSpace
+                                                    ? GnomeThemeHeaderBarMinimumTitleWidth : 0.0);
+      if (counted + GnomeThemeToolbarClippedItemsWidth > width && (i < n - 1 || counted > width))
+        {
+          break;
+        }
+      visible = i + 1;
+      if (item != titleSpace)
+        {
+          others += NSWidth ([[item _backView] frame]);
+        }
+    }
+  if (visible <= titleIndex)
+    {
+      return;
+    }
+  /* The title's space takes what the visible items leave, and the items
+     follow one another from the start (libs-gui leaves them where they
+     were when no width is left to share out). */
+  end = visible < n ? width - GnomeThemeToolbarClippedItemsWidth : width;
+  for (i = 0; i < n; i++)
+    {
+      NSRect frame;
+
+      backView = [[items objectAtIndex: i] _backView];
+      frame = [backView frame];
+      frame.origin.x = x;
+      if (i == titleIndex)
+        {
+          frame.size.width = MAX (0.0, floor (end - others));
+        }
+      [backView setFrame: frame];
+      x += NSWidth (frame);
+    }
+}
+
 
 - (NSView *) _overrideGSToolbarViewMethod_hitTest: (NSPoint)point
 {
