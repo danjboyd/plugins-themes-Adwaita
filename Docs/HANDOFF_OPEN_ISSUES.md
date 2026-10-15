@@ -12,14 +12,6 @@ code pointers; read it before starting.
   the user's GNUstep). alpha10's release notes say it is superseded.
   ReleaseCoordinator (a local session) collects all the projects for
   Dan's mailing-list announcement.
-- **Apt:** alpha10 is in the repo for amd64 and arm64; alpha9 never was
-  (that release stopped after cloning). This session's permissions block
-  the ssh build and publish steps, so the `iep-apt` Remote Control
-  session runs them (SendMessage "iep-apt"; it reports back). iep-apt's
-  `~/git/apt_portstree` can't pull (GitHub auth), so it starts from the
-  previous `debian/` plus the new changelog entry. alpha11 was handed to
-  it on the evening of 2026-10-15; check the index for `0.1.0~alpha11-1`.
-  iep-wellproduction still has libs-gui `0.32.0-4` installed.
 - **Alt+F4 killed the app (alpha11, 2ed57cb):** the theme allowed close
   in the Motif hints (since 3ebf9f1), but libs-back lists
   WM_DELETE_WINDOW only for windows it decorates, so Mutter killed the
