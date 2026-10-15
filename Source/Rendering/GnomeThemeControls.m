@@ -2023,6 +2023,42 @@ GnomeThemeDrawTabLabel(NSString *label,
       return;
     }
 
+  /* Recessed and textured buttons, Cocoa's toolbar and scope bar styles,
+     are libadwaita's .flat buttons: no fill or outline at rest, the
+     foreground at 16% over the window while pressed, 10% while a toggle
+     is on and 19% for both. (They were the regular filled button.)
+     libs-gui reports a toggle that is on as highlighted, as it does a
+     pressed button, so the cell says which it is. libadwaita's 7% hover
+     fill needs the pointer tracked, which GNUstep's buttons don't do. */
+  if (popupButton == NO
+    && (style == NSRecessedBezelStyle || style == NSTexturedRoundedBezelStyle
+        || style == NSTexturedSquareBezelStyle))
+    {
+      NSColor *window = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+      NSColor *text = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
+      BOOL pressed = [cell isHighlighted] && disabled == NO;
+      BOOL checked = [cell state] == NSOnState && GnomeThemeButtonCellUsesPersistentAccentSelection (cell);
+      CGFloat fraction = 0.0;
+
+      if (pressed)
+        {
+          fraction = checked ? 0.19 : 0.16;
+        }
+      else if (checked)
+        {
+          fraction = disabled ? 0.05 : 0.10;
+        }
+      if (fraction > 0.0)
+        {
+          GnomeThemeFillAndStrokeRoundedRect (buttonRect, radius, GnomeThemeBlend (window, text, fraction), nil, 0.0);
+        }
+      if (focused && disabled == NO)
+        {
+          GnomeThemeDrawFocusRing (self, NSInsetRect (buttonRect, 0.75, 0.75), MAX (0.0, radius - 0.75));
+        }
+      return;
+    }
+
   /* libadwaita's buttons have no outline; high contrast gives them one,
      the foreground at 50% (40% opacity disabled), but not the accent
      ones. */

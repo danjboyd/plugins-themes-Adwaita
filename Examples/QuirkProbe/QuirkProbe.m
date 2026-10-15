@@ -5649,6 +5649,82 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Recessed and textured buttons are libadwaita's .flat buttons: nothing
+   behind the label at rest, the foreground at 10% over the window while a
+   toggle is on, 16% while pressed. A rounded button keeps its fill.
+   (They were all the regular filled button.) */
+- (void) checkFlatButtons
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 440, 70) title: @"Probe Flat Buttons"];
+  NSView *content = [window contentView];
+  NSInteger styles[3] = { NSRecessedBezelStyle, NSTexturedRoundedBezelStyle, NSTexturedSquareBezelStyle };
+  NSButton *flat[3], *on, *pressed, *rounded;
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], rest[3][3], onRGB[3], pressedRGB[3], roundedRGB[3], text[1];
+  NSInteger i, top = 70 - 46;
+  BOOL restOK = YES, onOK, pressedOK, roundedOK;
+  NSString *detail;
+
+  for (i = 0; i < 3; i++)
+    {
+      flat[i] = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10 + 70 * i, 20, 60, 26)]);
+      [flat[i] setBezelStyle: styles[i]];
+      [flat[i] setTitle: @"A"];
+      [content addSubview: flat[i]];
+    }
+  on = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (220, 20, 60, 26)]);
+  [on setBezelStyle: NSRecessedBezelStyle];
+  [on setButtonType: NSPushOnPushOffButton];
+  [on setTitle: @"A"];
+  [on setState: NSOnState];
+  [content addSubview: on];
+  pressed = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (360, 20, 60, 26)]);
+  [pressed setBezelStyle: NSRecessedBezelStyle];
+  [pressed setTitle: @"A"];
+  [[pressed cell] setHighlighted: YES];
+  [content addSubview: pressed];
+  rounded = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (290, 20, 60, 26)]);
+  [rounded setBezelStyle: NSRoundedBezelStyle];
+  [rounded setTitle: @"A"];
+  [content addSubview: rounded];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (content);
+  QuirkProbePixelAt (rep, 2, 2, windowRGB);
+  /* 8pt in from each button's left edge, halfway down: clear of the label
+     and the corners. */
+  for (i = 0; i < 3; i++)
+    {
+      QuirkProbePixelAt (rep, 10 + 70 * i + 8, top + 13, rest[i]);
+      restOK = restOK && labs ((long)rest[i][0] - (long)windowRGB[0]) <= 2;
+    }
+  QuirkProbePixelAt (rep, 220 + 8, top + 13, onRGB);
+  QuirkProbePixelAt (rep, 290 + 8, top + 13, roundedRGB);
+  QuirkProbePixelAt (rep, 360 + 8, top + 13, pressedRGB);
+  text[0] = (NSUInteger)floor ([[[NSColor controlTextColor]
+    colorUsingColorSpaceName: NSCalibratedRGBColorSpace] redComponent] * 255.0 + 0.5);
+  /* 10% of the way from the window's red to the text's. */
+  onOK = labs ((long)onRGB[0] - (long)(windowRGB[0] + 0.10 * ((long)text[0] - (long)windowRGB[0]))) <= 4
+    && labs ((long)onRGB[0] - (long)windowRGB[0]) >= 6;
+  pressedOK = labs ((long)pressedRGB[0] - (long)(windowRGB[0] + 0.16 * ((long)text[0] - (long)windowRGB[0]))) <= 4;
+  roundedOK = labs ((long)roundedRGB[0] - (long)windowRGB[0]) >= 6;
+  [self saveWindow: window named: @"flat-buttons"];
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"window %@; at rest: recessed %@, textured rounded %@, textured square %@; "
+    @"recessed toggle on %@, pressed %@; rounded %@",
+    QuirkProbeHex (windowRGB), QuirkProbeHex (rest[0]), QuirkProbeHex (rest[1]), QuirkProbeHex (rest[2]),
+    QuirkProbeHex (onRGB), QuirkProbeHex (pressedRGB), QuirkProbeHex (roundedRGB)];
+  if (restOK && onOK && pressedOK && roundedOK)
+    {
+      [self pass: @"flat-buttons" detail: detail];
+    }
+  else
+    {
+      [self fail: @"flat-buttons" detail: detail];
+    }
+}
+
 /* Buttons whose style is a shape: a disclosure button is GtkExpander's
    arrow (pointing right closed, down open; GSTheme drew nothing), help and
    circular buttons are round (.circular), the help button with its "?"
@@ -7861,6 +7937,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserTitles];
   [self checkBrowserLists];
   [self checkShapedButtons];
+  [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
@@ -7955,6 +8032,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkBrowserTitles];
   [self checkBrowserLists];
   [self checkShapedButtons];
+  [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
   [self checkSliderTickMarks];
