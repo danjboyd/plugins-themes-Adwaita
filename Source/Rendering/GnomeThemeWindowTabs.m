@@ -59,6 +59,7 @@ static const CGFloat GnomeThemeTabHeight = 34.0;
 static const CGFloat GnomeThemeTabRadius = 6.0;
 static const CGFloat GnomeThemeTabCloseSize = 24.0;
 static const CGFloat GnomeThemeTabCloseInset = 4.0;
+static const CGFloat GnomeThemeTabTitlePadding = 8.0;
 static const CGFloat GnomeThemeTabSeparatorHeight = 27.0;
 static const CGFloat GnomeThemeTabSelectedAlpha = 0.10;
 static const CGFloat GnomeThemeTabHoverAlpha = 0.07;
@@ -213,8 +214,18 @@ GnomeThemeTabShapeRect(NSRect tabRect)
     }
   [attributes setObject: font forKey: NSFontAttributeName];
   [attributes setObject: text forKey: NSForegroundColorAttributeName];
-  /* Centred in the whole tab, clear of a close button at either end. */
-  room = NSWidth (shape) - 2.0 * (GnomeThemeTabCloseSize + 2.0 * GnomeThemeTabCloseInset);
+  /* Centred in the whole tab, clear of a close button at either end
+     where the tab shows one; without one the title has the tab's width
+     less its padding, as AdwTab's 126pt tabs show "Document 3.txt" in
+     full. */
+  if (NSIsEmptyRect ([self windowTabCloseButtonRectForTabRect: rect state: state window: window]))
+    {
+      room = NSWidth (shape) - 2.0 * GnomeThemeTabTitlePadding;
+    }
+  else
+    {
+      room = NSWidth (shape) - 2.0 * (GnomeThemeTabCloseSize + 2.0 * GnomeThemeTabCloseInset);
+    }
   title = GSWindowTabFittedTitle (title, attributes, MAX (room, 0.0));
   size = [title sizeWithAttributes: attributes];
   [title drawAtPoint: NSMakePoint (floor (NSMidX (shape) - size.width / 2.0),

@@ -7557,6 +7557,57 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
    the selected tab's 10%), opaque, with its close button. A scroll fade is
    42pt: the bar's colour, opaque for 6pt at the edge, then fading out
    linearly over 36pt. */
+/* A tab with no close button (neither selected nor hovered) gives its
+   title the tab's whole width, less 8pt each side, as AdwTab does: a
+   126pt tab shows "Document 3.txt" in full. The title used to keep room
+   for a close button at each end, and was cut to "Doc…". */
+- (void) checkWindowTabTitleWidth
+{
+  GSTheme *theme = [GSTheme theme];
+  NSString *title = @"Document 3.txt";
+  NSWindow *window;
+  NSImage *canvas;
+  NSBitmapImageRep *rep;
+  NSRect tabRect = NSMakeRect (0, 0, 126, 40);
+  NSDictionary *attributes = [NSDictionary dictionaryWithObject: [NSFont systemFontOfSize: 0]
+                                                         forKey: NSFontAttributeName];
+  CGFloat full = [title sizeWithAttributes: attributes].width;
+  NSColor *background;
+  NSUInteger savedBackground = QuirkProbeInkBackground;
+  QuirkProbeInk ink;
+  NSString *detail;
+
+  if ([NSWindow instancesRespondToSelector: @selector(tab)] == NO
+    || [theme respondsToSelector: @selector(drawWindowTab:inRect:state:window:)] == NO)
+    {
+      [self fail: @"window-tab-title-width" detail: @"the tabbing code isn't in the theme"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (80, 80, 300, 100) title: title];
+  background = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  canvas = AUTORELEASE ([[NSImage alloc] initWithSize: tabRect.size]);
+  [canvas lockFocus];
+  [background set];
+  NSRectFill (tabRect);
+  [(id)theme drawWindowTab: [(id)window tab] inRect: tabRect state: 0 window: window];
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: tabRect]);
+  [canvas unlockFocus];
+  QuirkProbeInkBackground = (NSUInteger)floor (([background redComponent] + [background greenComponent]
+                                                + [background blueComponent]) * 255.0 + 0.5);
+  ink = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (0, 0, NSWidth (tabRect), NSHeight (tabRect)));
+  QuirkProbeInkBackground = savedBackground;
+  detail = [NSString stringWithFormat: @"\"%@\" in a 126pt tab with no close button: ink %ldpt wide, "
+    @"the whole title %.0fpt", title, (long)ink.width, full];
+  if (ink.width >= full - 4.0)
+    {
+      [self pass: @"window-tab-title-width" detail: detail];
+    }
+  else
+    {
+      [self fail: @"window-tab-title-width" detail: detail];
+    }
+}
+
 - (void) checkWindowTabsDragAndFade
 {
   typedef NSView *(*BarFunction)(NSWindow *);
@@ -7829,6 +7880,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkWindowTabsDragAndFade];
+  [self checkWindowTabTitleWidth];
   [self checkDropDownList];
   [self checkDropDownEmpty];
   [self checkSourceList];
@@ -7922,6 +7974,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkAutohideTileSettles];
   [self checkWindowTabs];
   [self checkWindowTabsDragAndFade];
+  [self checkWindowTabTitleWidth];
   [self checkDropDownList];
   [self checkDropDownEmpty];
   [self checkSourceList];
