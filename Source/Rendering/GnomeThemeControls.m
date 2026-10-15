@@ -1820,6 +1820,56 @@ GnomeThemeUsesFlatTabs(NSTabViewType type)
   return (type == NSTopTabsBezelBorder || type == NSBottomTabsBezelBorder);
 }
 
+/* An accent button (ScreenshotTool's primary buttons): libadwaita's
+   .suggested-action without being the window's default button, so Return
+   keeps doing what it did. An app sets it with -setGSThemeStyle:
+   (@"accent", or nil for the regular button), a theme-neutral name any
+   theme may implement, as WinUI's -[NSProgressIndicator setGSThemeState:];
+   apps ask -respondsToSelector: first, as other themes and AppKit don't
+   have it. Kept with the cell, which is what draws. */
+static char GnomeThemeButtonStyleKey;
+
+@implementation NSButtonCell (GnomeThemeStyle)
+
+- (void) setGSThemeStyle: (NSString *)style
+{
+  if ([style isEqualToString: @"accent"] == NO)
+    {
+      style = nil;
+    }
+  objc_setAssociatedObject (self, &GnomeThemeButtonStyleKey, style, OBJC_ASSOCIATION_COPY_NONATOMIC);
+  [[self controlView] setNeedsDisplay: YES];
+}
+
+- (NSString *) GSThemeStyle
+{
+  return objc_getAssociatedObject (self, &GnomeThemeButtonStyleKey);
+}
+
+@end
+
+@implementation NSButton (GnomeThemeStyle)
+
+- (void) setGSThemeStyle: (NSString *)style
+{
+  [(NSButtonCell *)[self cell] setGSThemeStyle: style];
+  [self setNeedsDisplay: YES];
+}
+
+- (NSString *) GSThemeStyle
+{
+  return [(NSButtonCell *)[self cell] GSThemeStyle];
+}
+
+@end
+
+BOOL
+GnomeThemeButtonCellHasAccentStyle(NSCell *cell)
+{
+  return [cell isKindOfClass: [NSButtonCell class]]
+    && [[(NSButtonCell *)cell GSThemeStyle] isEqualToString: @"accent"];
+}
+
 static BOOL
 GnomeThemeButtonCellUsesPersistentAccentSelection(NSCell *cell)
 {
@@ -2006,6 +2056,17 @@ GnomeThemeDrawTabLabel(NSString *label,
     {
       isDefaultButton = ([[view window] defaultButtonCell] == cell);
     }
+  /* An accent button is drawn as the default button, flat styles too:
+     libadwaita's .suggested-action is filled in a header bar as well. */
+  if (popupButton == NO && GnomeThemeButtonCellHasAccentStyle (cell))
+    {
+      isDefaultButton = YES;
+      if (style == NSRecessedBezelStyle || style == NSTexturedRoundedBezelStyle
+          || style == NSTexturedSquareBezelStyle)
+        {
+          style = NSRoundedBezelStyle;
+        }
+    }
 
   /* A borderless pop-up button (a table's pop-up cells, mostly) is
      libadwaita's flat drop-down: no fill but while pressed. libs-gui's
@@ -2076,6 +2137,15 @@ GnomeThemeDrawTabLabel(NSString *label,
         {
           fillColor = pressedFill;
         }
+    }
+  else if (disabled && GnomeThemeButtonCellHasAccentStyle (cell))
+    {
+      /* libadwaita's disabled .suggested-action: the whole button at half
+         opacity, so the blue over the window. */
+      fillColor = GnomeThemeBlend (accentFill,
+                                   GnomeThemeColor (self, @"windowBackgroundColor",
+                                                    [NSColor windowBackgroundColor]),
+                                   0.5);
     }
   else if (disabled)
     {
@@ -5447,10 +5517,15 @@ GnomeThemeIsDropDownComboBox(id view)
         {
           defaultButton = ([[controlView window] defaultButtonCell] == cell);
         }
+      defaultButton = defaultButton || GnomeThemeButtonCellHasAccentStyle (cell);
 
       if (defaultButton && enabled)
         {
           textColor = [NSColor selectedControlTextColor];
+        }
+      else if (GnomeThemeButtonCellHasAccentStyle (cell))
+        {
+          textColor = [[NSColor selectedControlTextColor] colorWithAlphaComponent: 0.5];
         }
 
       if ([cell isHighlighted])

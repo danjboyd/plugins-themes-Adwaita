@@ -102,6 +102,10 @@ NSImage *GnomeThemeTintedImage(NSImage *image, NSColor *color);
    in the bar, the disabled colour when `dimmed`, else `text`. */
 NSColor *GnomeThemeTemplateImageColorInView(NSView *controlView, BOOL dimmed, NSColor *text);
 
+/* Whether a button cell asked for the accent style (-setGSThemeStyle:
+   @"accent"): libadwaita's .suggested-action, as the default button. */
+BOOL GnomeThemeButtonCellHasAccentStyle(NSCell *cell);
+
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is
    mirrored, as GTK mirrors it. */
