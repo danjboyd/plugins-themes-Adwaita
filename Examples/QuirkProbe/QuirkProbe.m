@@ -701,6 +701,42 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @end
 
+/* A header-bar toolbar holding a segmented control as its item's view,
+   as ScreenshotTool's tool switcher. */
+@interface QuirkProbeSegmentToolbarDelegate : NSObject
+{
+@public
+  NSSegmentedControl *control;
+}
+@end
+
+@implementation QuirkProbeSegmentToolbarDelegate
+
+- (NSToolbarItem *) toolbar: (NSToolbar *)toolbar
+      itemForItemIdentifier: (NSString *)identifier
+  willBeInsertedIntoToolbar: (BOOL)flag
+{
+  NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
+
+  [item setLabel: identifier];
+  [item setView: control];
+  [item setMinSize: [control frame].size];
+  [item setMaxSize: [control frame].size];
+  return item;
+}
+
+- (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [NSArray arrayWithObjects: @"Tools", NSToolbarFlexibleSpaceItemIdentifier, nil];
+}
+
+- (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
+{
+  return [self toolbarAllowedItemIdentifiers: toolbar];
+}
+
+@end
+
 /* A toolbar item's view that acts on the release only, as ScreenshotTool's
    Copy and zoom items did (plugins-themes-Adwaita#33). */
 @interface QuirkProbeReleaseView : NSView
@@ -2689,6 +2725,185 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   else
     {
       [self fail: @"segment-selected-visible" detail: detail];
+    }
+}
+
+static NSImage *QuirkProbeRedImage(NSString *name);
+
+/* How far a segment's label stands out from its fill (r+g+b), whichever
+   way the palette goes, and the fill near its top edge. */
+static long
+QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *fill)
+{
+  QuirkProbeInk ink = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (80 * segment + 12, 9, 56, 16));
+
+  *fill = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (80 * segment + 40, 4, 2, 2)).darkest;
+  return MAX ((long)*fill - (long)ink.darkest, (long)ink.lightest - (long)*fill);
+}
+
+/* A disabled segmented control, or segment, at libadwaita's insensitive
+   half opacity: the fill halfway to the window, the label dimmed, the
+   selected segment still told apart (ScreenshotTool's tool switcher with
+   no image open, which stayed at full strength). */
+- (void) checkSegmentedDisabled
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 200, 300, 80) title: @"QuirkProbe Disabled Segments"];
+  NSSegmentedControl *control = AUTORELEASE ([[NSSegmentedControl alloc] initWithFrame: NSMakeRect (20, 20, 240, 34)]);
+  NSBitmapImageRep *rep, *windowRep;
+  NSUInteger fill[3][2], background;
+  long contrast[3][2];
+  NSInteger i, pass;
+  NSString *detail;
+  BOOL ok;
+
+  [control setSegmentCount: 3];
+  for (i = 0; i < 3; i++)
+    {
+      [control setLabel: [NSString stringWithFormat: @"Item %ld", (long)i + 1] forSegment: i];
+      [control setWidth: 80 forSegment: i];
+    }
+  [control setSelectedSegment: 1];
+  [[window contentView] addSubview: control];
+  [window orderFront: nil];
+  windowRep = QuirkProbeRender ([window contentView]);
+  background = QuirkProbeMeasureIn (windowRep, QuirkProbeIsAnyPixel, NSMakeRect (2, 2, 2, 2)).darkest;
+  /* Enabled; then segment 0 alone disabled; then the whole control, as
+     ScreenshotTool does it. */
+  for (pass = 0; pass < 3; pass++)
+    {
+      if (pass == 1)
+        {
+          [control setEnabled: NO forSegment: 0];
+        }
+      else if (pass == 2)
+        {
+          [control setEnabled: NO];
+          for (i = 0; i < 3; i++)
+            {
+              [control setEnabled: NO forSegment: i];
+            }
+        }
+      [window display];
+      rep = QuirkProbeRender (control);
+      for (i = 0; i < 2; i++)
+        {
+          contrast[pass][i] = QuirkProbeSegmentContrast (rep, i, &fill[pass][i]);
+        }
+    }
+  [window orderOut: nil];
+
+  /* Dimmed: the label at most two thirds as far from its fill (the
+     theme's disabled text colour; libadwaita's half opacity gives half),
+     and the fill at
+     least a third closer to the window (both segments, the selected one
+     too); the selected one still apart from the others. */
+#define QUIRK_PROBE_CLOSER(now, was) (labs ((long)(now) - (long)background) * 3 <= labs ((long)(was) - (long)background) * 2 + 3)
+  ok = contrast[1][0] * 3 <= contrast[0][0] * 2 && contrast[1][1] * 10 > contrast[0][1] * 8
+    && QUIRK_PROBE_CLOSER (fill[1][0], fill[0][0])
+    && contrast[2][0] * 3 <= contrast[0][0] * 2 && contrast[2][1] * 3 <= contrast[0][1] * 2
+    && QUIRK_PROBE_CLOSER (fill[2][0], fill[0][0]) && QUIRK_PROBE_CLOSER (fill[2][1], fill[0][1])
+    && fill[2][0] != fill[2][1];
+#undef QUIRK_PROBE_CLOSER
+  detail = [NSString stringWithFormat: @"r+g+b window %lu; label contrast / fill of segment 1, selected segment 2: "
+    @"enabled %ld/%lu, %ld/%lu; segment 1 disabled %ld/%lu, %ld/%lu; control disabled %ld/%lu, %ld/%lu",
+    (unsigned long)background,
+    contrast[0][0], (unsigned long)fill[0][0], contrast[0][1], (unsigned long)fill[0][1],
+    contrast[1][0], (unsigned long)fill[1][0], contrast[1][1], (unsigned long)fill[1][1],
+    contrast[2][0], (unsigned long)fill[2][0], contrast[2][1], (unsigned long)fill[2][1]];
+  if (ok)
+    {
+      [self pass: @"segment-disabled" detail: detail];
+    }
+  else
+    {
+      [self fail: @"segment-disabled" detail: detail];
+    }
+}
+
+/* The same in the header bar, as ScreenshotTool's tool switcher: a
+   toolbar item's view with symbolic images and no labels, disabled with
+   its segments, after the toolbar validates its items. The images' colour
+   moves at least a third of the way to the fill. */
+- (void) checkHeaderBarSegmentedDisabled
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSMutableArray *searchList;
+  QuirkProbeSegmentToolbarDelegate *delegate;
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSSegmentedControl *control = AUTORELEASE ([[NSSegmentedControl alloc] initWithFrame: NSMakeRect (0, 0, 120, 34)]);
+  NSBitmapImageRep *rep;
+  long contrast[2][2];
+  NSUInteger fill[2][2];
+  NSInteger i, pass;
+  NSString *detail;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"header-bar-segment-disabled" detail: @"needs -GSX11HandlesWindowDecorations NO"];
+      return;
+    }
+  [defaults setVolatileDomain: [NSDictionary dictionaryWithObject: @"YES" forKey: @"GnomeThemeHeaderBarToolbar"]
+                      forName: @"QuirkProbeHeaderBarSegments"];
+  searchList = AUTORELEASE ([[defaults searchList] mutableCopy]);
+  [searchList insertObject: @"QuirkProbeHeaderBarSegments" atIndex: 0];
+  [defaults setSearchList: searchList];
+
+  [control setSegmentCount: 3];
+  [[control cell] setTrackingMode: NSSegmentSwitchTrackingSelectOne];
+  for (i = 0; i < 3; i++)
+    {
+      [control setWidth: 40 forSegment: i];
+      [control setLabel: @"" forSegment: i];
+      [control setImage: QuirkProbeRedImage ([NSString stringWithFormat: @"quirk-probe-tool-%ld-symbolic", (long)i])
+             forSegment: i];
+    }
+  [control setSelectedSegment: 1];
+  delegate = AUTORELEASE ([QuirkProbeSegmentToolbarDelegate new]);
+  delegate->control = control;
+  window = [self windowWithFrame: NSMakeRect (40, 200, 500, 200) title: @"Probe Segments Bar"];
+  toolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: @"QuirkProbeHeaderSegments"]);
+  [toolbar setDelegate: delegate];
+  [window setToolbar: toolbar];
+  [window orderFront: nil];
+  for (pass = 0; pass < 2; pass++)
+    {
+      if (pass == 1)
+        {
+          [control setEnabled: NO];
+          for (i = 0; i < 3; i++)
+            {
+              [control setEnabled: NO forSegment: i];
+            }
+        }
+      [toolbar validateVisibleItems];
+      [window display];
+      rep = QuirkProbeRender (control);
+      for (i = 0; i < 2; i++)
+        {
+          NSUInteger centre = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (40 * i + 19, 16, 2, 2)).darkest;
+
+          fill[pass][i] = QuirkProbeMeasureIn (rep, QuirkProbeIsAnyPixel, NSMakeRect (40 * i + 4, 4, 2, 2)).darkest;
+          contrast[pass][i] = labs ((long)centre - (long)fill[pass][i]);
+        }
+    }
+  [window orderOut: nil];
+  [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarSegments"];
+  [searchList removeObject: @"QuirkProbeHeaderBarSegments"];
+  [defaults setSearchList: searchList];
+
+  detail = [NSString stringWithFormat: @"image contrast / fill (r+g+b), segment 1 and selected segment 2: "
+    @"enabled %ld/%lu, %ld/%lu; disabled %ld/%lu, %ld/%lu (control enabled %d)",
+    contrast[0][0], (unsigned long)fill[0][0], contrast[0][1], (unsigned long)fill[0][1],
+    contrast[1][0], (unsigned long)fill[1][0], contrast[1][1], (unsigned long)fill[1][1], (int)[control isEnabled]];
+  if (contrast[0][0] > 60 && contrast[1][0] * 3 <= contrast[0][0] * 2 && contrast[1][1] * 3 <= contrast[0][1] * 2
+    && fill[1][0] != fill[1][1])
+    {
+      [self pass: @"header-bar-segment-disabled" detail: detail];
+    }
+  else
+    {
+      [self fail: @"header-bar-segment-disabled" detail: detail];
     }
 }
 
@@ -8123,6 +8338,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkHeaderBarDocumentTitle];
   [self checkHeaderBarToolbarLive];
       [self checkSegmentedSelection];
+      [self checkSegmentedDisabled];
+      [self checkHeaderBarSegmentedDisabled];
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
   [self checkOverlayScrollers];
@@ -8202,6 +8419,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkToolbarRowHeight];
   [self checkToolbarViewItemWidth];
   [self checkSegmentedSelection];
+      [self checkSegmentedDisabled];
+      [self checkHeaderBarSegmentedDisabled];
   [self checkMenuSeparatorAndShortcut];
   [self checkApplicationMenuPosition];
   [self checkMenuBarOverflow];
