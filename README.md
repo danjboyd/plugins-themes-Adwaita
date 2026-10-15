@@ -125,7 +125,7 @@ windows, menus and tool tips have square corners and no shadow.
 
 ## Known issues
 
-This is an alpha (`0.1.0-alpha7`). What is open, with an issue for each in
+This is an alpha. What is open, with an issue for each in
 [the tracker](https://github.com/danjboyd/plugins-themes-Adwaita/issues):
 
 - Text is about 1.4% narrower than GTK's at the same font (#23): libs-back
@@ -195,6 +195,12 @@ Reference app requirements:
 - libadwaita
 
 ## Install and use
+
+Releases are on the
+[releases page](https://github.com/danjboyd/plugins-themes-Adwaita/releases).
+Download a release's source archive, unpack it and build it as below. The
+theme is a native bundle, so it has to be built against the GNUstep
+installation it will run with.
 
 Build and install the theme for the current user:
 
