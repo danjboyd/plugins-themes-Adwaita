@@ -109,6 +109,8 @@ it was found. Compare against the libadwaita reference with
 | A pop-up item carrying GNUstep's arrow image, as items archived in a Gorm file do, showed it beside the chevron (the Page Layout panel's empty Custom pop-up) | GNUstep's pop-up and pull-down arrow images (`common_Nibble`, `common_3DArrow…`) are left out by name, as the arrow put on an item at run time already was |
 | A browser's horizontal scroller (GNUstep's Open and Save panels) sat in a grey bezel box, round the theme's thin overlay indicator | no box: the theme draws the browser's titles itself and leaves GSTheme's scroller bezel out (browsers whose columns aren't separated keep GSTheme's drawing) |
 | GNUstep's own Open and Save panels' Home, Mount and Unmount buttons had NeXT's icons | GNOME's symbolic icons under GNUstep's names (`Resources/ThemeImages/common_Home.png` and the rest: user-home, drive-removable-media, media-eject), drawn as templates in the text colour |
+| A window tab without a close button (neither selected nor hovered) kept room for one at each end, so a 126pt tab cut "Document 3.txt" to "Doc…" | the title has the tab's width less 8pt each side, as AdwTab's |
+| Recessed and textured buttons (Cocoa's scope bar and toolbar styles) were the regular filled button | libadwaita's flat buttons: nothing at rest, the foreground at 16% pressed, 10% when a toggle is on, 19% for both (no hover fill: GNUstep's buttons don't track the pointer) |
 
 Regression checks for these live in `Examples/QuirkProbe`; run
 `make check-quirks` (see the README).

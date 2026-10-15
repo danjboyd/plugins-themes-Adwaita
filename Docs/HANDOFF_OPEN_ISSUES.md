@@ -5,7 +5,41 @@ stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
 
-## Overnight, 2026-10-14 (committed on main, not pushed)
+## Dan's decisions on the overnight work (2026-10-14)
+
+Dan pushed the overnight commits (origin/main at fa4ee1f). Then, on main
+and not pushed yet:
+
+- 6e7966f: `sort-indicator-from-descriptors` merged (Fixes #71).
+- dcba796: a tab with no close button gives its title the tab's width,
+  the piece of `window-tabs-phase2-tabbing-fixes` that main lacked. That
+  branch and its worktree (`.claude/worktrees/tabs-phase2-fixes`, clean)
+  can go; the auto mode classifier wouldn't let the session remove them.
+- d0dbbed: recessed and textured buttons are libadwaita's flat buttons
+  (no hover fill: GNUstep's buttons don't track the pointer).
+
+`about-dialog` gained cc68b20 after trying it in Gorm and LinDirStat:
+long text wrapped to one line and was cut off, and a panel at a half
+point origin could stay empty. It waits for Dan to look before merging.
+GNUstep's own panel ignores the Credits option too, so the new panel
+doesn't show it either. In Gorm on Xvfb with no window manager, even
+GNUstep's own About panel often doesn't appear: that's Gorm under the
+harness, not the panel.
+
+Decided against: a red default button for critical alerts (critical is
+the alert's seriousness, not a destructive button; wait for
+`hasDestructiveAction`). Left until an app needs them: left and right
+tabs, NSPathControl's arrows, NSDatePicker.
+
+The review's tab bar "+" finding is moot on GNUstep: libs-gui creates
+the shared NSDocumentController in every app at launch
+(`-[NSApplication finishLaunching]`), so the button's lookup creates
+nothing.
+
+Upstream drafts 17 and 18 still need Cocoa's behaviour confirmed on a
+Mac before Dan signs off.
+
+## Overnight, 2026-10-14 (pushed: origin/main fa4ee1f)
 
 An unattended session worked through the open bug and feature issues and
 then a survey of AppKit's less common controls. Every commit has a
@@ -14,7 +48,8 @@ check-quirks` (all seven configurations) passed after each one. The other
 suites (`check-nib-metrics`, `-live-settings`, `-color-scheme`,
 `-text-scaling`, `-file-chooser`, `-print-dialog`, `-menu-timing`,
 `-scroller-drag`, `-context-menu`, `-mutter`, `-mutter-shadow`, `-wms`)
-passed at 466f0e1. Nothing was pushed, installed, tagged or posted.
+passed at 466f0e1. Nothing was pushed, installed, tagged or posted
+overnight; Dan pushed it after reviewing it.
 
 Issues (each commit says "Fixes #n" or "Part of #n"):
 
