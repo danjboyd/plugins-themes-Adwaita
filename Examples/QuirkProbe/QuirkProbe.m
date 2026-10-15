@@ -646,6 +646,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
    GnomeThemeHeaderBar.m. */
 @interface NSObject (QuirkProbeGnomeTheme)
 + (NSString *) windowTypeForWindow: (NSWindow *)window;
++ (NSString *) windowManagerCloseStateForWindow: (NSWindow *)window;
 - (BOOL) holdsToolbarInBar;
 - (NSString *) view: (NSView *)view stringForToolTip: (NSToolTipTag)tag point: (NSPoint)point
            userData: (void *)data;
@@ -7375,6 +7376,63 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A window manager asked to close a header-bar window (Alt+F4) kills the
+   app unless the window lists WM_DELETE_WINDOW, which libs-back lists only
+   for windows it decorates. The theme lists it for closable windows and
+   only then lets the window manager close them; a window that can't be
+   closed gets neither. Ordered out and in again, as libs-back sets
+   WM_PROTOCOLS anew each time. */
+- (void) checkWindowManagerClose
+{
+  Class theme = NSClassFromString (@"GnomeTheme");
+  NSUInteger styles[2] = { NSTitledWindowMask | NSClosableWindowMask | NSResizableWindowMask,
+                           NSTitledWindowMask | NSResizableWindowMask };
+  NSString *wanted[2] = { @"WM_DELETE_WINDOW yes, close yes", @"WM_DELETE_WINDOW no, close no" };
+  NSString *states[2];
+  NSWindow *window;
+  BOOL ok = YES;
+  int i;
+
+  if (QuirkProbeDrawsDecorations () == NO)
+    {
+      [self skip: @"wm-close" detail: @"the window manager draws the decorations"];
+      return;
+    }
+  if ([theme respondsToSelector: @selector(windowManagerCloseStateForWindow:)] == NO)
+    {
+      [self skip: @"wm-close" detail: @"no +[GnomeTheme windowManagerCloseStateForWindow:]"];
+      return;
+    }
+  for (i = 0; i < 2; i++)
+    {
+      window = [[NSWindow alloc] initWithContentRect: NSMakeRect (40, 40, 300, 200)
+                                           styleMask: styles[i]
+                                             backing: NSBackingStoreBuffered
+                                               defer: NO];
+      [window orderFront: nil];
+      [window orderOut: nil];
+      [window orderFront: nil];
+      states[i] = [theme windowManagerCloseStateForWindow: window];
+      if (states[i] == nil)
+        {
+          states[i] = @"(no X window)";
+        }
+      ok = ok && [states[i] isEqualToString: wanted[i]];
+      [window orderOut: nil];
+      RELEASE (window);
+    }
+  if (ok)
+    {
+      [self pass: @"wm-close" detail: [NSString stringWithFormat: @"closable: %@; not closable: %@",
+                                                states[0], states[1]]];
+    }
+  else
+    {
+      [self fail: @"wm-close" detail: [NSString stringWithFormat: @"closable: %@ (want %@); not closable: %@ (want %@)",
+                                                states[0], wanted[0], states[1], wanted[1]]];
+    }
+}
+
 /* The window types the theme gives windows, as GTK's
    (_NET_WM_WINDOW_TYPE, plugins-themes-Adwaita#15). The probe's display
    has no window manager to set them for, so this asks the theme what it
@@ -8013,6 +8071,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkToolTip];
   [self checkHiddenWindows];
   [self checkWindowTypes];
+  [self checkWindowManagerClose];
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkSwitch];

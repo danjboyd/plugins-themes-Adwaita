@@ -251,6 +251,13 @@ ThemeDemoPrintLine(NSString *line)
   return YES;
 }
 
+/* A line on stderr when the app quits on its own, not killed
+   (run-mutter-check.sh's Alt+F4 check). */
+- (void) applicationWillTerminate: (NSNotification *)notification
+{
+  fprintf (stderr, "ThemeDemo-terminate\n");
+}
+
 #pragma mark - Menu & Window Setup
 
 - (void) buildMenuBar

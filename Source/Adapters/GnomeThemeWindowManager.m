@@ -27,9 +27,11 @@
 #import "GnomeThemeWindowManager.h"
 
 #import <GNUstepGUI/GSDisplayServer.h>
+#import <objc/runtime.h>
 
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
+#include <X11/Xutil.h>
 
 /* EWMH _NET_WM_STATE actions, and the source indication for a request from
    an application acting for the user. */
@@ -155,6 +157,53 @@ enum
   GnomeThemeMwmFuncClose = 1 << 5
 };
 
+/* Set on a window whose functions the theme allows: whether close was
+   among them. */
+static char GnomeThemeAllowedCloseKey;
+
+/* Whether the window lists WM_DELETE_WINDOW in WM_PROTOCOLS; with `add`,
+   lists it if it doesn't. */
+static BOOL
+GnomeThemeX11ListsDeleteWindow(Display *display, Window xwindow, BOOL add)
+{
+  Atom deleteWindow = XInternAtom (display, "WM_DELETE_WINDOW", False);
+  Atom *protocols = NULL;
+  Atom *more;
+  int count = 0;
+  int i;
+  BOOL listed = NO;
+
+  if (XGetWMProtocols (display, xwindow, &protocols, &count) == 0)
+    {
+      protocols = NULL;
+      count = 0;
+    }
+  for (i = 0; i < count && listed == NO; i++)
+    {
+      listed = protocols[i] == deleteWindow;
+    }
+  if (listed == NO && add)
+    {
+      more = malloc ((count + 1) * sizeof (Atom));
+      if (more != NULL)
+        {
+          for (i = 0; i < count; i++)
+            {
+              more[i] = protocols[i];
+            }
+          more[count] = deleteWindow;
+          listed = XSetWMProtocols (display, xwindow, more, count + 1) != 0;
+          free (more);
+          XFlush (display);
+        }
+    }
+  if (protocols != NULL)
+    {
+      XFree (protocols);
+    }
+  return listed;
+}
+
 BOOL
 GnomeThemeWindowManagerAllowFunctions(NSWindow *window)
 {
@@ -162,6 +211,7 @@ GnomeThemeWindowManagerAllowFunctions(NSWindow *window)
   Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
   NSUInteger style = [window styleMask];
   long hints[5] = { GnomeThemeMwmHintsFunctions | GnomeThemeMwmHintsDecorations, 0, 0, 0, 0 };
+  BOOL closable;
 
   if (xwindow == None || (style & (NSTitledWindowMask | NSClosableWindowMask | NSMiniaturizableWindowMask
                                    | NSResizableWindowMask | NSDocModalWindowMask)) == 0)
@@ -169,7 +219,14 @@ GnomeThemeWindowManagerAllowFunctions(NSWindow *window)
       return NO;
     }
   hints[1] = GnomeThemeMwmFuncMove;
-  if (style & NSClosableWindowMask)
+  /* Close only while the window lists WM_DELETE_WINDOW: offered close
+     without it, Mutter kills the whole app (XKillClient). libs-back lists
+     it only for windows it decorates (until libs-back 0006 in
+     Docs/upstream-patches); GnomeThemeWindowManagerWindowOrderedIn adds
+     it, then calls this again. */
+  closable = (style & NSClosableWindowMask) != 0
+    && GnomeThemeX11ListsDeleteWindow (display, xwindow, NO);
+  if (closable)
     {
       hints[1] |= GnomeThemeMwmFuncClose;
     }
@@ -186,7 +243,66 @@ GnomeThemeWindowManagerAllowFunctions(NSWindow *window)
                    XInternAtom (display, "_MOTIF_WM_HINTS", False), 32, PropModeReplace,
                    (unsigned char *)hints, 5);
   XFlush (display);
+  objc_setAssociatedObject (window, &GnomeThemeAllowedCloseKey, [NSNumber numberWithBool: closable],
+                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   return YES;
+}
+
+BOOL
+GnomeThemeWindowManagerCloseState(NSWindow *window, BOOL *listsDeleteWindow, BOOL *allowsClose)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
+  Atom motifHints, type;
+  int format;
+  unsigned long count, after;
+  unsigned char *data = NULL;
+
+  if (xwindow == None)
+    {
+      return NO;
+    }
+  XSync (display, False);
+  *listsDeleteWindow = GnomeThemeX11ListsDeleteWindow (display, xwindow, NO);
+  *allowsClose = NO;
+  motifHints = XInternAtom (display, "_MOTIF_WM_HINTS", False);
+  if (XGetWindowProperty (display, xwindow, motifHints, 0, 5, False, motifHints, &type, &format,
+                          &count, &after, &data) == Success && data != NULL)
+    {
+      if (format == 32 && count >= 2)
+        {
+          long *hints = (long *)data;
+
+          *allowsClose = (hints[0] & GnomeThemeMwmHintsFunctions) != 0
+            && (hints[1] & GnomeThemeMwmFuncClose) != 0;
+        }
+      XFree (data);
+    }
+  return YES;
+}
+
+BOOL
+GnomeThemeWindowManagerWindowOrderedIn(NSWindow *window)
+{
+  Display *display = GnomeThemeX11Display ();
+  Window xwindow = display != NULL ? GnomeThemeX11Window (window) : None;
+  NSNumber *allowedClose = objc_getAssociatedObject (window, &GnomeThemeAllowedCloseKey);
+  BOOL closable;
+
+  if (xwindow == None || allowedClose == nil)
+    {
+      return NO;
+    }
+  /* libs-back sets WM_PROTOCOLS again each time the window is ordered in.
+     Close follows: allowed once it's listed, taken back from a window that
+     is no longer closable. */
+  closable = ([window styleMask] & NSClosableWindowMask) != 0
+    && GnomeThemeX11ListsDeleteWindow (display, xwindow, YES);
+  if (closable != [allowedClose boolValue])
+    {
+      GnomeThemeWindowManagerAllowFunctions (window);
+    }
+  return closable;
 }
 
 BOOL

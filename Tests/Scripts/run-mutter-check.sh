@@ -37,7 +37,8 @@
 # on the bar, handed to Mutter, takes the window past the screen's left
 # edge (GNUstep's own move loop can't); a drag on the right edge, handed
 # to Mutter, widens it. A menu bar's menu is a _DROPDOWN_MENU, and the
-# window stays the active one while it's open.
+# window stays the active one while it's open. Last, Alt+F4 closes the
+# window through the app, which then quits, rather than Mutter killing it.
 #
 # --shadow runs against a libs-gui and libs-back that draw GNOME's window
 # shadow (phase 2b in Docs/HANDOFF_HEADER_BAR.md): MUTTER_CHECK_GUI is the
@@ -139,7 +140,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for tool in Xvfb $WM_TOOLS dbus-run-session xdotool xprop xwininfo import convert cc; do
+for tool in Xvfb $WM_TOOLS dbus-run-session xdotool wmctrl xprop xwininfo import convert cc; do
   if ! command -v "$tool" >/dev/null 2>&1; then
     echo "SKIP  $NAME: $tool not installed"
     exit 0
@@ -891,6 +892,31 @@ elif [ "$MARGIN" = YES ] && [ "$WM" = xfwm4 ]; then
   else
     report FAIL "$NAME-compositor-restart" "$DETAIL"
   fi
+fi
+
+# Last, as it closes the window: Alt+F4 asks the app to close it
+# (WM_DELETE_WINDOW, then -performClose:), and ThemeDemo quits after its
+# last window. Without WM_DELETE_WINDOW Mutter kills the app instead
+# (XKillClient), and it never gets to quit. KWin's shortcuts need
+# kglobalaccel, which this session doesn't run: it gets the request a
+# task bar sends (_NET_CLOSE_WINDOW) instead.
+xdotool windowactivate --sync "$WINDOW" >/dev/null 2>&1; sleep 1
+if [ "$WM" = kwin ]; then
+  wmctrl -i -c "$WINDOW"
+else
+  xdotool key alt+F4
+fi
+for _ in $(seq 1 10); do
+  kill -0 "$DEMO_PID" 2>/dev/null || break
+  sleep 0.5
+done
+QUIT="$(grep -c '^ThemeDemo-terminate' "$WORK/demo.log")"
+BROKEN="$(grep -ciE 'connection .*broken|X IO error|Fatal IO error' "$WORK/demo.log")"
+DETAIL="quit on its own: $QUIT, X connection broken: $BROKEN, still running: $(kill -0 "$DEMO_PID" 2>/dev/null && echo yes || echo no)"
+if [ "$QUIT" = 1 ] && [ "$BROKEN" = 0 ]; then
+  report PASS "$NAME-close" "$DETAIL"
+else
+  report FAIL "$NAME-close" "$DETAIL"
 fi
 
 echo "SUMMARY $NAME failed=$FAILED"

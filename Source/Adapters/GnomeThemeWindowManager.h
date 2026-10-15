@@ -33,8 +33,21 @@
    window manager no functions, so Mutter won't move, maximise, minimise
    or close it, even when asked. This keeps "no decorations" and allows
    the functions the window's style has, as libs-back does for windows the
-   window manager decorates. Call it once the X window exists. */
+   window manager decorates. Call it once the X window exists. Close is
+   allowed only while the window lists WM_DELETE_WINDOW. */
 BOOL GnomeThemeWindowManagerAllowFunctions(NSWindow *window);
+
+/* libs-back lists WM_DELETE_WINDOW only for windows it decorates, so a
+   window manager asked to close a header-bar window (Alt+F4, its window
+   menu) has no way to ask the app and kills it instead. For a window whose
+   functions the theme allows and that is closable, this lists it, then
+   allows close; the request comes back as -performClose:. Call it each
+   time the window is ordered in, after libs-back. */
+BOOL GnomeThemeWindowManagerWindowOrderedIn(NSWindow *window);
+
+/* For QuirkProbe: whether the window lists WM_DELETE_WINDOW, and whether
+   its Motif hints allow close. NO when there's no X window to read. */
+BOOL GnomeThemeWindowManagerCloseState(NSWindow *window, BOOL *listsDeleteWindow, BOOL *allowsClose);
 
 /* _NET_WM_MOVERESIZE directions. */
 typedef enum

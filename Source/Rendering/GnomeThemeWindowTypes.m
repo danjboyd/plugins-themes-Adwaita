@@ -176,6 +176,20 @@ GnomeThemeSetWindowType(NSWindow *window)
   return type != NULL ? [NSString stringWithUTF8String: type] : nil;
 }
 
+/* For QuirkProbe: "WM_DELETE_WINDOW yes, close yes" and so on, or nil
+   when there's no X window to read. */
++ (NSString *) windowManagerCloseStateForWindow: (NSWindow *)window
+{
+  BOOL listed, allowed;
+
+  if (GnomeThemeWindowManagerCloseState (window, &listed, &allowed) == NO)
+    {
+      return nil;
+    }
+  return [NSString stringWithFormat: @"WM_DELETE_WINDOW %@, close %@",
+                   listed ? @"yes" : @"no", allowed ? @"yes" : @"no"];
+}
+
 /* A deferred window gets its X window here, on its way to the screen:
    typed before it's mapped. */
 - (void) _overrideNSWindowMethod__initBackendWindow
@@ -221,6 +235,10 @@ GnomeThemeSetWindowType(NSWindow *window)
   if (originalIMP != NULL)
     {
       originalIMP (self, _cmd, place, otherWindow);
+    }
+  if (place != NSWindowOut)
+    {
+      GnomeThemeWindowManagerWindowOrderedIn ((NSWindow *)self);
     }
   /* Attached here or, for a deferred window, as its X window was made. */
   attached = place != NSWindowOut && [objc_getAssociatedObject (self, &GnomeThemeAttachedKey) boolValue];
