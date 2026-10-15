@@ -6898,6 +6898,90 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* -setGSThemeStyle: @"accent" (ScreenshotTool's primary buttons): drawn
+   as libadwaita's .suggested-action, #3584e4 with a white title, without
+   becoming the window's default button. A toolbar-style (textured) one is
+   filled too, as .suggested-action in a header bar; pressed, the blue
+   darkened; disabled, the blue at half opacity over the window. */
+- (void) checkAccentButtons
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 560, 80) title: @"Probe Accent Buttons"];
+  NSButton *buttons[4];
+  NSUInteger fill[4][3], titleRGB[3] = { 0, 0, 0 }, windowRGB[3];
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect inWindow;
+  NSString *detail;
+  NSInteger i, x;
+  BOOL ok;
+
+  for (i = 0; i < 4; i++)
+    {
+      buttons[i] = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20 + i * 130, 23, 120, 34)]);
+      [buttons[i] setTitle: @"Accent"];
+      if ([buttons[i] respondsToSelector: @selector(setGSThemeStyle:)] == NO)
+        {
+          [self fail: @"accent-button" detail: @"NSButton has no -setGSThemeStyle:"];
+          [window orderOut: nil];
+          return;
+        }
+      [buttons[i] performSelector: @selector(setGSThemeStyle:) withObject: @"accent"];
+      [[window contentView] addSubview: buttons[i]];
+    }
+  [buttons[1] setBezelStyle: NSTexturedRoundedBezelStyle];
+  [[buttons[2] cell] setHighlighted: YES];
+  [buttons[3] setEnabled: NO];
+  [window orderFront: nil];
+  [window display];
+  frameView = [[window contentView] superview];
+  rep = QuirkProbeRender (frameView);
+#define QUIRK_PROBE_SAMPLE(view, dx, dy, rgb) \
+  inWindow = [view convertRect: [view bounds] toView: nil]; \
+  QuirkProbePixelAt (rep, (NSInteger)(NSMinX (inWindow) + (dx)), \
+                     (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
+  QUIRK_PROBE_SAMPLE (buttons[0], -6, 17, windowRGB);
+  for (i = 0; i < 4; i++)
+    {
+      QUIRK_PROBE_SAMPLE (buttons[i], 8, 17, fill[i]);
+    }
+  for (x = 20; x < 100; x++)
+    {
+      NSUInteger rgb[3];
+
+      QUIRK_PROBE_SAMPLE (buttons[0], x, 17, rgb);
+      if (rgb[0] + rgb[1] + rgb[2] > titleRGB[0] + titleRGB[1] + titleRGB[2])
+        {
+          titleRGB[0] = rgb[0]; titleRGB[1] = rgb[1]; titleRGB[2] = rgb[2];
+        }
+    }
+#undef QUIRK_PROBE_SAMPLE
+  [window orderOut: nil];
+
+  {
+    unsigned int pressed = ((0x35 * 82 / 100) << 16) | ((0x84 * 82 / 100) << 8) | (0xe4 * 82 / 100);
+    unsigned int disabled = (((0x35 + windowRGB[0]) / 2) << 16) | (((0x84 + windowRGB[1]) / 2) << 8)
+      | ((0xe4 + windowRGB[2]) / 2);
+
+    ok = QuirkProbeNear (fill[0], 0x3584e4, 1) && QuirkProbeNear (fill[1], 0x3584e4, 1)
+      && QuirkProbeNear (fill[2], pressed, 2) && QuirkProbeNear (fill[3], disabled, 2)
+      && titleRGB[0] >= 240 && titleRGB[1] >= 240 && titleRGB[2] >= 240
+      && [window defaultButtonCell] == nil;
+    detail = [NSString stringWithFormat: @"fill %@, toolbar style %@ (want #3584e4), pressed %@ (want #%06x), "
+      @"disabled %@ (want #%06x), title's brightest pixel %@ (want white), default button %@ (want none)",
+      QuirkProbeHex (fill[0]), QuirkProbeHex (fill[1]), QuirkProbeHex (fill[2]), pressed,
+      QuirkProbeHex (fill[3]), disabled, QuirkProbeHex (titleRGB),
+      [window defaultButtonCell] == nil ? @"none" : @"set"];
+  }
+  if (ok)
+    {
+      [self pass: @"accent-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"accent-button" detail: detail];
+    }
+}
+
 /* libadwaita 1.7's control colours, measured from its reference app on the
    same display (Reference/AdwaitaDemo), in the palette the run uses (light
    or dark by the window colour, high contrast from -ProbeHighContrast):
@@ -7980,6 +8064,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkControlColors];
+  [self checkAccentButtons];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
@@ -8076,6 +8161,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkOverlayScrollers];
   [self checkSwitch];
   [self checkControlColors];
+  [self checkAccentButtons];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];

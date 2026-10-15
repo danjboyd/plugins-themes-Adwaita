@@ -288,6 +288,13 @@ GnomeThemeTemplateImageColor(NSButtonCell *cell, NSView *controlView)
       return ([cell isHighlighted] && [[(NSMenuItemCell *)cell menuView] isHorizontal])
         ? [NSColor selectedMenuItemTextColor] : [NSColor controlTextColor];
     }
+  /* White on an accent button's blue, in the header bar too; half
+     opacity disabled. */
+  if (GnomeThemeButtonCellHasAccentStyle (cell))
+    {
+      return dimmed ? [[NSColor selectedControlTextColor] colorWithAlphaComponent: 0.5]
+        : [NSColor selectedControlTextColor];
+    }
   if (dimmed || GnomeThemeViewIsInHeaderBarToolbar (controlView))
     {
       return GnomeThemeTemplateImageColorInView (controlView, dimmed, nil);
