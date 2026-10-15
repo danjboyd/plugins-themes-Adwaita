@@ -24,10 +24,13 @@ packets in `review/`, each with the hash to sign off on):
 | libs-back 3 | `x11-borderless-alpha` | `b94dc1b` | master `23fbe39` | `review/libs-back-0003.md` |
 | libs-back 4 | `x11-window-shadows` | `fd50897` | patch 3 | `review/libs-back-0004.md` |
 | libs-back 5 | `x11-popover-shadows` | `0c7dc1f` | patch 4 | `review/libs-back-0005.md` |
+| libs-back 6 | `x11-wm-delete-window` | `1ecd259` | master `36ac709` | `review/libs-back-0006.md` |
 | libs-gui 1 | `ai-policy/theme-backend-defaults` | `bd5a983` | master `549f639` (current) | `review/libs-gui-0001.md` |
 
 2 and 3 stand alone; 4 can only be sent once 3 is merged, and 5 once 4
-is. Each differs from its series commit only by what isn't under it (the
+is. 6 (2026-10-15) stands alone but must land before #244 or with it:
+#244 alone lets Mutter close a window that lists no `WM_DELETE_WINDOW`,
+which it does by killing the client. Each differs from its series commit only by what isn't under it (the
 ChangeLog entries of the patches before it, and patch 2's method
 declaration next to patch 4's) and by corrections that runs disproved:
 patch 2's Mutter and Openbox statements, and patch 4's note on which
