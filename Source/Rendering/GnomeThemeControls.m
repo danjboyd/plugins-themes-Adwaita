@@ -2298,6 +2298,10 @@ GnomeThemeDrawTabLabel(NSString *label,
   [edge stroke];
 }
 
+/* Whether the segment being drawn is enabled: -drawSegment:inFrame:withView:
+   knows the segment, -drawSegmentedControlSegment:... only the cell. */
+static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
+
 - (void) drawSegmentedControlSegment: (NSCell *)cell
                            withFrame: (NSRect)cellFrame
                               inView: (NSView *)controlView
@@ -2307,7 +2311,8 @@ GnomeThemeDrawTabLabel(NSString *label,
                         roundedRight: (BOOL)roundedRight
 {
   BOOL selected = GnomeThemeStateIsSelected (state);
-  BOOL disabled = GnomeThemeStateIsDisabled (state) || ([cell isEnabled] == NO);
+  BOOL disabled = GnomeThemeStateIsDisabled (state) || ([cell isEnabled] == NO)
+    || GnomeThemeSegmentBeingDrawnIsEnabled == NO;
   NSColor *baseFill = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
   NSColor *segmentFill = GnomeThemeColor (self, @"controlColor", [NSColor controlColor]);
   NSColor *borderColor = GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]);
@@ -4184,6 +4189,22 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
     }
 }
 
+/* A disabled segment's label and symbolic images: libadwaita's
+   insensitive half opacity, the enabled colour halfway to the window (the
+   fill goes the same way), so the selected segment dims as much as the
+   others. From the enabled text colour: libs-gui already greys a disabled
+   cell's typing attributes. */
+static NSColor *
+GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
+{
+  NSColor *color = GnomeThemeTemplateImageColorInView (controlView, NO,
+                                                       GnomeThemeColor (theme, @"controlTextColor",
+                                                                        [NSColor controlTextColor]));
+  NSColor *window = GnomeThemeColor (theme, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+
+  return GnomeThemeBlend (color, window, 0.5);
+}
+
 - (void) _overrideNSSegmentedCellMethod_drawSegment: (NSInteger)segmentIndex
                                             inFrame: (NSRect)frame
                                            withView: (NSView *)view
@@ -4199,6 +4220,10 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
   BOOL roundedLeft = (segmentIndex == 0);
   BOOL roundedRight = (segmentIndex == ([cell segmentCount] - 1));
   NSView *controlView = [cell controlView];
+  /* libadwaita draws an insensitive button at half opacity, the checked
+     one too: the fill over the window, the label and image dimmed. */
+  BOOL enabled = [cell isEnabled] && [cell isEnabledForSegment: segmentIndex]
+    && ([controlView isKindOfClass: [NSControl class]] == NO || [(NSControl *)controlView isEnabled]);
 
   if ([cell trackingMode] == NSSegmentSwitchTrackingSelectOne)
     {
@@ -4221,6 +4246,7 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
       return;
     }
 
+  GnomeThemeSegmentBeingDrawnIsEnabled = enabled;
   [theme drawSegmentedControlSegment: cell
                            withFrame: frame
                               inView: (controlView != nil) ? controlView : view
@@ -4228,6 +4254,7 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
                                state: state
                          roundedLeft: roundedLeft
                         roundedRight: roundedRight];
+  GnomeThemeSegmentBeingDrawnIsEnabled = YES;
 
   if ([label length] > 0)
     {
@@ -4241,6 +4268,11 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
                                      drawWidth,
                                      ceil (textSize.height));
 
+      if (enabled == NO)
+        {
+          [attributes setObject: GnomeThemeDisabledSegmentColor (theme, (controlView != nil) ? controlView : view)
+                         forKey: NSForegroundColorAttributeName];
+        }
       if (font != nil)
         {
           [attributes setObject: font forKey: NSFontAttributeName];
@@ -4277,18 +4309,19 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
          button's (plugins-themes-Adwaita#37). */
       if (GnomeThemeImageIsTemplate (segmentImage))
         {
-          BOOL enabled = [cell isEnabled] && [cell isEnabledForSegment: segmentIndex];
           NSColor *text = [[cell _nonAutoreleasedTypingAttributes] objectForKey: NSForegroundColorAttributeName];
 
-          segmentImage = GnomeThemeTintedImage (segmentImage,
-                                                GnomeThemeTemplateImageColorInView ((controlView != nil) ? controlView : view,
-                                                                                    enabled == NO, text));
+          segmentImage = GnomeThemeTintedImage (segmentImage, enabled
+                                                ? GnomeThemeTemplateImageColorInView ((controlView != nil) ? controlView : view,
+                                                                                      NO, text)
+                                                : GnomeThemeDisabledSegmentColor (theme, (controlView != nil) ? controlView : view));
         }
 
       [segmentImage drawInRect: destinationRect
                       fromRect: NSZeroRect
                      operation: NSCompositeSourceOver
-                      fraction: 1.0];
+                      fraction: (enabled || GnomeThemeImageIsTemplate ([cell imageForSegment: segmentIndex]))
+                                  ? 1.0 : 0.5];
     }
 }
 
