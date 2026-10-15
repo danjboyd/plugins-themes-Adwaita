@@ -81,6 +81,11 @@ void GnomeThemeSystemFontsDidChange(void);
    chooser): a press in a header bar that moves its window, which then
    isn't dropped. YES when the press was taken. */
 BOOL GnomeThemeHeaderBarMoveWindowFromModalPress(NSEvent *event);
+/* Around libs-gui's share-out of a toolbar's flexible width: with the
+   toolbar in the header bar, room for the title is kept in its first
+   flexible space before items stay in the bar. */
+void GnomeThemeHeaderBarReserveTitleRoom(NSView *toolbarView);
+void GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView);
 
 /* Template (symbolic) images: whether `image` is one (-isTemplate, or a
    name ending in "Template" or "-symbolic"), and its shape in `color`. */
