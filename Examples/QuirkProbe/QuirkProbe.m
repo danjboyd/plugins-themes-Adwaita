@@ -6395,12 +6395,19 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
 
 /* The standard About panel is the first page of AdwAboutWindow: 350pt
    wide, the icon at 128pt, the name in title-1 (bold, about 181% of the
-   interface font), the version in a pill. GNUstep's had NeXT's layout. */
+   interface font), the version in a pill. GNUstep's had NeXT's layout.
+   A description too long for one line wraps (the label was once one line
+   tall, and cut it off), and the panel sits on whole points (at half a
+   point, X11 drew nothing in it). */
 - (void) checkAboutPanel
 {
+  NSString *description = @"A description long enough to need three lines or so in the About panel, "
+    @"as an application's own description often is";
   NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
     @"Probe About", @"ApplicationName", @"0.1.0", @"ApplicationRelease",
-    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", nil];
+    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", description, @"ApplicationDescription", nil];
+  CGFloat descriptionHeight = 0.0, lineHeight;
+  NSPoint origin = NSZeroPoint;
   NSEnumerator *enumerator;
   NSWindow *window, *panel = nil;
   NSView *view;
@@ -6434,13 +6441,24 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
         {
           nameSize = [[(NSTextField *)view font] pointSize];
         }
+      if ([view isKindOfClass: [NSTextField class]]
+        && [[(NSTextField *)view stringValue] isEqualToString: description])
+        {
+          descriptionHeight = NSHeight ([view frame]);
+        }
     }
+  origin = [panel frame].origin;
   [panel orderOut: nil];
+  lineHeight = [[NSFont systemFontOfSize: 0] defaultLineHeightForFont];
 
-  detail = [NSString stringWithFormat: @"panel %@; icon %@, name at %gpt (interface %gpt), version pill %@",
-    panel != nil ? @"350pt wide" : @"not found", icon ? @"128pt" : @"missing", nameSize,
-    [[NSFont systemFontOfSize: 0] pointSize], pill ? @"shown" : @"missing"];
-  if (panel != nil && icon && pill && nameSize >= 1.7 * [[NSFont systemFontOfSize: 0] pointSize])
+  detail = [NSString stringWithFormat: @"panel %@ at %@; icon %@, name at %gpt (interface %gpt), "
+    @"version pill %@, long description %gpt tall (line %gpt)",
+    panel != nil ? @"350pt wide" : @"not found", NSStringFromPoint (origin), icon ? @"128pt" : @"missing",
+    nameSize, [[NSFont systemFontOfSize: 0] pointSize], pill ? @"shown" : @"missing",
+    descriptionHeight, lineHeight];
+  if (panel != nil && icon && pill && nameSize >= 1.7 * [[NSFont systemFontOfSize: 0] pointSize]
+    && descriptionHeight >= 2.5 * lineHeight
+    && origin.x == floor (origin.x) && origin.y == floor (origin.y))
     {
       [self pass: @"about-panel" detail: detail];
     }

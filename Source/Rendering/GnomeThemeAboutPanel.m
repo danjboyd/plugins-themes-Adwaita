@@ -72,6 +72,23 @@ GnomeThemeAboutValue(NSDictionary *options, NSArray *keys, Class class)
   return nil;
 }
 
+/* The size of `text` in `font`, wrapped at `width`. */
+static NSSize
+GnomeThemeAboutTextSize(NSString *text, NSFont *font, CGFloat width)
+{
+  NSTextStorage *storage = AUTORELEASE ([[NSTextStorage alloc] initWithString: text
+    attributes: [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName]]);
+  NSLayoutManager *layout = AUTORELEASE ([[NSLayoutManager alloc] init]);
+  NSTextContainer *container = AUTORELEASE ([[NSTextContainer alloc]
+    initWithContainerSize: NSMakeSize (width, 1.0e7)]);
+
+  [container setLineFragmentPadding: 0.0];
+  [layout addTextContainer: container];
+  [storage addLayoutManager: layout];
+  [layout glyphRangeForTextContainer: container];
+  return [layout usedRectForTextContainer: container].size;
+}
+
 /* A centred, wrapping label. */
 static NSTextField *
 GnomeThemeAboutLabel(NSString *text, NSFont *font, NSColor *color, CGFloat width)
@@ -89,8 +106,10 @@ GnomeThemeAboutLabel(NSString *text, NSFont *font, NSColor *color, CGFloat width
   [label setEditable: NO];
   [label setSelectable: NO];
   [[label cell] setWraps: YES];
-  size = [[label cell] cellSizeForBounds: NSMakeRect (0.0, 0.0, width, 10000.0)];
-  [label setFrameSize: NSMakeSize (width, ceil (size.height))];
+  /* The cell measures a wrapping string as one line, so lay the text out
+     at the label's width, less the cell's 2pt inset each side. */
+  size = GnomeThemeAboutTextSize (text, font, width - 4.0);
+  [label setFrameSize: NSMakeSize (width, ceil (size.height) + 4.0)];
   return label;
 }
 
@@ -280,6 +299,13 @@ GnomeThemeMakeAboutPanel(GSTheme *theme, NSDictionary *options)
       [content addSubview: view];
     }
   [panel center];
+  /* On whole points: GNUstep's X11 backend draws nothing in a window whose
+     origin is a half point, as -center gives an odd height. */
+  {
+    NSRect frame = [panel frame];
+
+    [panel setFrameOrigin: NSMakePoint (floor (NSMinX (frame)), floor (NSMinY (frame)))];
+  }
   return panel;
 }
 
