@@ -197,7 +197,7 @@ New traps:
 | # | Issue | State |
 |---|---|---|
 | 13 | Send the libs-back and libs-gui patches upstream | Under way, one item at a time after Dan's sign-off (`Docs/UPSTREAM_POLICY.md`) |
-| 29 | Report the remaining upstream issues | Drafts 2, 4, 11 approved (not filed); 17, 18 need a Mac; 19 needs a Cocoa nib checked |
+| 29 | Report the remaining upstream issues | 2, 4, 11 filed (libs-gui #991, #990, #989); 14, 15 wait for Dan in QUEUE.md; 17, 18 need a Mac; 19 needs a Cocoa nib checked |
 | 23 | Text width against GTK | Now 1.4% narrower; matching exactly needs libs-gui to round text-derived sizes. Candidate to close |
 | 26 | Gorm's inspectors cramped at GNOME's metrics | #24's per-window metrics could draw Gorm's design windows at GNOME's sizes; deferred until Dan has talked to Gorm's maintainer |
 | 44 | File chooser not attached under Mutter | Waits on GNOME/mutter#5106 |
