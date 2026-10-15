@@ -1,9 +1,49 @@
-# Handoff: the open issues (2026-10-07, overnight work added 2026-10-14)
+# Handoff: the open issues (2026-10-07, updated 2026-10-15)
 
 For picking up the theme's open work in a fresh session: where things
 stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
+
+## 2026-10-15: alpha10, alpha11, libs-back 0006, accent buttons
+
+- **Released:** 0.1.0-alpha10 and 0.1.0-alpha11, the first GitHub
+  releases (source only, Dan's choice: the bundle must be built against
+  the user's GNUstep). alpha10's release notes say it is superseded.
+  ReleaseCoordinator (a local session) collects all the projects for
+  Dan's mailing-list announcement.
+- **Apt:** alpha10 is in the repo for amd64 and arm64; alpha9 never was
+  (that release stopped after cloning). This session's permissions block
+  the ssh build and publish steps, so the `iep-apt` Remote Control
+  session runs them (SendMessage "iep-apt"; it reports back). iep-apt's
+  `~/git/apt_portstree` can't pull (GitHub auth), so it starts from the
+  previous `debian/` plus the new changelog entry. alpha11 was handed to
+  it on the evening of 2026-10-15; check the index for `0.1.0~alpha11-1`.
+  iep-wellproduction still has libs-gui `0.32.0-4` installed.
+- **Alt+F4 killed the app (alpha11, 2ed57cb):** the theme allowed close
+  in the Motif hints (since 3ebf9f1), but libs-back lists
+  WM_DELETE_WINDOW only for windows it decorates, so Mutter killed the
+  client. The theme now lists it on each order-in and allows close only
+  while it's listed. Checks: QuirkProbe `wm-close`, and `-close` last in
+  `run-mutter-check.sh` (Alt+F4; `_NET_CLOSE_WINDOW` under KWin, whose
+  shortcuts need kglobalaccel). ThemeDemo prints `ThemeDemo-terminate`
+  when it quits on its own.
+- **libs-back 0006** (`1ecd259`, branch `x11-wm-delete-window` on the
+  fork, worktree `~/git/gnustep/libs-back-wmdelete`): the upstream fix.
+  Approved by Dan; must land before #244 or with it. PR text
+  (`Docs/upstream-patches/pr/libs-back-0006.md`, fbf5c77) and the note
+  for #244 (`pr/libs-back-244-comment-0006.md`, 7ec507b) wait for his
+  approval. Once both are in a GNUstep release,
+  `GnomeThemeWindowManagerAllowFunctions` and the WM_DELETE_WINDOW
+  listing can go (#28).
+- **Accent buttons** (branch `gsthemestyle-accent`, 3c2c1da, not
+  merged): `-setGSThemeStyle: @"accent"` on NSButton/NSButtonCell draws
+  libadwaita's .suggested-action without making the button the default.
+  For ScreenshotTool's redesign; WinUITheme will match the same shape.
+  Waits for Dan to confirm the name, then merge and alpha12.
+- **Upstream draft 19:** keyed archives from 0.32 decode centre and
+  right swapped on libs-gui master (the NSTextAlignment renumbering);
+  needs a Cocoa nib checked first.
 
 ## Dan's decisions on the overnight work (2026-10-14)
 
@@ -157,7 +197,7 @@ New traps:
 | # | Issue | State |
 |---|---|---|
 | 13 | Send the libs-back and libs-gui patches upstream | Under way, one item at a time after Dan's sign-off (`Docs/UPSTREAM_POLICY.md`) |
-| 29 | Report the remaining upstream issues | Drafts 2, 4, 11 ready for review |
+| 29 | Report the remaining upstream issues | Drafts 2, 4, 11 approved (not filed); 17, 18 need a Mac; 19 needs a Cocoa nib checked |
 | 23 | Text width against GTK | Now 1.4% narrower; matching exactly needs libs-gui to round text-derived sizes. Candidate to close |
 | 26 | Gorm's inspectors cramped at GNOME's metrics | #24's per-window metrics could draw Gorm's design windows at GNOME's sizes; deferred until Dan has talked to Gorm's maintainer |
 | 44 | File chooser not attached under Mutter | Waits on GNOME/mutter#5106 |
