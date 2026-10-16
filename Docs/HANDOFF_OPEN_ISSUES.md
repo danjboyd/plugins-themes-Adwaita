@@ -5,7 +5,7 @@ stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
 
-## 2026-10-16: alpha12 and alpha13
+## 2026-10-16: alpha12, alpha13 and alpha14
 
 - **alpha12** (4ccb16d, 2026-10-15): accent buttons (`gsthemestyle-accent`
   merged), the header bar title's 100pt, disabled segmented controls.
@@ -17,6 +17,18 @@ code pointers; read it before starting.
   `accent-default-yields`). `check-quirks`, `-file-chooser`, `-mutter`
   and `-wms` passed at the merge. GitHub pre-release published; the apt
   builds were handed to the iep-apt session.
+- **alpha14** (f60c962, 2026-10-16): `title-before-overflow`. When the
+  title's flexible space itself doesn't fit, libs-gui clips it with the
+  items after it; the title was drawn in the clipped frame under the »
+  (ScreenshotTool at 720pt). `titleLimitsWithToolbar::` now counts only
+  what the clip view shows and stops before the ». QuirkProbe
+  `header-bar-toolbar-title-before-overflow`. The title can't keep 100pt
+  there: libs-gui only clips from the end, so items before the title
+  can't go into » first; it's truncated instead.
+- `kwin-few-resizes` (`check-wms`, stock libraries) flaked on 2026-10-16:
+  2 of 4 runs failed at alpha14, and 4 of 4 with alpha13's header bar
+  code, each time with an intermediate maximise frame 30px outside the
+  screen. It's KWin timing, not the theme's layout.
 - Still waiting for Dan: `about-dialog`. Old branches from 2026-10-07
   (`fix/dark-controls`, `fix/text-scaling`) aren't on main by subject;
   check whether main covers them some other way before deleting them.
