@@ -1,9 +1,25 @@
-# Handoff: the open issues (2026-10-07, updated 2026-10-15)
+# Handoff: the open issues (2026-10-07, updated 2026-10-16)
 
 For picking up the theme's open work in a fresh session: where things
 stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
+
+## 2026-10-16: alpha12 and alpha13
+
+- **alpha12** (4ccb16d, 2026-10-15): accent buttons (`gsthemestyle-accent`
+  merged), the header bar title's 100pt, disabled segmented controls.
+- **alpha13** (b74231f, 2026-10-16): `title-room-view-items` (a toolbar
+  item with a view no longer pushes the last item into », a regression
+  from alpha12's title room; QuirkProbe `header-bar-toolbar-last-item`)
+  and `default-yields-to-accent` (a window's default button is drawn
+  plain while an accent button is visible; QuirkProbe
+  `accent-default-yields`). `check-quirks`, `-file-chooser`, `-mutter`
+  and `-wms` passed at the merge. GitHub pre-release published; the apt
+  builds were handed to the iep-apt session.
+- Still waiting for Dan: `about-dialog`. Old branches from 2026-10-07
+  (`fix/dark-controls`, `fix/text-scaling`) aren't on main by subject;
+  check whether main covers them some other way before deleting them.
 
 ## 2026-10-15: alpha10, alpha11, libs-back 0006, accent buttons
 
