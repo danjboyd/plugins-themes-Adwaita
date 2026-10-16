@@ -303,11 +303,15 @@ GSTabGroupWindowAt(NSArray *windows, NSUInteger index)
   frame = [previous frame];
   maximized = [previous _tabbingIsMaximized];
   key = [previous isKeyWindow];
-  [previous _tabbingHide];
+  /* The new tab first, over the old one, then the old one out: hidden
+     first, no window of the group would be on screen for a moment, and
+     the window manager would animate both (the window vanishes and
+     reappears). */
   [window _tabbingShowWithFrame: frame
                       maximized: maximized
                         makeKey: key
                       inPlaceOf: previous];
+  [previous _tabbingHide];
 }
 
 /* The window that takes the place of the window at index when it
