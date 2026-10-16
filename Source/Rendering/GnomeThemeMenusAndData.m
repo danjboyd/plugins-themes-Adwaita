@@ -1836,11 +1836,29 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
   originalIMP (self, _cmd, index);
 }
 
+/* Whether the menus under `menu` hang from a horizontal bar: there
+   libs-gui lines a submenu up with its item itself. */
+static BOOL
+GnomeThemeMenuRootIsHorizontal(NSMenu *menu)
+{
+  NSMenuView *root;
+
+  while ([menu supermenu] != nil)
+    {
+      menu = [menu supermenu];
+    }
+  root = (NSMenuView *)[menu menuRepresentation];
+  return [root isKindOfClass: [NSMenuView class]] && [root isHorizontal];
+}
+
 /* A submenu that doesn't fit right of its menu opens to the left of it,
    and one that would leave the screen at the bottom (or top) is moved up
    (or down) into it, as GTK places a submenu popover; GNUstep put it right
    of the menu whatever the screen, so at the right edge it ran off (#77).
-   Once a submenu has gone left, its own submenus go left first too. */
+   Once a submenu has gone left, its own submenus go left first too.
+   Its first item is level with the item that opens it, as in GTK; under
+   no horizontal bar libs-gui lined its top up with the menu's top
+   (Markdown Viewer's Share pop-up › Email as). */
 static NSPoint
 GnomeThemeSubmenuLocationOnScreen(NSMenuView *menuView, NSMenu *aSubmenu, NSPoint location)
 {
@@ -1864,6 +1882,20 @@ GnomeThemeSubmenuLocationOnScreen(NSMenuView *menuView, NSMenu *aSubmenu, NSPoin
       return location;
     }
   visible = [screen visibleFrame];
+  if (GnomeThemeMenuRootIsHorizontal ([menuView menu]) == NO)
+    {
+      NSInteger index = [[menuView menu] indexOfItemWithSubmenu: aSubmenu];
+      NSMenuView *submenuView = (NSMenuView *)[aSubmenu menuRepresentation];
+
+      if (index >= 0 && [aSubmenu numberOfItems] > 0 && [submenuView isKindOfClass: [NSMenuView class]])
+        {
+          NSRect itemRect = [menuView convertRect: [menuView rectOfItemAtIndex: index] toView: nil];
+          NSRect firstRect = [submenuView convertRect: [submenuView rectOfItemAtIndex: 0] toView: nil];
+          CGFloat itemTop = [window convertBaseToScreen: NSMakePoint (0.0, NSMaxY (itemRect))].y;
+
+          location.y = itemTop - NSMaxY (firstRect);
+        }
+    }
   if ([superView isKindOfClass: [NSMenuView class]] && [superView isHorizontal] == NO
     && NSMinX ([[superView window] frame]) > NSMinX (frame))
     {
