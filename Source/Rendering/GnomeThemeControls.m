@@ -1871,6 +1871,41 @@ GnomeThemeButtonCellHasAccentStyle(NSCell *cell)
 }
 
 static BOOL
+GnomeThemeViewHasAccentButton(NSView *view)
+{
+  NSEnumerator *enumerator;
+  NSView *subview;
+
+  if ([view isHidden])
+    {
+      return NO;
+    }
+  if ([view isKindOfClass: [NSButton class]] && GnomeThemeButtonCellHasAccentStyle ([(NSButton *)view cell]))
+    {
+      return YES;
+    }
+  enumerator = [[view subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if (GnomeThemeViewHasAccentButton (subview))
+        {
+          return YES;
+        }
+    }
+  return NO;
+}
+
+/* From the window's frame view, so a header bar's toolbar items count. */
+BOOL
+GnomeThemeWindowHasAccentButton(NSWindow *window)
+{
+  NSView *contentView = [window contentView];
+  NSView *frameView = [contentView superview];
+
+  return GnomeThemeViewHasAccentButton (frameView != nil ? frameView : contentView);
+}
+
+static BOOL
 GnomeThemeButtonCellUsesPersistentAccentSelection(NSCell *cell)
 {
   NSInteger showsStateByMask;
@@ -2055,6 +2090,10 @@ GnomeThemeDrawTabLabel(NSString *label,
   if (isDefaultButton == NO && view != nil && [view window] != nil)
     {
       isDefaultButton = ([[view window] defaultButtonCell] == cell);
+    }
+  if (isDefaultButton && GnomeThemeWindowHasAccentButton ([view window]))
+    {
+      isDefaultButton = NO;
     }
   /* An accent button is drawn as the default button, flat styles too:
      libadwaita's .suggested-action is filled in a header bar as well. */
@@ -5551,6 +5590,10 @@ GnomeThemeIsDropDownComboBox(id view)
       if (defaultButton == NO && controlView != nil && [controlView window] != nil)
         {
           defaultButton = ([[controlView window] defaultButtonCell] == cell);
+        }
+      if (defaultButton && GnomeThemeWindowHasAccentButton ([controlView window]))
+        {
+          defaultButton = NO;
         }
       defaultButton = defaultButton || GnomeThemeButtonCellHasAccentStyle (cell);
 

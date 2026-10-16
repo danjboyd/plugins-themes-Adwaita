@@ -300,7 +300,8 @@ GnomeThemeTemplateImageColor(NSButtonCell *cell, NSView *controlView)
       return GnomeThemeTemplateImageColorInView (controlView, dimmed, nil);
     }
   if (enabled && ([keyEquivalent isEqualToString: @"\r"] || [keyEquivalent isEqualToString: @"\n"]
-                  || (controlView != nil && [[controlView window] defaultButtonCell] == cell)))
+                  || (controlView != nil && [[controlView window] defaultButtonCell] == cell))
+      && GnomeThemeWindowHasAccentButton ([controlView window]) == NO)
     {
       return [NSColor selectedControlTextColor];
     }
