@@ -1968,15 +1968,20 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
   NSToolbarItem *item;
   NSView *backView;
   CGFloat width = NSWidth ([toolbarView frame]);
-  CGFloat counted = 0.0, others = 0.0, end, x = 0.0;
+  CGFloat counted = 0.0, others = 0.0, trailing = 0.0, end, x = 0.0;
   NSUInteger i, n = [items count], visible = 0;
 
   if (titleSpace == nil)
     {
       return;
     }
-  /* The items libs-gui found room for, as it counted them, and their
-     widths but the title's space. */
+  /* The items libs-gui found room for, as it counted them: the others as
+     it counts them again afterwards (-_visibleBackViews), and the width
+     the visible ones after the title take. An item with a view counts
+     with libs-gui's insets, wider than the theme lays it out
+     (-_takeInAccountFlexibleSpaces in GnomeThemeControls.m); giving the
+     title what they really leave pushed the last item into the » menu at
+     any width (ScreenshotTool's Copy). */
   for (i = 0; i < n; i++)
     {
       item = [items objectAtIndex: i];
@@ -1989,16 +1994,21 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
       visible = i + 1;
       if (item != titleSpace)
         {
-          others += NSWidth ([[item _backView] frame]);
+          others += GnomeThemeToolbarItemCountedWidth (item, 0.0);
+        }
+      if (i > titleIndex)
+        {
+          trailing += NSWidth ([[item _backView] frame]);
         }
     }
   if (visible <= titleIndex)
     {
       return;
     }
-  /* The title's space takes what the visible items leave, and the items
-     follow one another from the start (libs-gui leaves them where they
-     were when no width is left to share out). */
+  /* The title's space takes what libs-gui will count as left; the items
+     before it follow one another from the start, those after it end at
+     the end (libs-gui leaves items where they were when no width is left
+     to share out). */
   end = visible < n ? width - GnomeThemeToolbarClippedItemsWidth : width;
   for (i = 0; i < n; i++)
     {
@@ -2006,6 +2016,10 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
 
       backView = [[items objectAtIndex: i] _backView];
       frame = [backView frame];
+      if (i == titleIndex + 1)
+        {
+          x = MAX (x, end - trailing);
+        }
       frame.origin.x = x;
       if (i == titleIndex)
         {
