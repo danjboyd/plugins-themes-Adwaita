@@ -648,6 +648,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 + (NSString *) windowTypeForWindow: (NSWindow *)window;
 + (NSString *) windowManagerCloseStateForWindow: (NSWindow *)window;
 - (BOOL) holdsToolbarInBar;
+- (void) titleLimitsWithToolbar: (CGFloat *)minX : (CGFloat *)maxX;
 - (NSString *) view: (NSView *)view stringForToolTip: (NSToolTipTag)tag point: (NSPoint)point
            userData: (void *)data;
 @end
@@ -2622,6 +2623,65 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     else
       {
         [self fail: @"header-bar-toolbar-title-room" detail: roomDetail];
+      }
+  }
+
+  /* Narrower still, the title's space goes into the » menu with the items
+     after it: the title is drawn between the items and the », never under
+     the » (alpha13 drew it in the clipped space's frame). */
+  {
+    NSMutableArray *failures = [NSMutableArray array];
+    NSString *overflowDetail;
+    int clipped = 0;
+    CGFloat w;
+
+    for (w = 200.0; w <= 700.0; w += 20.0)
+      {
+        NSWindow *sized = [self windowWithFrame: NSMakeRect (40, 200, w, 200) title: @"Probe Toolbar Title Before Overflow"];
+        NSString *identifier = [NSString stringWithFormat: @"QuirkProbeHeaderToolbarBeforeOverflow%g", w];
+        NSToolbar *sizedToolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: identifier]);
+        NSView *sizedFrame, *sizedToolbarView, *subview;
+        NSRect mark = NSZeroRect;
+        CGFloat minX, maxX;
+
+        [sizedToolbar setDelegate: delegate];
+        [sized setToolbar: sizedToolbar];
+        [sized orderFront: nil];
+        [sized display];
+        sizedFrame = [[sized contentView] superview];
+        sizedToolbarView = [sizedToolbar _toolbarView];
+        enumerator = [[sizedToolbarView subviews] objectEnumerator];
+        while ((subview = [enumerator nextObject]) != nil)
+          {
+            if ([subview isKindOfClass: [NSButton class]])
+              {
+                mark = [sizedFrame convertRect: [subview bounds] fromView: subview];
+              }
+          }
+        if (NSWidth (mark) > 0.0 && [sizedFrame respondsToSelector: @selector(titleLimitsWithToolbar::)])
+          {
+            clipped++;
+            minX = 0.0;
+            maxX = NSWidth ([sizedFrame bounds]);
+            [sizedFrame titleLimitsWithToolbar: &minX : &maxX];
+            if (maxX > NSMinX (mark) + 0.5 && maxX > minX)
+              {
+                [failures addObject: [NSString stringWithFormat: @"%g: title %g-%g, » %g-%g", w,
+                  minX, maxX, NSMinX (mark), NSMaxX (mark)]];
+              }
+          }
+        [sized orderOut: nil];
+      }
+    overflowDetail = [NSString stringWithFormat: @"%d window widths with », %lu with the title under it%@%@",
+      clipped, (unsigned long)[failures count], [failures count] ? @": " : @"",
+      [failures componentsJoinedByString: @"; "]];
+    if (clipped > 0 && [failures count] == 0)
+      {
+        [self pass: @"header-bar-toolbar-title-before-overflow" detail: overflowDetail];
+      }
+    else
+      {
+        [self fail: @"header-bar-toolbar-title-before-overflow" detail: overflowDetail];
       }
   }
 

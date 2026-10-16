@@ -892,11 +892,17 @@ GnomeThemeResizeCursor(NSUInteger edges)
 
 /* Where the title goes when the toolbar is in the bar: in its widest
    flexible space (the items before it are the bar's start, those after
-   it its end), else after the items. */
+   it its end), else after the items; never under the » of the items that
+   don't fit. Only what the toolbar's clip view shows counts: when even
+   the title's space doesn't fit, libs-gui clips it with the items after
+   it, and the title was drawn in its whole frame, under the » (alpha13,
+   ScreenshotTool's toolbar at 720pt). */
 - (void) titleLimitsWithToolbar: (CGFloat *)minX : (CGFloat *)maxX
 {
+  NSView *toolbarView = [[window toolbar] _toolbarView];
   NSEnumerator *enumerator = [[[window toolbar] items] objectEnumerator];
   NSToolbarItem *item;
+  NSView *subview;
   NSRect widest = NSZeroRect;
   CGFloat itemsEnd = *minX;
 
@@ -907,13 +913,18 @@ GnomeThemeResizeCursor(NSUInteger edges)
   while ((item = [enumerator nextObject]) != nil)
     {
       NSView *backView = [item _backView];
-      NSRect frame;
+      NSRect visible, frame;
 
       if ([backView superview] == nil || [backView isHiddenOrHasHiddenAncestor])
         {
           continue;
         }
-      frame = [self convertRect: [backView bounds] fromView: backView];
+      visible = [backView visibleRect];
+      if (NSIsEmptyRect (visible))
+        {
+          continue;
+        }
+      frame = [self convertRect: visible fromView: backView];
       if ([[item itemIdentifier] isEqualToString: NSToolbarFlexibleSpaceItemIdentifier])
         {
           if (NSWidth (frame) > NSWidth (widest))
@@ -934,6 +945,27 @@ GnomeThemeResizeCursor(NSUInteger edges)
   else
     {
       *minX = MAX (*minX, itemsEnd);
+    }
+  /* The » is the toolbar view's only subview besides its clip view; it's
+     at the toolbar's end, or its start in a right-to-left window. */
+  enumerator = [[toolbarView subviews] objectEnumerator];
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      NSRect frame;
+
+      if ([subview isKindOfClass: [NSClipView class]] || [subview isHidden])
+        {
+          continue;
+        }
+      frame = [self convertRect: [subview bounds] fromView: subview];
+      if (NSMidX (frame) > (*minX + *maxX) / 2.0)
+        {
+          *maxX = MIN (*maxX, NSMinX (frame) - GnomeThemeHeaderBarTitleSpacing);
+        }
+      else
+        {
+          *minX = MAX (*minX, NSMaxX (frame) + GnomeThemeHeaderBarTitleSpacing);
+        }
     }
 }
 
