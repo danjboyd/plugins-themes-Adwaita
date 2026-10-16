@@ -5698,6 +5698,56 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A submenu's first item is level with the item that opens it, as GTK
+   places a submenu, in a menu that doesn't hang from a horizontal bar (a
+   pop-up's menu, the main menu's); libs-gui lined the submenu's top up
+   with the menu's top instead. */
+- (void) checkSubmenuLinesUpWithItem
+{
+  NSRect visible = [[NSScreen mainScreen] visibleFrame];
+  NSMenu *menu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Share"]);
+  NSMenu *submenu = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Email as"]);
+  NSMenuView *menuView, *submenuView;
+  NSMenuItem *item;
+  NSWindow *menuWindow;
+  NSRect itemRect, firstRect;
+  NSPoint location;
+  CGFloat itemTop, firstTop;
+  NSString *detail;
+
+  [submenu addItemWithTitle: @"Markdown" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"HTML" action: NULL keyEquivalent: @""];
+  [submenu addItemWithTitle: @"PDF" action: NULL keyEquivalent: @""];
+  [menu addItemWithTitle: @"Copy Link" action: NULL keyEquivalent: @""];
+  [menu addItemWithTitle: @"Copy as HTML" action: NULL keyEquivalent: @""];
+  [menu addItemWithTitle: @"Save a Copy" action: NULL keyEquivalent: @""];
+  item = [menu addItemWithTitle: @"Email as" action: NULL keyEquivalent: @""];
+  [menu setSubmenu: submenu forItem: item];
+  [menu sizeToFit];
+  [submenu sizeToFit];
+  menuView = (NSMenuView *)[menu menuRepresentation];
+  submenuView = (NSMenuView *)[submenu menuRepresentation];
+  menuWindow = [menuView window];
+  [menuWindow setFrameOrigin: NSMakePoint (NSMinX (visible) + 20, NSMaxY (visible) - NSHeight ([menuWindow frame]) - 20)];
+
+  location = [menuView locationForSubmenu: submenu];
+  itemRect = [menuView convertRect: [menuView rectOfItemAtIndex: 3] toView: nil];
+  itemTop = [menuWindow convertBaseToScreen: NSMakePoint (0.0, NSMaxY (itemRect))].y;
+  firstRect = [submenuView convertRect: [submenuView rectOfItemAtIndex: 0] toView: nil];
+  firstTop = location.y + NSMaxY (firstRect);
+
+  detail = [NSString stringWithFormat: @"item \"Email as\" top %.0f, submenu's first item top %.0f (menu top %.0f)",
+    itemTop, firstTop, NSMaxY ([menuWindow frame])];
+  if (fabs (firstTop - itemTop) <= 1.0)
+    {
+      [self pass: @"submenu-lines-up-with-item" detail: detail];
+    }
+  else
+    {
+      [self fail: @"submenu-lines-up-with-item" detail: detail];
+    }
+}
+
 /* The named sort indicators an app sets on a column are GTK 4's: pan-up
    ascending, pan-down descending, about 10x6, 6pt after the title in a
    16pt box. GNUstep has no NSAscendingSortIndicator or
@@ -8554,6 +8604,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
+  [self checkSubmenuLinesUpWithItem];
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
@@ -8654,6 +8705,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpTitleTruncation];
   [self checkPopUpDisabled];
   [self checkSubmenuAtScreenEdge];
+  [self checkSubmenuLinesUpWithItem];
   [self checkSortIndicator];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
