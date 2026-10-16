@@ -5,7 +5,7 @@ stand, the open issues on danjboyd/plugins-themes-Adwaita, how to build and
 test, and the traps found so far. Each issue holds its own background and
 code pointers; read it before starting.
 
-## 2026-10-16: alpha12, alpha13 and alpha14
+## 2026-10-16: alpha12 to alpha15
 
 - **alpha12** (4ccb16d, 2026-10-15): accent buttons (`gsthemestyle-accent`
   merged), the header bar title's 100pt, disabled segmented controls.
@@ -25,6 +25,14 @@ code pointers; read it before starting.
   `header-bar-toolbar-title-before-overflow`. The title can't keep 100pt
   there: libs-gui only clips from the end, so items before the title
   can't go into » first; it's truncated instead.
+- **alpha15** (b2d4326, 2026-10-16), both asked for by Markdown Viewer:
+  gnustep-window-tabbing re-vendored at 3c4e62f (switching tabs shows the
+  new tab before hiding the old one, so GNOME doesn't animate the window
+  away and back), and submenus of menus that don't hang from a
+  horizontal bar open with their first item level with their item
+  (`GnomeThemeSubmenuLocationOnScreen`; QuirkProbe
+  `submenu-lines-up-with-item`). Every suite passed at the merge,
+  `check-wms` included.
 - `kwin-few-resizes` (`check-wms`, stock libraries) flaked on 2026-10-16:
   2 of 4 runs failed at alpha14, and 4 of 4 with alpha13's header bar
   code, each time with an intermediate maximise frame 30px outside the
