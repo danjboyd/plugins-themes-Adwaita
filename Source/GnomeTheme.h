@@ -110,6 +110,10 @@ NSColor *GnomeThemeTemplateImageColorInView(NSView *controlView, BOOL dimmed, NS
 /* Whether a button cell asked for the accent style (-setGSThemeStyle:
    @"accent"): libadwaita's .suggested-action, as the default button. */
 BOOL GnomeThemeButtonCellHasAccentStyle(NSCell *cell);
+/* Whether a visible button in the window asked for the accent style:
+   then the default button is drawn as a regular button, so the accent
+   one is the window's only suggested action. */
+BOOL GnomeThemeWindowHasAccentButton(NSWindow *window);
 
 /* YES when the app's first preferred language is written right to left
    (or NSForceRightToLeftWritingDirection is set): the header bar is

@@ -7261,6 +7261,72 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* With an accent button in the window, the default (Return) button is
+   drawn as a regular button, so the accent one is the only suggested
+   action (ScreenshotTool's empty state: Open... and Take Screenshot);
+   hide the accent button and the default one is blue again. Return still
+   belongs to the default button. */
+- (void) checkAccentYields
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 300, 80) title: @"Probe Accent And Default"];
+  NSButton *open = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 23, 120, 34)]);
+  NSButton *accent = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (160, 23, 120, 34)]);
+  NSUInteger openFill[2][3], accentFill[3];
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSRect inWindow;
+  NSString *detail;
+  NSInteger pass;
+  BOOL ok;
+
+  if ([accent respondsToSelector: @selector(setGSThemeStyle:)] == NO)
+    {
+      [self fail: @"accent-default-yields" detail: @"NSButton has no -setGSThemeStyle:"];
+      return;
+    }
+  [open setTitle: @"Open"];
+  [open setKeyEquivalent: @"\r"];
+  [accent setTitle: @"Take"];
+  [accent performSelector: @selector(setGSThemeStyle:) withObject: @"accent"];
+  [[window contentView] addSubview: open];
+  [[window contentView] addSubview: accent];
+  [window setDefaultButtonCell: [open cell]];
+  [window orderFront: nil];
+  for (pass = 0; pass < 2; pass++)
+    {
+      [accent setHidden: pass == 1];
+      [window display];
+      frameView = [[window contentView] superview];
+      rep = QuirkProbeRender (frameView);
+#define QUIRK_PROBE_SAMPLE(view, dx, dy, rgb) \
+  inWindow = [view convertRect: [view bounds] toView: nil]; \
+  QuirkProbePixelAt (rep, (NSInteger)(NSMinX (inWindow) + (dx)), \
+                     (NSInteger)(NSHeight ([frameView bounds]) - NSMaxY (inWindow) + (dy)), rgb)
+      QUIRK_PROBE_SAMPLE (open, 8, 17, openFill[pass]);
+      if (pass == 0)
+        {
+          QUIRK_PROBE_SAMPLE (accent, 8, 17, accentFill);
+        }
+#undef QUIRK_PROBE_SAMPLE
+    }
+  [window orderOut: nil];
+
+  ok = QuirkProbeNear (accentFill, 0x3584e4, 1) && QuirkProbeNear (openFill[0], 0x3584e4, 40) == NO
+    && QuirkProbeNear (openFill[1], 0x3584e4, 1) && [window defaultButtonCell] == [open cell];
+  detail = [NSString stringWithFormat: @"accent %@ (want #3584e4), default button beside it %@ (want a regular button), "
+    @"default button with the accent one hidden %@ (want #3584e4), Return %@",
+    QuirkProbeHex (accentFill), QuirkProbeHex (openFill[0]), QuirkProbeHex (openFill[1]),
+    [window defaultButtonCell] == [open cell] ? @"still the default button's" : @"moved"];
+  if (ok)
+    {
+      [self pass: @"accent-default-yields" detail: detail];
+    }
+  else
+    {
+      [self fail: @"accent-default-yields" detail: detail];
+    }
+}
+
 /* libadwaita 1.7's control colours, measured from its reference app on the
    same display (Reference/AdwaitaDemo), in the palette the run uses (light
    or dark by the window colour, high contrast from -ProbeHighContrast):
@@ -8346,6 +8412,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
+  [self checkAccentYields];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
@@ -8445,6 +8512,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
+  [self checkAccentYields];
   [self checkSliderKnob];
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
