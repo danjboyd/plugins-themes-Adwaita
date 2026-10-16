@@ -719,15 +719,30 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
   NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
 
   [item setLabel: identifier];
-  [item setView: control];
-  [item setMinSize: [control frame].size];
-  [item setMaxSize: [control frame].size];
+  if ([identifier isEqualToString: @"Tools"])
+    {
+      [item setView: control];
+      [item setMinSize: [control frame].size];
+      [item setMaxSize: [control frame].size];
+    }
+  else
+    {
+      NSImage *image = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (16, 16)]);
+
+      [image lockFocus];
+      [[NSColor blackColor] set];
+      NSRectFill (NSMakeRect (4, 4, 8, 8));
+      [image unlockFocus];
+      [item setImage: image];
+      [item setTarget: self];
+      [item setAction: @selector(description)];
+    }
   return item;
 }
 
 - (NSArray *) toolbarAllowedItemIdentifiers: (NSToolbar *)toolbar
 {
-  return [NSArray arrayWithObjects: @"Tools", NSToolbarFlexibleSpaceItemIdentifier, nil];
+  return [NSArray arrayWithObjects: @"Tools", NSToolbarFlexibleSpaceItemIdentifier, @"Copy", nil];
 }
 
 - (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *)toolbar
@@ -2888,6 +2903,62 @@ QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *
         }
     }
   [window orderOut: nil];
+
+  /* With an item that has a view (the segmented control), the last item
+     stays in the bar while there's room, at its end, and nothing goes into
+     the » menu (alpha12 put ScreenshotTool's Copy there at any width). */
+  {
+    NSMutableArray *failures = [NSMutableArray array];
+    CGFloat widths[3] = { 400.0, 800.0, 1100.0 };
+    int w;
+
+    for (w = 0; w < 3; w++)
+      {
+        NSWindow *sized = [self windowWithFrame: NSMakeRect (40, 200, widths[w], 200) title: @"Probe Last Item"];
+        NSString *identifier = [NSString stringWithFormat: @"QuirkProbeHeaderLastItem%d", w];
+        NSToolbar *sizedToolbar = AUTORELEASE ([[NSToolbar alloc] initWithIdentifier: identifier]);
+        NSView *toolbarView, *copyView = nil, *subview;
+        NSEnumerator *enumerator;
+        NSToolbarItem *item;
+        NSRect copyFrame = NSZeroRect;
+        BOOL overflow = NO;
+
+        [sizedToolbar setDelegate: delegate];
+        [sized setToolbar: sizedToolbar];
+        [sized orderFront: nil];
+        [sized display];
+        toolbarView = [sizedToolbar _toolbarView];
+        enumerator = [[sizedToolbar items] objectEnumerator];
+        while ((item = [enumerator nextObject]) != nil)
+          {
+            if ([[item itemIdentifier] isEqualToString: @"Copy"])
+              {
+                copyView = [item _backView];
+                copyFrame = [toolbarView convertRect: [copyView bounds] fromView: copyView];
+              }
+          }
+        enumerator = [[toolbarView subviews] objectEnumerator];
+        while ((subview = [enumerator nextObject]) != nil)
+          {
+            overflow = overflow || ([subview isKindOfClass: [NSButton class]] && [subview superview] == toolbarView);
+          }
+        if (copyView == nil || overflow || NSMaxX (copyFrame) > NSWidth ([toolbarView frame]) + 0.5
+            || NSMaxX (copyFrame) < NSWidth ([toolbarView frame]) - 1.5)
+          {
+            [failures addObject: [NSString stringWithFormat: @"%g: Copy %g-%g in %g%@", widths[w],
+              NSMinX (copyFrame), NSMaxX (copyFrame), NSWidth ([toolbarView frame]), overflow ? @", » shown" : @""]];
+          }
+        [sized orderOut: nil];
+      }
+    if ([failures count] == 0)
+      {
+        [self pass: @"header-bar-toolbar-last-item" detail: @"at 400, 800 and 1100pt the last item is at the toolbar's end, no »"];
+      }
+    else
+      {
+        [self fail: @"header-bar-toolbar-last-item" detail: [failures componentsJoinedByString: @"; "]];
+      }
+  }
   [defaults removeVolatileDomainForName: @"QuirkProbeHeaderBarSegments"];
   [searchList removeObject: @"QuirkProbeHeaderBarSegments"];
   [defaults setSearchList: searchList];
