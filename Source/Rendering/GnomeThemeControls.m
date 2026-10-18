@@ -4297,7 +4297,8 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
 
   if ([label length] > 0)
     {
-      NSMutableDictionary *attributes = [[cell _nonAutoreleasedTypingAttributes] mutableCopy];
+      NSDictionary *cellAttributes = [cell _nonAutoreleasedTypingAttributes];
+      NSMutableDictionary *attributes = [cellAttributes mutableCopy];
       NSFont *font = GnomeThemeEmphasizedFont ([attributes objectForKey: NSFontAttributeName], (NSCell *)self, view);
       NSSize textSize = [label sizeWithAttributes: attributes];
       CGFloat availableWidth = MAX (0.0, frame.size.width - 10.0);
@@ -4330,6 +4331,7 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
 
       [label drawInRect: textFrame withAttributes: attributes];
       RELEASE (attributes);
+      RELEASE (cellAttributes);
     }
 
   if (segmentImage != nil)
@@ -4348,12 +4350,14 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
          button's (plugins-themes-Adwaita#37). */
       if (GnomeThemeImageIsTemplate (segmentImage))
         {
-          NSColor *text = [[cell _nonAutoreleasedTypingAttributes] objectForKey: NSForegroundColorAttributeName];
+          NSDictionary *cellAttributes = [cell _nonAutoreleasedTypingAttributes];
+          NSColor *text = [cellAttributes objectForKey: NSForegroundColorAttributeName];
 
           segmentImage = GnomeThemeTintedImage (segmentImage, enabled
                                                 ? GnomeThemeTemplateImageColorInView ((controlView != nil) ? controlView : view,
                                                                                       NO, text)
                                                 : GnomeThemeDisabledSegmentColor (theme, (controlView != nil) ? controlView : view));
+          RELEASE (cellAttributes);
         }
 
       [segmentImage drawInRect: destinationRect
@@ -5181,7 +5185,10 @@ GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
 
   if ([displayString length] > 0)
     {
-      attributes = [[cell _nonAutoreleasedTypingAttributes] mutableCopy];
+      NSDictionary *cellAttributes = [cell _nonAutoreleasedTypingAttributes];
+
+      attributes = [cellAttributes mutableCopy];
+      RELEASE (cellAttributes);
       /* Bold is a drop-down's, a button's label; a combo box that can be
          edited is an entry, in the field editor's regular weight. */
       font = GnomeThemeIsDropDownComboBox (controlView)
