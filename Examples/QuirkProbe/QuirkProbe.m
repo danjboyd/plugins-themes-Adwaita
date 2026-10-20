@@ -8574,6 +8574,15 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly toolbar-overflow: the » menu by visibilityPriority, in a
+     window's toolbar and (with the theme's decorations) the header bar. */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"toolbar-overflow"])
+    {
+      [self checkToolbarPriorityOverflow];
+      [self checkHeaderBarToolbarPriorityOverflow];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly header-bar: the header bar's checks alone, for the dark and
      high contrast runs (the other checks assume the light palette). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"header-bar"])
@@ -8584,6 +8593,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkHeaderBarToolbarItemDrag];
   [self checkHeaderBarDocumentTitle];
   [self checkHeaderBarToolbarLive];
+  [self checkHeaderBarToolbarPriorityOverflow];
       [self checkSegmentedSelection];
       [self checkSegmentedDisabled];
       [self checkHeaderBarSegmentedDisabled];
@@ -8667,6 +8677,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkToolbarDisplayMode];
   [self checkToolbarRowHeight];
   [self checkToolbarViewItemWidth];
+  [self checkToolbarPriorityOverflow];
   [self checkSegmentedSelection];
       [self checkSegmentedDisabled];
       [self checkHeaderBarSegmentedDisabled];
@@ -8684,6 +8695,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkHeaderBarToolbarItemDrag];
   [self checkHeaderBarDocumentTitle];
   [self checkHeaderBarToolbarLive];
+  [self checkHeaderBarToolbarPriorityOverflow];
   [self checkFonts];
   [self checkToolTip];
   [self checkHiddenWindows];

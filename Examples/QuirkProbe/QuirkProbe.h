@@ -93,6 +93,11 @@
 - (void) showPopoverDemo;
 @end
 
+@interface QuirkProbe (ToolbarOverflow)
+- (void) checkToolbarPriorityOverflow;
+- (void) checkHeaderBarToolbarPriorityOverflow;
+@end
+
 @interface QuirkProbe (NibMetrics)
 - (void) checkNibMetrics;
 @end

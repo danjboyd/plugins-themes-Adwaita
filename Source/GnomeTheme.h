@@ -86,6 +86,11 @@ BOOL GnomeThemeHeaderBarMoveWindowFromModalPress(NSEvent *event);
    flexible space before items stay in the bar. */
 void GnomeThemeHeaderBarReserveTitleRoom(NSView *toolbarView);
 void GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView);
+/* A toolbar too narrow for its items: those that stay, by
+   visibilityPriority (*fromEnd is YES when they're libs-gui's run from
+   the start), and placing them after libs-gui's share-out. */
+NSIndexSet *GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd);
+void GnomeThemeToolbarPlaceKeptItems(NSView *toolbarView);
 
 /* Template (symbolic) images: whether `image` is one (-isTemplate, or a
    name ending in "Template" or "-symbolic"), and its shape in `color`. */
