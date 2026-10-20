@@ -61,6 +61,9 @@ static const CGFloat GnomeThemeHeaderBarMinimumTitleWidth = 100.0;
    (ClippedItemsViewWidth and InsetItemViewX in GSToolbarView.m). */
 static const CGFloat GnomeThemeToolbarClippedItemsWidth = 28.0;
 static const CGFloat GnomeThemeToolbarItemViewInset = 10.0;
+/* The theme's inset on each side of an item's view
+   (GnomeThemeToolbarSpacing in GnomeThemeControls.m). */
+static const CGFloat GnomeThemeToolbarItemSpacing = 3.0;
 /* Resizing: a strip this wide inside each edge (there's no shadow margin
    outside the window to put it in), and corners this long. */
 static const CGFloat GnomeThemeResizeEdge = 5.0;
@@ -1841,6 +1844,15 @@ GnomeThemeHeaderBarDesktopSettingsChanged(void)
 
 @implementation GnomeTheme (HeaderBar)
 
+/* For apps: a toolbar's » menu takes items by visibilityPriority
+   (GnomeThemeToolbarKeptItems), so an app needn't widen its window to keep
+   its important items. Asked of [GSTheme theme], as WinUITheme answers it
+   too; it goes with the theme when another is chosen. */
+- (BOOL) toolbarHonoursVisibilityPriority
+{
+  return YES;
+}
+
 /* In the header bar the toolbar is part of the bar: no background or
    bottom line of its own (the bar's shows, with the title), and presses
    on its empty parts and spaces are the bar's (moves, double-click). */
@@ -1974,6 +1986,189 @@ GnomeThemeHeaderBarTitleSpace(NSView *toolbarView, NSUInteger *index)
   return nil;
 }
 
+/* Which items stay in the row when they don't all fit: libs-gui keeps the
+   longest run from the start, so the » menu took the items at the end
+   whatever their visibilityPriority. Items go by ascending priority
+   instead, right to left within one, until the rest and the » fit; a run
+   of separators and spaces goes with the item on its left (a leading run
+   with the item on its right), and flexible spaces stay. When that order
+   is right to left anyway (every item Standard), the items kept are
+   libs-gui's run, as it counts it: *fromEnd is then YES and nothing
+   changes. The same rule as WinUITheme's. */
+NSIndexSet *
+GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd)
+{
+  NSUInteger titleIndex = NSNotFound;
+  NSToolbarItem *titleSpace = GnomeThemeHeaderBarTitleSpace (toolbarView, &titleIndex);
+  NSArray *items = [[toolbarView toolbar] items];
+  NSUInteger i, j, n = [items count], kept = 0, candidates = 0;
+  NSMutableIndexSet *keep = [NSMutableIndexSet indexSet];
+  NSMutableData *data = [NSMutableData dataWithLength: MAX (n, 1) * (sizeof (CGFloat) + 2 * sizeof (NSUInteger))];
+  CGFloat *counted = [data mutableBytes];
+  NSUInteger *owner = (NSUInteger *)(counted + MAX (n, 1));
+  NSUInteger *order = owner + MAX (n, 1);
+  CGFloat width = NSWidth ([toolbarView frame]), total = 0.0, sum = 0.0;
+  NSInteger previous = NSIntegerMax;
+  BOOL rightToLeft = YES;
+
+  for (i = 0; i < n; i++)
+    {
+      NSToolbarItem *item = [items objectAtIndex: i];
+
+      counted[i] = GnomeThemeToolbarItemCountedWidth (item, item == titleSpace
+                                                      ? GnomeThemeHeaderBarMinimumTitleWidth : 0.0);
+      total += counted[i];
+      owner[i] = NSNotFound;
+      if (GnomeThemeToolbarItemIsSpace (item) == NO)
+        {
+          NSInteger priority = [item visibilityPriority];
+
+          rightToLeft = rightToLeft && priority <= previous;
+          previous = priority;
+          owner[i] = i;
+          /* The drop order: ascending priority, right to left within one. */
+          for (j = candidates; j > 0
+                 && [[items objectAtIndex: order[j - 1]] visibilityPriority] >= priority; j--)
+            {
+              order[j] = order[j - 1];
+            }
+          order[j] = i;
+          candidates++;
+        }
+    }
+  if (fromEnd != NULL)
+    {
+      *fromEnd = YES;
+    }
+  if (rightToLeft)
+    {
+      for (i = 0; i < n; i++)
+        {
+          sum += counted[i];
+          if (sum + GnomeThemeToolbarClippedItemsWidth > width && (i < n - 1 || sum > width))
+            {
+              break;
+            }
+          kept = i + 1;
+        }
+      [keep addIndexesInRange: NSMakeRange (0, kept)];
+      return keep;
+    }
+  if (total <= width)
+    {
+      [keep addIndexesInRange: NSMakeRange (0, n)];
+      return keep;
+    }
+  if (fromEnd != NULL)
+    {
+      *fromEnd = NO;
+    }
+  /* A separator or space belongs to the nearest item on its left that
+     isn't a space, else (at the start, or after a flexible space) to the
+     nearest on its right; a flexible space to none. */
+  for (i = 0; i < n; i++)
+    {
+      NSToolbarItem *item = [items objectAtIndex: i];
+
+      if (owner[i] != NSNotFound || [item _isFlexibleSpace])
+        {
+          continue;
+        }
+      for (j = i; j > 0 && owner[i] == NSNotFound; j--)
+        {
+          if ([[items objectAtIndex: j - 1] _isFlexibleSpace])
+            {
+              break;
+            }
+          if (GnomeThemeToolbarItemIsSpace ([items objectAtIndex: j - 1]) == NO)
+            {
+              owner[i] = j - 1;
+            }
+        }
+      for (j = i + 1; j < n && owner[i] == NSNotFound; j++)
+        {
+          if ([[items objectAtIndex: j] _isFlexibleSpace])
+            {
+              break;
+            }
+          if (GnomeThemeToolbarItemIsSpace ([items objectAtIndex: j]) == NO)
+            {
+              owner[i] = j;
+            }
+        }
+    }
+  [keep addIndexesInRange: NSMakeRange (0, n)];
+  sum = total;
+  for (i = 0; i < candidates && sum + GnomeThemeToolbarClippedItemsWidth > width; i++)
+    {
+      for (j = 0; j < n; j++)
+        {
+          if (owner[j] == order[i])
+            {
+              [keep removeIndex: j];
+              sum -= counted[j];
+            }
+        }
+    }
+  return keep;
+}
+
+/* After libs-gui places the items, when the items kept aren't the run
+   from the start: those go contiguously from the start, a view item at
+   its minimum width and the theme's insets, the others are hidden (not
+   left past the clip view's end), and the width left over is shared by
+   the flexible spaces kept (else left at the end). In the header bar,
+   GnomeThemeHeaderBarGiveTitleRoom places them again. */
+void
+GnomeThemeToolbarPlaceKeptItems(NSView *toolbarView)
+{
+  NSArray *items = [[toolbarView toolbar] items];
+  BOOL fromEnd = YES;
+  NSIndexSet *keep = GnomeThemeToolbarKeptItems (toolbarView, &fromEnd);
+  NSUInteger i, n = [items count], flexible = 0;
+  CGFloat left = NSWidth ([toolbarView frame]) - GnomeThemeToolbarClippedItemsWidth, x = 0.0;
+
+  for (i = 0; i < n; i++)
+    {
+      NSToolbarItem *item = [items objectAtIndex: i];
+
+      [[item _backView] setHidden: (fromEnd == NO && [keep containsIndex: i] == NO)];
+      if (fromEnd == NO && [keep containsIndex: i])
+        {
+          left -= [item view] != nil ? [item minSize].width + 2.0 * GnomeThemeToolbarItemSpacing
+            : GnomeThemeToolbarItemCountedWidth (item, 0.0);
+          flexible += [item _isFlexibleSpace] ? 1 : 0;
+        }
+    }
+  if (fromEnd)
+    {
+      return;
+    }
+  left = MAX (0.0, left);
+  for (i = 0; i < n; i++)
+    {
+      NSToolbarItem *item = [items objectAtIndex: i];
+      NSView *backView = [item _backView];
+      NSRect frame = [backView frame];
+
+      if ([keep containsIndex: i] == NO)
+        {
+          continue;
+        }
+      frame.origin.x = x;
+      if ([item _isFlexibleSpace])
+        {
+          frame.size.width = floor (left / flexible);
+        }
+      else if ([item view] != nil)
+        {
+          frame.size.width = [item minSize].width + 2.0 * GnomeThemeToolbarItemSpacing;
+        }
+      [backView setFrame: frame];
+      x += NSWidth (frame);
+    }
+}
+
 void
 GnomeThemeHeaderBarReserveTitleRoom(NSView *toolbarView)
 {
@@ -2000,30 +2195,34 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
   NSToolbarItem *item;
   NSView *backView;
   CGFloat width = NSWidth ([toolbarView frame]);
-  CGFloat counted = 0.0, others = 0.0, trailing = 0.0, end, x = 0.0;
-  NSUInteger i, n = [items count], visible = 0;
+  CGFloat others = 0.0, trailing = 0.0, end, x = 0.0;
+  NSUInteger i, n = [items count];
+  NSIndexSet *keep;
+  BOOL fromEnd = YES, placedTrailing = NO;
 
   if (titleSpace == nil)
     {
       return;
     }
-  /* The items libs-gui found room for, as it counted them: the others as
-     it counts them again afterwards (-_visibleBackViews), and the width
-     the visible ones after the title take. An item with a view counts
-     with libs-gui's insets, wider than the theme lays it out
+  /* The items kept (GnomeThemeToolbarKeptItems), as libs-gui counts them:
+     the others as it counts them again afterwards (-_visibleBackViews),
+     and the width the kept ones after the title take. An item with a
+     view counts with libs-gui's insets, wider than the theme lays it out
      (-_takeInAccountFlexibleSpaces in GnomeThemeControls.m); giving the
      title what they really leave pushed the last item into the » menu at
      any width (ScreenshotTool's Copy). */
+  keep = GnomeThemeToolbarKeptItems (toolbarView, &fromEnd);
+  if ([keep containsIndex: titleIndex] == NO)
+    {
+      return;
+    }
   for (i = 0; i < n; i++)
     {
       item = [items objectAtIndex: i];
-      counted += GnomeThemeToolbarItemCountedWidth (item, item == titleSpace
-                                                    ? GnomeThemeHeaderBarMinimumTitleWidth : 0.0);
-      if (counted + GnomeThemeToolbarClippedItemsWidth > width && (i < n - 1 || counted > width))
+      if ([keep containsIndex: i] == NO)
         {
-          break;
+          continue;
         }
-      visible = i + 1;
       if (item != titleSpace)
         {
           others += GnomeThemeToolbarItemCountedWidth (item, 0.0);
@@ -2033,24 +2232,25 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
           trailing += NSWidth ([[item _backView] frame]);
         }
     }
-  if (visible <= titleIndex)
-    {
-      return;
-    }
   /* The title's space takes what libs-gui will count as left; the items
      before it follow one another from the start, those after it end at
      the end (libs-gui leaves items where they were when no width is left
-     to share out). */
-  end = visible < n ? width - GnomeThemeToolbarClippedItemsWidth : width;
+     to share out). Hidden items keep no place. */
+  end = [keep count] < n ? width - GnomeThemeToolbarClippedItemsWidth : width;
   for (i = 0; i < n; i++)
     {
       NSRect frame;
 
+      if (fromEnd == NO && [keep containsIndex: i] == NO)
+        {
+          continue;
+        }
       backView = [[items objectAtIndex: i] _backView];
       frame = [backView frame];
-      if (i == titleIndex + 1)
+      if (i > titleIndex && placedTrailing == NO)
         {
           x = MAX (x, end - trailing);
+          placedTrailing = YES;
         }
       frame.origin.x = x;
       if (i == titleIndex)
@@ -2061,7 +2261,6 @@ GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView)
       x += NSWidth (frame);
     }
 }
-
 
 - (NSView *) _overrideGSToolbarViewMethod_hitTest: (NSPoint)point
 {

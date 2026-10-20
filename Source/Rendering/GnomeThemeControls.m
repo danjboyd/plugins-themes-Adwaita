@@ -4812,6 +4812,7 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
     {
       originalIMP (self, _cmd);
     }
+  GnomeThemeToolbarPlaceKeptItems ((NSView *)self);
   GnomeThemeHeaderBarGiveTitleRoom ((NSView *)self);
   if (GnomeThemeLaysOutToolbar (toolbar) == NO)
     {
@@ -4839,6 +4840,32 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       [view setFrameSize: NSMakeSize (width, NSHeight ([view frame]))];
       GnomeThemePlaceToolbarView (backView, item);
     }
+}
+
+/* The items not in the » menu: those kept by visibilityPriority
+   (GnomeThemeToolbarKeptItems), in their order. -[NSToolbar visibleItems],
+   so the » menu, and the clip view's width follow; libs-gui's own when
+   it drops items from the end anyway. */
+- (NSArray *) _overrideGSToolbarViewMethod__visibleBackViews
+{
+  typedef NSArray *(*VisibleIMP)(id, SEL);
+  VisibleIMP originalIMP = (VisibleIMP)GnomeThemeOriginalMethod (_cmd, self, NSClassFromString (@"GSToolbarView"));
+  NSArray *items = [[(id)self toolbar] items];
+  BOOL fromEnd = YES;
+  NSIndexSet *keep = GnomeThemeToolbarKeptItems ((NSView *)self, &fromEnd);
+  NSMutableArray *backViews;
+  NSUInteger i;
+
+  if (fromEnd && originalIMP != NULL)
+    {
+      return originalIMP (self, _cmd);
+    }
+  backViews = [NSMutableArray arrayWithCapacity: [keep count]];
+  for (i = [keep firstIndex]; i != NSNotFound; i = [keep indexGreaterThanIndex: i])
+    {
+      [backViews addObject: [[items objectAtIndex: i] _backView]];
+    }
+  return backViews;
 }
 
 - (void) _overrideGSToolbarButtonMethod_layout

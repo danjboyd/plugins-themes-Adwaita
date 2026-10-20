@@ -40,7 +40,8 @@ QuirkProbe_OBJC_FILES = \
 	QuirkProbeNibMetrics.m \
 	QuirkProbeLiveSettings.m \
 	QuirkProbeLists.m \
-	QuirkProbePopovers.m
+	QuirkProbePopovers.m \
+	QuirkProbeToolbarOverflow.m
 
 QuirkProbe_HEADER_FILES = \
 	QuirkProbe.h
