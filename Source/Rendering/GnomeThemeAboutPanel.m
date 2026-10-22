@@ -25,7 +25,9 @@
    developer; the version in a pill, the accent's text colour on the accent
    at 12%. GNUstep has no navigation pages, so what AdwAboutWindow puts on
    its Details and Legal pages follows inline, dimmed: the description and
-   website, then the copyright and its description. The values come from
+   website, then the copyright and its description, and last, as in
+   GSInfoPanel, the current theme. An icon of bitmaps smaller than 128px
+   is drawn at its own size, not scaled up. The values come from
    the same places as GSInfoPanel's: the options dictionary, then the
    app's Info.plist. GNUstep's panel had NeXT's layout, with a GNUstep
    watermark behind it. */
@@ -35,6 +37,27 @@
 #import <AppKit/AppKit.h>
 
 static NSPanel *GnomeThemeAboutPanel = nil;
+
+/* Whether `image` has only bitmaps, all fewer than `side` pixels wide: it
+   is drawn at its own size, not scaled up and jagged (GNUstep's logo, for
+   an app with no icon of its own). */
+static BOOL
+GnomeThemeAboutIconIsSmallBitmap(NSImage *image, CGFloat side)
+{
+  NSEnumerator *enumerator = [[image representations] objectEnumerator];
+  NSImageRep *rep;
+  BOOL any = NO;
+
+  while ((rep = [enumerator nextObject]) != nil)
+    {
+      if ([rep isKindOfClass: [NSBitmapImageRep class]] == NO || [rep pixelsWide] >= side)
+        {
+          return NO;
+        }
+      any = YES;
+    }
+  return any;
+}
 
 /* The first of `keys` with a value of `class`: in `options`, then in the
    app's Info.plist. */
@@ -232,7 +255,8 @@ GnomeThemeMakeAboutPanel(GSTheme *theme, NSDictionary *options)
       NSImageView *iconView = AUTORELEASE ([[NSImageView alloc] initWithFrame: NSMakeRect (0, 0, 128, 128)]);
 
       [iconView setImage: icon];
-      [iconView setImageScaling: NSImageScaleProportionallyUpOrDown];
+      [iconView setImageScaling: GnomeThemeAboutIconIsSmallBitmap (icon, 128.0)
+        ? NSImageScaleProportionallyDown : NSImageScaleProportionallyUpOrDown];
       [views addObject: iconView];
       [gaps addObject: [NSNumber numberWithDouble: 0.0]];
     }
@@ -271,6 +295,12 @@ GnomeThemeMakeAboutPanel(GSTheme *theme, NSDictionary *options)
                                               dim, textWidth)];
       [gaps addObject: [NSNumber numberWithDouble: 24.0]];
     }
+  /* As GSInfoPanel's last line, the theme in use, by its name: a dim
+     caption. */
+  [views addObject: GnomeThemeAboutLabel ([NSString stringWithFormat: @"%@: %@",
+      NSLocalizedStringFromTableInBundle (@"Current theme", nil, [NSBundle bundleForLibrary: @"gnustep-gui"], @""),
+      [theme name]], [NSFont systemFontOfSize: floor (size * 0.82 + 0.5)], dim, textWidth)];
+  [gaps addObject: [NSNumber numberWithDouble: ([copyright length] > 0 || [license length] > 0) ? 6.0 : 24.0]];
 
   for (index = 0; index < [views count]; index++)
     {

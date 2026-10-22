@@ -7214,14 +7214,28 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
    interface font), the version in a pill. GNUstep's had NeXT's layout.
    A description too long for one line wraps (the label was once one line
    tall, and cut it off), and the panel sits on whole points (at half a
-   point, X11 drew nothing in it). */
+   point, X11 drew nothing in it). A 32px bitmap icon is drawn at 32pt in
+   the middle of its 128pt slot, not scaled up and jagged; the last line
+   names the current theme, as GSInfoPanel's does. */
 - (void) checkAboutPanel
 {
+  NSBitmapImageRep *bitmap = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+    pixelsWide: 32 pixelsHigh: 32 bitsPerSample: 8 samplesPerPixel: 4 hasAlpha: YES isPlanar: NO
+    colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 0 bitsPerPixel: 0]);
+  NSImage *smallIcon = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (32, 32)]);
+  NSString *themeLine = [NSString stringWithFormat: @"Current theme: %@", [[GSTheme theme] name]];
+  NSImageView *iconView = nil;
+  QuirkProbeInk iconInk = { 0 };
+  BOOL themeShown = NO;
+  unsigned char *pixels = [bitmap bitmapData];
+  NSInteger i;
+
   NSString *description = @"A description long enough to need three lines or so in the About panel, "
     @"as an application's own description often is";
   NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
     @"Probe About", @"ApplicationName", @"0.1.0", @"ApplicationRelease",
-    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", description, @"ApplicationDescription", nil];
+    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", description, @"ApplicationDescription",
+    smallIcon, @"ApplicationIcon", nil];
   CGFloat descriptionHeight = 0.0, lineHeight;
   NSPoint origin = NSZeroPoint;
   NSEnumerator *enumerator;
@@ -7231,6 +7245,12 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   CGFloat nameSize = 0.0;
   NSString *detail;
 
+  /* An opaque black square. */
+  for (i = 0; i < 32 * 32 * 4; i++)
+    {
+      pixels[i] = (i % 4 == 3) ? 255 : 0;
+    }
+  [smallIcon addRepresentation: bitmap];
   [NSApp orderFrontStandardAboutPanelWithOptions: options];
   enumerator = [[NSApp windows] objectEnumerator];
   while ((window = [enumerator nextObject]) != nil)
@@ -7247,6 +7267,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
       if ([view isKindOfClass: [NSImageView class]] && NSEqualSizes ([view frame].size, NSMakeSize (128, 128)))
         {
           icon = YES;
+          iconView = (NSImageView *)view;
+        }
+      if ([view isKindOfClass: [NSTextField class]] && [[(NSTextField *)view stringValue] isEqualToString: themeLine])
+        {
+          themeShown = YES;
         }
       if ([NSStringFromClass ([view class]) isEqualToString: @"GnomeThemeAboutPill"])
         {
@@ -7263,18 +7288,26 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
           descriptionHeight = NSHeight ([view frame]);
         }
     }
+  if (iconView != nil)
+    {
+      [panel display];
+      iconInk = QuirkProbeMeasure (QuirkProbeRender (iconView), QuirkProbeIsInk);
+    }
   origin = [panel frame].origin;
   [panel orderOut: nil];
   lineHeight = [[NSFont systemFontOfSize: 0] defaultLineHeightForFont];
 
   detail = [NSString stringWithFormat: @"panel %@ at %@; icon %@, name at %gpt (interface %gpt), "
-    @"version pill %@, long description %gpt tall (line %gpt)",
+    @"version pill %@, long description %gpt tall (line %gpt); a 32px icon drawn %ldx%ld at %ld,%ld "
+    @"(want 32x32 at 48,48); \"%@\" %@",
     panel != nil ? @"350pt wide" : @"not found", NSStringFromPoint (origin), icon ? @"128pt" : @"missing",
     nameSize, [[NSFont systemFontOfSize: 0] pointSize], pill ? @"shown" : @"missing",
-    descriptionHeight, lineHeight];
+    descriptionHeight, lineHeight, (long)iconInk.width, (long)iconInk.height, (long)iconInk.minX,
+    (long)iconInk.minY, themeLine, themeShown ? @"shown" : @"missing"];
   if (panel != nil && icon && pill && nameSize >= 1.7 * [[NSFont systemFontOfSize: 0] pointSize]
     && descriptionHeight >= 2.5 * lineHeight
-    && origin.x == floor (origin.x) && origin.y == floor (origin.y))
+    && origin.x == floor (origin.x) && origin.y == floor (origin.y)
+    && iconInk.width == 32 && iconInk.height == 32 && iconInk.minX == 48 && iconInk.minY == 48 && themeShown)
     {
       [self pass: @"about-panel" detail: detail];
     }
