@@ -5478,6 +5478,21 @@ GnomeThemeIsDropDownComboBox(id view)
   return resigned;
 }
 
+/* The frame it's given, as in Cocoa: libs-gui's -setFrame: makes every
+   combo box 21pt high ("We shouldn't harcode the height value"), so one
+   sized to fit (34pt, -cellSize) drew 21pt at the top of its row
+   (LinDirStat's folder combo box, #86). */
+- (void) _overrideNSComboBoxMethod_setFrame: (NSRect)frame
+{
+  typedef void (*SetFrameIMP)(id, SEL, NSRect);
+  SetFrameIMP superIMP = (SetFrameIMP)[[NSComboBox superclass] instanceMethodForSelector: _cmd];
+
+  if (superIMP != NULL)
+    {
+      superIMP (self, _cmd, frame);
+    }
+}
+
 - (void) _overrideNSComboBoxMethod_keyDown: (NSEvent *)theEvent
 {
   typedef void (*KeyDownIMP)(id, SEL, NSEvent *);
