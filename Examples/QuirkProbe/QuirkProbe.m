@@ -3387,7 +3387,8 @@ QuirkProbeRowsUnlikeBackground (NSBitmapImageRep *rep, NSRect rect)
    button: GTK's entry and GtkDropDown are 34px, as its buttons are
    (LinDirStat's folder combo box was 25pt beside a 34pt Browse…, #86).
    The combo box's field fills its frame, as LinDirStat builds it: sized
-   to fit while empty, placed, filled, and its window's first key view. */
+   to fit while empty, placed, filled, and its window's first key view.
+   A bezeled text field is as tall (GtkEntry); a label isn't. */
 - (void) checkControlHeights
 {
   NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 420, 70) title: @"Probe Control Heights"];
@@ -3395,6 +3396,8 @@ QuirkProbeRowsUnlikeBackground (NSBitmapImageRep *rep, NSRect rect)
   NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (0, 0, 200, 34)]);
   NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (280, 10, 120, 20)
                                                                 pullsDown: NO]);
+  NSTextField *field34 = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (0, 0, 40, 20)]);
+  NSTextField *label = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (0, 0, 40, 20)]);
   CGFloat buttonHeight, comboHeight, placedHeight, popUpHeight;
   NSInteger field, editedField;
   NSString *detail;
@@ -3407,6 +3410,13 @@ QuirkProbeRowsUnlikeBackground (NSBitmapImageRep *rep, NSRect rect)
   [combo setCompletes: NO];
   [combo setUsesDataSource: NO];
   [combo setNumberOfVisibleItems: 10];
+  [field34 setStringValue: @"0"];
+  [label setStringValue: @"Minimum"];
+  [label setBezeled: NO];
+  [label setDrawsBackground: NO];
+  [label setEditable: NO];
+  [field34 sizeToFit];
+  [label sizeToFit];
   [button sizeToFit];
   [combo sizeToFit];
   [popUp sizeToFit];
@@ -3436,10 +3446,12 @@ QuirkProbeRowsUnlikeBackground (NSBitmapImageRep *rep, NSRect rect)
 
   detail = [NSString stringWithFormat: @"sized to fit: button %g, combo box %g, pop-up %g high "
     @"(want 34 or more, within 1 of the button); the combo box %g high after -setFrame:, its field "
-    @"drawn %ld high, %ld as the first key view (want within 2 of its frame)", buttonHeight, comboHeight,
-    popUpHeight, placedHeight, (long)field, (long)editedField];
+    @"drawn %ld high, %ld as the first key view (want within 2 of its frame); a text field %g high, "
+    @"a label %g", buttonHeight, comboHeight,
+    popUpHeight, placedHeight, (long)field, (long)editedField, NSHeight ([field34 frame]), NSHeight ([label frame])];
   if (comboHeight >= 34.0 && popUpHeight >= 34.0
     && fabs (comboHeight - buttonHeight) <= 1.0 && fabs (popUpHeight - buttonHeight) <= 1.0
+    && fabs (NSHeight ([field34 frame]) - buttonHeight) <= 1.0 && NSHeight ([label frame]) < 30.0
     && placedHeight == comboHeight && field >= comboHeight - 2.0 && editedField >= comboHeight - 2.0)
     {
       [self pass: @"control-heights" detail: detail];
