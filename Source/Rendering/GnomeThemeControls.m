@@ -143,11 +143,20 @@ GnomeThemeIndicatorMinimumSize(NSCell *cell, NSView *controlView)
   return (theme != nil) ? [[theme metricsForCell: cell inView: controlView] indicatorMinimumSize] : 18.0;
 }
 
-/* GTK's focus-visible: buttons, checkboxes and other non-text controls show
-   their focus ring only after a key press, and hide it again on a pointer
-   press. A dialog opened with the mouse shows no ring on its focused button.
-   Text entries show theirs whenever they have focus, as in GTK. */
-static BOOL GnomeThemeFocusVisible = NO;
+/* GTK's focus-visible, a window's own: buttons, checkboxes and other
+   non-text controls show their focus ring only after a key press in their
+   window, and hide it again on a pointer press there. A dialog opened with
+   the mouse, or with a shortcut in another window (LinDirStat's Ctrl+,
+   Preferences, #85), shows no ring on its first key view. Text entries
+   show theirs whenever they have focus, as in GTK. On a window, its
+   NSNumber. */
+static char GnomeThemeFocusVisibleKey;
+
+static BOOL
+GnomeThemeWindowFocusVisible(NSWindow *window)
+{
+  return window != nil && [objc_getAssociatedObject (window, &GnomeThemeFocusVisibleKey) boolValue];
+}
 
 @interface NSSearchFieldCell (GnomeThemePrivateLayout)
 - (NSButtonCell *) cancelButtonCell;
@@ -427,34 +436,28 @@ GnomeThemeTrackFocusedEntryView(NSView *view)
 static BOOL
 GnomeThemeViewShowsFocusRing(NSView *view)
 {
-  return GnomeThemeFocusVisible && GnomeThemeViewHasFocus (view);
+  return GnomeThemeWindowFocusVisible ([view window]) && GnomeThemeViewHasFocus (view);
 }
 
-/* Redraws each window's focused view, so its ring follows focus-visible. */
+/* Redraws a window's focused view, so its ring follows focus-visible. */
 static void
-GnomeThemeRedisplayFocusedViews(void)
+GnomeThemeRedisplayFocusedView(NSWindow *window)
 {
-  NSEnumerator *enumerator = [[NSApp windows] objectEnumerator];
-  NSWindow *window;
+  id responder = [window firstResponder];
 
-  while ((window = [enumerator nextObject]) != nil)
+  if ([window isVisible] == NO)
     {
-      id responder = [window firstResponder];
-
-      if ([window isVisible] == NO)
-        {
-          continue;
-        }
-      /* An editing text field's first responder is its field editor. */
-      if ([responder isKindOfClass: [NSText class]]
-        && [[responder delegate] isKindOfClass: [NSView class]])
-        {
-          responder = [responder delegate];
-        }
-      if ([responder isKindOfClass: [NSView class]])
-        {
-          [responder setNeedsDisplay: YES];
-        }
+      return;
+    }
+  /* An editing text field's first responder is its field editor. */
+  if ([responder isKindOfClass: [NSText class]]
+    && [[responder delegate] isKindOfClass: [NSView class]])
+    {
+      responder = [responder delegate];
+    }
+  if ([responder isKindOfClass: [NSView class]])
+    {
+      [responder setNeedsDisplay: YES];
     }
 }
 
@@ -1973,7 +1976,8 @@ GnomeThemeDrawTabLabel(NSString *label,
 {
   typedef void (*SendEventIMP)(id, SEL, NSEvent *);
   SendEventIMP originalIMP = (SendEventIMP)GnomeThemeOriginalMethod (_cmd, self, [NSApplication class]);
-  BOOL visible = GnomeThemeFocusVisible;
+  NSWindow *window = [event window];
+  BOOL visible = GnomeThemeWindowFocusVisible (window);
 
   switch ([event type])
     {
@@ -1990,10 +1994,11 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
   /* Before dispatch, so a click that moves focus also clears the ring of
      the view losing it. */
-  if (visible != GnomeThemeFocusVisible)
+  if (window != nil && visible != GnomeThemeWindowFocusVisible (window))
     {
-      GnomeThemeFocusVisible = visible;
-      GnomeThemeRedisplayFocusedViews ();
+      objc_setAssociatedObject (window, &GnomeThemeFocusVisibleKey,
+                                [NSNumber numberWithBool: visible], OBJC_ASSOCIATION_RETAIN);
+      GnomeThemeRedisplayFocusedView (window);
     }
   if (originalIMP != NULL)
     {
@@ -2035,7 +2040,7 @@ GnomeThemeDrawTabLabel(NSString *label,
   /* Buttons draw their own ring: push buttons and pop-ups in -drawButton:,
      checkboxes and radios around the indicator. NSCell would put this one
      around the title. */
-  if ([view isKindOfClass: [NSButton class]] || GnomeThemeFocusVisible == NO)
+  if ([view isKindOfClass: [NSButton class]] || GnomeThemeWindowFocusVisible ([view window]) == NO)
     {
       return;
     }

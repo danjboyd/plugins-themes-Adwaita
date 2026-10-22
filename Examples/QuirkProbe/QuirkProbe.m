@@ -3356,6 +3356,51 @@ QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *
     }
 }
 
+/* Focus-visible is a window's own, as in GTK: a key press in one window
+   (LinDirStat's Ctrl+, in its main window) doesn't ring the first key view
+   of the dialog it opens; a key press in the dialog does (#85). */
+- (void) checkFocusVisiblePerWindow
+{
+  NSWindow *main = [self windowWithFrame: NSMakeRect (480, 600, 200, 60) title: @"QuirkProbe Focus Main"];
+  NSWindow *dialog = [self windowWithFrame: NSMakeRect (480, 700, 260, 60) title: @"QuirkProbe Focus Dialog"];
+  NSButton *checkbox = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 18, 220, 24)]);
+  QuirkProbeInk opened, afterKey;
+  NSString *detail;
+
+  [checkbox setButtonType: NSSwitchButton];
+  [checkbox setTitle: @"Show sizes"];
+  [[dialog contentView] addSubview: checkbox];
+  [main makeKeyAndOrderFront: nil];
+  QuirkProbeSendApplicationEvent (main, NSKeyDown);
+  [dialog makeKeyAndOrderFront: nil];
+  [dialog makeFirstResponder: checkbox];
+  [dialog display];
+  opened = QuirkProbeMeasure (QuirkProbeRender (checkbox), QuirkProbeIsFocusBlue);
+  QuirkProbeSendApplicationEvent (dialog, NSKeyDown);
+  [dialog display];
+  afterKey = QuirkProbeMeasure (QuirkProbeRender (checkbox), QuirkProbeIsFocusBlue);
+  [self saveWindow: dialog named: @"focus-visible-per-window"];
+  /* Leave focus-visible off for later checks. */
+  QuirkProbeSendApplicationEvent (dialog, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (dialog, NSLeftMouseUp);
+  QuirkProbeSendApplicationEvent (main, NSLeftMouseDown);
+  QuirkProbeSendApplicationEvent (main, NSLeftMouseUp);
+  [dialog orderOut: nil];
+  [main orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"checkbox ring pixels: %lu when the dialog opens after a key "
+    @"in another window (want 0), %lu after a key in the dialog", (unsigned long)opened.count,
+    (unsigned long)afterKey.count];
+  if (opened.count == 0 && afterKey.count > 20)
+    {
+      [self pass: @"focus-visible-per-window" detail: detail];
+    }
+  else
+    {
+      [self fail: @"focus-visible-per-window" detail: detail];
+    }
+}
+
 /* A focused push button, as in OneDriveServiceManager's Resync panel, where
    Cancel is the first key view. As in GTK, the ring shows only after a key
    press. It runs along the button's edge: not around the title (where NSCell
@@ -8671,6 +8716,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpButton];
   [self checkPopUpClick];
   [self checkButtonFocusRing];
+  [self checkFocusVisiblePerWindow];
   [self checkCheckboxGap];
   [self checkTableDensity];
   [self checkTabView];
