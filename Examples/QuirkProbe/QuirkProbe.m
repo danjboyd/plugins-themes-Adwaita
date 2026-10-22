@@ -145,6 +145,13 @@ QuirkProbeIsFocusBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
   return blue > 200 && blue > red + 30;
 }
 
+/* Strong red, in no palette: the About panel probe's icon. */
+static BOOL
+QuirkProbeIsProbeRed (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return red > 200 && green < 60 && blue < 60;
+}
+
 /* The accent in any palette: bluer than it is red or green. */
 static BOOL
 QuirkProbeIsAccentBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
@@ -6429,10 +6436,10 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   CGFloat nameSize = 0.0;
   NSString *detail;
 
-  /* An opaque black square. */
+  /* An opaque red square, unlike any palette's colours. */
   for (i = 0; i < 32 * 32 * 4; i++)
     {
-      pixels[i] = (i % 4 == 3) ? 255 : 0;
+      pixels[i] = (i % 4 == 0 || i % 4 == 3) ? 255 : 0;
     }
   [smallIcon addRepresentation: bitmap];
   [NSApp orderFrontStandardAboutPanelWithOptions: options];
@@ -6475,7 +6482,7 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   if (iconView != nil)
     {
       [panel display];
-      iconInk = QuirkProbeMeasure (QuirkProbeRender (iconView), QuirkProbeIsInk);
+      iconInk = QuirkProbeMeasure (QuirkProbeRender (iconView), QuirkProbeIsProbeRed);
     }
   origin = [panel frame].origin;
   [panel orderOut: nil];
