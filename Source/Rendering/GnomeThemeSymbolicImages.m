@@ -70,7 +70,11 @@ GnomeThemeImageIsTemplate(NSImage *image)
       return YES;
     }
   name = [image name];
+  /* libs-gui's » for a toolbar's overflow is black on clear, a shape
+     like a symbolic icon's: in the text colour, it shows on the dark
+     style's header bar and toolbars (#83). */
   return [name hasSuffix: @"Template"] || [name hasSuffix: @"-symbolic"]
+    || [name isEqualToString: @"common_ToolbarClippedItemsMark"]
     || [GnomeThemeSymbolicReplacements () containsObject: name];
 }
 
