@@ -252,7 +252,76 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
     state.width, state.kept, state.menu, state.placement];
 }
 
+/* The » mark drawn alone: the darkest and lightest grey levels (0 to
+   255) of its opaque pixels, the mark's ink and what is behind it in
+   either order; -1 with no mark. */
+static CGFloat
+QuirkProbeOverflowMarkInk(NSToolbar *toolbar, CGFloat *lightest)
+{
+  NSEnumerator *enumerator = [[[toolbar _toolbarView] subviews] objectEnumerator];
+  NSView *subview, *mark = nil;
+  NSBitmapImageRep *rep;
+  NSInteger x, y;
+  CGFloat darkest = -1.0;
+
+  *lightest = -1.0;
+  while ((subview = [enumerator nextObject]) != nil)
+    {
+      if ([subview respondsToSelector: @selector(overflowMenu)] && [subview superview] != nil)
+        {
+          mark = subview;
+        }
+    }
+  if (mark == nil)
+    {
+      return -1.0;
+    }
+  rep = [mark bitmapImageRepForCachingDisplayInRect: [mark bounds]];
+  [mark cacheDisplayInRect: [mark bounds] toBitmapImageRep: rep];
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < [rep pixelsWide]; x++)
+        {
+          NSColor *color = [[rep colorAtX: x y: y] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+          CGFloat grey;
+
+          if (color == nil || [color alphaComponent] < 0.5)
+            {
+              continue;
+            }
+          grey = 255.0 * (0.299 * [color redComponent] + 0.587 * [color greenComponent]
+                          + 0.114 * [color blueComponent]);
+          darkest = darkest < 0.0 ? grey : MIN (darkest, grey);
+          *lightest = MAX (*lightest, grey);
+        }
+    }
+  return darkest;
+}
+
 @implementation QuirkProbe (ToolbarOverflow)
+
+/* The » mark in the text colour, so it shows on what is behind it in the
+   dark style too: libs-gui's is black (#83). */
+- (void) checkOverflowMark: (NSString *)ident
+{
+  NSWindow *window;
+  NSToolbar *toolbar = [self overflowToolbarIn: &window identifiers: QuirkProbeOverflowScreenshotToolItems ()
+                                    priorities: QuirkProbeOverflowScreenshotToolPriorities () width: 500.0 name: ident];
+  CGFloat lightest = -1.0;
+  CGFloat darkest = QuirkProbeOverflowMarkInk (toolbar, &lightest);
+  NSString *detail = [NSString stringWithFormat: @"» greys %.0f to %.0f (want 90 apart)", darkest, lightest];
+
+  [self saveWindow: window named: ident];
+  [window orderOut: nil];
+  if (darkest >= 0.0 && lightest - darkest >= 90.0)
+    {
+      [self pass: ident detail: detail];
+    }
+  else
+    {
+      [self fail: ident detail: darkest < 0.0 ? @"no » drawn" : detail];
+    }
+}
 
 /* A window holding a toolbar of `identifiers`, its toolbar `width` wide. */
 - (NSToolbar *) overflowToolbarIn: (NSWindow **)windowOut
@@ -448,6 +517,7 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                contiguous: YES];
 
   [self checkOverflowSweep: @"toolbar-overflow-sweep" contiguous: YES];
+  [self checkOverflowMark: @"toolbar-overflow-mark"];
 }
 
 /* The same in the header bar, with its title in the flexible space: the
@@ -485,6 +555,7 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                      menu: @"Share Action"
                contiguous: NO];
   [self checkOverflowSweep: @"header-bar-toolbar-overflow-sweep" contiguous: YES];
+  [self checkOverflowMark: @"header-bar-toolbar-overflow-mark"];
 
   [searchList removeObject: @"QuirkProbeOverflowHeaderBar"];
   [defaults setSearchList: searchList];
