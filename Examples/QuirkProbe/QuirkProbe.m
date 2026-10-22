@@ -7145,6 +7145,81 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* The standard About panel is the first page of AdwAboutWindow: 350pt
+   wide, the icon at 128pt, the name in title-1 (bold, about 181% of the
+   interface font), the version in a pill. GNUstep's had NeXT's layout.
+   A description too long for one line wraps (the label was once one line
+   tall, and cut it off), and the panel sits on whole points (at half a
+   point, X11 drew nothing in it). */
+- (void) checkAboutPanel
+{
+  NSString *description = @"A description long enough to need three lines or so in the About panel, "
+    @"as an application's own description often is";
+  NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
+    @"Probe About", @"ApplicationName", @"0.1.0", @"ApplicationRelease",
+    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", description, @"ApplicationDescription", nil];
+  CGFloat descriptionHeight = 0.0, lineHeight;
+  NSPoint origin = NSZeroPoint;
+  NSEnumerator *enumerator;
+  NSWindow *window, *panel = nil;
+  NSView *view;
+  BOOL icon = NO, pill = NO;
+  CGFloat nameSize = 0.0;
+  NSString *detail;
+
+  [NSApp orderFrontStandardAboutPanelWithOptions: options];
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      if ([window isVisible] && [window isKindOfClass: [NSPanel class]]
+        && fabs (NSWidth ([[window contentView] frame]) - 350.0) < 0.5)
+        {
+          panel = window;
+        }
+    }
+  enumerator = [[[panel contentView] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSImageView class]] && NSEqualSizes ([view frame].size, NSMakeSize (128, 128)))
+        {
+          icon = YES;
+        }
+      if ([NSStringFromClass ([view class]) isEqualToString: @"GnomeThemeAboutPill"])
+        {
+          pill = YES;
+        }
+      if ([view isKindOfClass: [NSTextField class]]
+        && [[(NSTextField *)view stringValue] isEqualToString: @"Probe About"])
+        {
+          nameSize = [[(NSTextField *)view font] pointSize];
+        }
+      if ([view isKindOfClass: [NSTextField class]]
+        && [[(NSTextField *)view stringValue] isEqualToString: description])
+        {
+          descriptionHeight = NSHeight ([view frame]);
+        }
+    }
+  origin = [panel frame].origin;
+  [panel orderOut: nil];
+  lineHeight = [[NSFont systemFontOfSize: 0] defaultLineHeightForFont];
+
+  detail = [NSString stringWithFormat: @"panel %@ at %@; icon %@, name at %gpt (interface %gpt), "
+    @"version pill %@, long description %gpt tall (line %gpt)",
+    panel != nil ? @"350pt wide" : @"not found", NSStringFromPoint (origin), icon ? @"128pt" : @"missing",
+    nameSize, [[NSFont systemFontOfSize: 0] pointSize], pill ? @"shown" : @"missing",
+    descriptionHeight, lineHeight];
+  if (panel != nil && icon && pill && nameSize >= 1.7 * [[NSFont systemFontOfSize: 0] pointSize]
+    && descriptionHeight >= 2.5 * lineHeight
+    && origin.x == floor (origin.x) && origin.y == floor (origin.y))
+    {
+      [self pass: @"about-panel" detail: detail];
+    }
+  else
+    {
+      [self fail: @"about-panel" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -8835,6 +8910,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
   [self checkPanelIcons];
+  [self checkAboutPanel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -8941,6 +9017,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
   [self checkPanelIcons];
+  [self checkAboutPanel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
