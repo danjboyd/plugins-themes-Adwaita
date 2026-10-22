@@ -5839,6 +5839,121 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* The runs of ink across a header column `columnRect` (in pixels):
+   columns with ink, apart where 3 or more have none. */
+static NSArray *
+QuirkProbeHeaderInkRuns (NSBitmapImageRep *rep, NSRect columnRect)
+{
+  NSMutableArray *runs = [NSMutableArray array];
+  NSInteger x, start = -1, end = -1, height = [rep pixelsHigh];
+
+  for (x = (NSInteger)NSMinX (columnRect) + 2; x < (NSInteger)NSMaxX (columnRect) - 2; x++)
+    {
+      if (QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (x, 2, 1, height - 4)).count == 0)
+        {
+          continue;
+        }
+      if (start >= 0 && x - end > 3)
+        {
+          [runs addObject: [NSValue valueWithRange: NSMakeRange (start, end - start + 1)]];
+          start = -1;
+        }
+      if (start < 0)
+        {
+          start = x;
+        }
+      end = x;
+    }
+  if (start >= 0)
+    {
+      [runs addObject: [NSValue valueWithRange: NSMakeRange (start, end - start + 1)]];
+    }
+  return runs;
+}
+
+/* A column too narrow for its title and its sort indicator: the title is
+   ellipsized and keeps clear of the indicator, before a right-aligned
+   title (LinDirStat's 90pt Percentage, at GNOME's metrics, read
+   "ercentage" under the ▾; 76pt at the compact ones) and
+   after a left-aligned one (#84). */
+- (void) checkSortIndicatorNarrow
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Sort Indicator Narrow"];
+  NSScrollView *scroll = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 300, 120)]);
+  NSTableColumn *first = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"first"]);
+  NSTableColumn *narrow = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"narrow"]);
+  NSTableColumn *last = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"last"]);
+  NSImage *down = [NSImage imageNamed: @"NSDescendingSortIndicator"];
+  NSMutableString *detail = [NSMutableString string];
+  BOOL ok = YES;
+  int pass;
+
+  [[first headerCell] setStringValue: @"Name"];
+  [[narrow headerCell] setStringValue: @"Percentage"];
+  [[last headerCell] setStringValue: @"Files"];
+  [first setWidth: 100];
+  [narrow setWidth: 76];
+  [last setWidth: 90];
+  [table setColumnAutoresizingStyle: NSTableViewNoColumnAutoresizing];
+  [table addTableColumn: first];
+  [table addTableColumn: narrow];
+  [table addTableColumn: last];
+  [scroll setHasVerticalScroller: YES];
+  [scroll setDocumentView: table];
+  [[window contentView] addSubview: scroll];
+  [window orderFront: nil];
+  [table setIndicatorImage: down inTableColumn: narrow];
+
+  for (pass = 0; pass < 2; pass++)
+    {
+      BOOL right = (pass == 0);
+      NSTableHeaderView *header = [table headerView];
+      NSBitmapImageRep *rep;
+      NSUInteger fill[3];
+      NSArray *runs;
+      NSRange arrow, title;
+      NSRect column;
+
+      [[narrow headerCell] setAlignment: right ? NSRightTextAlignment : NSLeftTextAlignment];
+      [header setNeedsDisplay: YES];
+      [window display];
+      rep = QuirkProbeRender (header);
+      column = [header headerRectOfColumn: 1];
+      QuirkProbePixelAt (rep, (NSInteger)NSMinX (column) + 3, [rep pixelsHigh] / 2, fill);
+      QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+      runs = QuirkProbeHeaderInkRuns (rep, column);
+      QuirkProbeInkBackground = 750;
+      if (right == NO)
+        {
+          [self saveWindow: window named: @"sort-indicator-narrow"];
+        }
+      if ([runs count] < 2)
+        {
+          [detail appendFormat: @"%@: %lu run(s) of ink, title and indicator together; ",
+            right ? @"right-aligned" : @"left-aligned", (unsigned long)[runs count]];
+          ok = NO;
+          continue;
+        }
+      arrow = [[runs objectAtIndex: right ? 0 : [runs count] - 1] rangeValue];
+      title = [[runs objectAtIndex: right ? 1 : 0] rangeValue];
+      [detail appendFormat: @"%@ in %g to %g: indicator %lu wide at %lu, title from %lu; ",
+        right ? @"right-aligned" : @"left-aligned", NSMinX (column), NSMaxX (column),
+        (unsigned long)arrow.length, (unsigned long)arrow.location, (unsigned long)title.location];
+      /* The indicator alone: GTK's chevron is 8 to 12 pixels wide. */
+      ok = ok && arrow.length >= 8 && arrow.length <= 12;
+    }
+  [window orderOut: nil];
+  if (ok && down != nil)
+    {
+      [self pass: @"sort-indicator-narrow" detail: detail];
+    }
+  else
+    {
+      [self fail: @"sort-indicator-narrow" detail: detail];
+    }
+}
+
 /* A combo box that can't be edited is a GtkDropDown: focused by Tab it
    keeps its bold label, with no field editor (no cursor, no lighter strip,
    and its text didn't vanish), shows the ring after the key, and Tab moves
@@ -8616,6 +8731,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSubmenuAtScreenEdge];
   [self checkSubmenuLinesUpWithItem];
   [self checkSortIndicator];
+  [self checkSortIndicatorNarrow];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
@@ -8719,6 +8835,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSubmenuAtScreenEdge];
   [self checkSubmenuLinesUpWithItem];
   [self checkSortIndicator];
+  [self checkSortIndicatorNarrow];
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
