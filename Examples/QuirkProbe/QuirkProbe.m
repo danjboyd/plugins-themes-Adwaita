@@ -3398,6 +3398,9 @@ QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *
   else
     {
       [self fail: @"focus-visible-per-window" detail: detail];
+    }
+}
+
 /* Sized to fit, a combo box and a pop-up button are as tall as a push
    button: GTK's entry and GtkDropDown are 34px, as its buttons are
    (LinDirStat's folder combo box was 25pt beside a 34pt Browse…, #86). */
