@@ -3356,6 +3356,51 @@ QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *
     }
 }
 
+/* Sized to fit, a combo box and a pop-up button are as tall as a push
+   button: GTK's entry and GtkDropDown are 34px, as its buttons are
+   (LinDirStat's folder combo box was 25pt beside a 34pt Browse…, #86). */
+- (void) checkControlHeights
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 420, 70) title: @"Probe Control Heights"];
+  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10, 10, 100, 20)]);
+  NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (120, 10, 150, 20)]);
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (280, 10, 120, 20)
+                                                                pullsDown: NO]);
+  CGFloat buttonHeight, comboHeight, popUpHeight;
+  NSString *detail;
+
+  [button setTitle: @"Browse…"];
+  [button setBezelStyle: NSRoundedBezelStyle];
+  [combo addItemWithObjectValue: @"/usr/share/doc"];
+  [combo setStringValue: @"/usr/share/doc"];
+  [popUp addItemWithTitle: @"System Default"];
+  [[window contentView] addSubview: button];
+  [[window contentView] addSubview: combo];
+  [[window contentView] addSubview: popUp];
+  [button sizeToFit];
+  [combo sizeToFit];
+  [popUp sizeToFit];
+  [window orderFront: nil];
+  [window display];
+  [self saveWindow: window named: @"control-heights"];
+  [window orderOut: nil];
+  buttonHeight = NSHeight ([button frame]);
+  comboHeight = NSHeight ([combo frame]);
+  popUpHeight = NSHeight ([popUp frame]);
+
+  detail = [NSString stringWithFormat: @"sized to fit: button %g, combo box %g, pop-up %g high "
+    @"(want 34 or more, within 1 of the button)", buttonHeight, comboHeight, popUpHeight];
+  if (comboHeight >= 34.0 && popUpHeight >= 34.0
+    && fabs (comboHeight - buttonHeight) <= 1.0 && fabs (popUpHeight - buttonHeight) <= 1.0)
+    {
+      [self pass: @"control-heights" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-heights" detail: detail];
+    }
+}
+
 /* A focused push button, as in OneDriveServiceManager's Resync panel, where
    Cancel is the first key view. As in GTK, the ring shows only after a key
    press. It runs along the button's edge: not around the title (where NSCell
@@ -8671,6 +8716,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpButton];
   [self checkPopUpClick];
   [self checkButtonFocusRing];
+  [self checkControlHeights];
   [self checkCheckboxGap];
   [self checkTableDensity];
   [self checkTabView];
