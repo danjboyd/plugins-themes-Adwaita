@@ -5219,16 +5219,20 @@ GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
   return size;
 }
 
-/* A combo box as tall as a push button: GtkEntry's 34pt (libs-gui's was
-   about 25 beside a 34pt button, #86). */
-- (NSSize) _overrideNSComboBoxCellMethod_cellSize
+/* A bezeled text field or combo box as tall as a push button: GtkEntry's
+   34pt (libs-gui's were about 25, beside 34pt buttons and pop-ups in
+   LinDirStat, #86). Labels, and the cells tables and headers draw, keep
+   their size. One override for both: NSComboBoxCell's own would find
+   this one as its original. */
+- (NSSize) _overrideNSTextFieldCellMethod_cellSize
 {
   typedef NSSize (*CellSizeIMP)(id, SEL);
-  CellSizeIMP originalIMP = (CellSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBoxCell class]);
-  NSComboBoxCell *cell = (NSComboBoxCell *)self;
+  CellSizeIMP originalIMP = (CellSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSTextFieldCell class]);
+  NSTextFieldCell *cell = (NSTextFieldCell *)self;
   NSSize size = (originalIMP != NULL) ? originalIMP (self, _cmd) : NSZeroSize;
 
-  if ([cell isBezeled] || [cell isBordered])
+  if ([cell isBezeled] && [cell isKindOfClass: [NSTableHeaderCell class]] == NO
+    && [[cell controlView] isKindOfClass: [NSTableView class]] == NO)
     {
       size.height = MAX (size.height, GnomeThemeControlRowHeight ([cell font]));
     }
