@@ -145,6 +145,40 @@ QuirkProbeIsFocusBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
   return blue > 200 && blue > red + 30;
 }
 
+/* Strong red, in no palette: the About panel probe's icon. */
+static BOOL
+QuirkProbeIsProbeRed (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return red > 200 && green < 60 && blue < 60;
+}
+
+/* Strong green, in no palette: the About panel probe's large bitmap. */
+static BOOL
+QuirkProbeIsProbeGreen (NSUInteger red, NSUInteger green, NSUInteger blue)
+{
+  return green > 200 && red < 60 && blue < 60;
+}
+
+/* An opaque square `pixels` wide in one colour (RGBA bytes). */
+static NSBitmapImageRep *
+QuirkProbeSquareBitmap (NSInteger pixels, unsigned char red, unsigned char green)
+{
+  NSBitmapImageRep *bitmap = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+    pixelsWide: pixels pixelsHigh: pixels bitsPerSample: 8 samplesPerPixel: 4 hasAlpha: YES isPlanar: NO
+    colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 0 bitsPerPixel: 0]);
+  unsigned char *bytes = [bitmap bitmapData];
+  NSInteger i;
+
+  for (i = 0; i < pixels * pixels; i++)
+    {
+      bytes[4 * i] = red;
+      bytes[4 * i + 1] = green;
+      bytes[4 * i + 2] = 0;
+      bytes[4 * i + 3] = 255;
+    }
+  return bitmap;
+}
+
 /* The accent in any palette: bluer than it is red or green. */
 static BOOL
 QuirkProbeIsAccentBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
@@ -7209,6 +7243,166 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* The About panel's icon, drawn, measured with `test`: the panel shown
+   with `options`, then closed. */
+static QuirkProbeInk
+QuirkProbeAboutIconInk (NSDictionary *options, QuirkProbePixelTest test)
+{
+  QuirkProbeInk ink = { 0 };
+  NSEnumerator *enumerator;
+  NSWindow *window, *panel = nil;
+  NSView *view;
+
+  [NSApp orderFrontStandardAboutPanelWithOptions: options];
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      if ([window isVisible] && [window isKindOfClass: [NSPanel class]]
+        && fabs (NSWidth ([[window contentView] frame]) - 350.0) < 0.5)
+        {
+          panel = window;
+        }
+    }
+  enumerator = [[[panel contentView] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSImageView class]])
+        {
+          [panel display];
+          ink = QuirkProbeMeasure (QuirkProbeRender (view), test);
+        }
+    }
+  [panel orderOut: nil];
+  return ink;
+}
+
+/* The standard About panel is the first page of AdwAboutWindow: 350pt
+   wide, the icon at 128pt, the name in title-1 (bold, about 181% of the
+   interface font), the version in a pill. GNUstep's had NeXT's layout.
+   A description too long for one line wraps (the label was once one line
+   tall, and cut it off), and the panel sits on whole points (at half a
+   point, X11 drew nothing in it). A 32px bitmap icon is drawn at 32pt in
+   the middle of its 128pt slot, not scaled up and jagged; an icon like an
+   app's default one, 48pt with a 48px and a 192px bitmap, is drawn from
+   the 192px one at 128pt (the 48px one was drawn, scaled up); the last
+   line names the current theme, as GSInfoPanel's does. */
+- (void) checkAboutPanel
+{
+  NSBitmapImageRep *bitmap = AUTORELEASE ([[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL
+    pixelsWide: 32 pixelsHigh: 32 bitsPerSample: 8 samplesPerPixel: 4 hasAlpha: YES isPlanar: NO
+    colorSpaceName: NSCalibratedRGBColorSpace bytesPerRow: 0 bitsPerPixel: 0]);
+  NSImage *smallIcon = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (32, 32)]);
+  NSString *themeLine = [NSString stringWithFormat: @"Current theme: %@", [[GSTheme theme] name]];
+  NSImageView *iconView = nil;
+  QuirkProbeInk iconInk = { 0 }, largeInk, smallInk;
+  BOOL themeShown = NO;
+  unsigned char *pixels = [bitmap bitmapData];
+  NSInteger i;
+
+  NSString *description = @"A description long enough to need three lines or so in the About panel, "
+    @"as an application's own description often is";
+  NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:
+    @"Probe About", @"ApplicationName", @"0.1.0", @"ApplicationRelease",
+    [NSArray arrayWithObject: @"QuirkProbe"], @"Authors", description, @"ApplicationDescription",
+    smallIcon, @"ApplicationIcon", nil];
+  CGFloat descriptionHeight = 0.0, lineHeight;
+  NSPoint origin = NSZeroPoint;
+  NSEnumerator *enumerator;
+  NSWindow *window, *panel = nil;
+  NSView *view;
+  BOOL icon = NO, pill = NO;
+  CGFloat nameSize = 0.0;
+  NSString *detail;
+
+  /* An opaque red square, unlike any palette's colours. */
+  for (i = 0; i < 32 * 32 * 4; i++)
+    {
+      pixels[i] = (i % 4 == 0 || i % 4 == 3) ? 255 : 0;
+    }
+  [smallIcon addRepresentation: bitmap];
+  [NSApp orderFrontStandardAboutPanelWithOptions: options];
+  enumerator = [[NSApp windows] objectEnumerator];
+  while ((window = [enumerator nextObject]) != nil)
+    {
+      if ([window isVisible] && [window isKindOfClass: [NSPanel class]]
+        && fabs (NSWidth ([[window contentView] frame]) - 350.0) < 0.5)
+        {
+          panel = window;
+        }
+    }
+  enumerator = [[[panel contentView] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSImageView class]] && NSEqualSizes ([view frame].size, NSMakeSize (128, 128)))
+        {
+          icon = YES;
+          iconView = (NSImageView *)view;
+        }
+      if ([view isKindOfClass: [NSTextField class]] && [[(NSTextField *)view stringValue] isEqualToString: themeLine])
+        {
+          themeShown = YES;
+        }
+      if ([NSStringFromClass ([view class]) isEqualToString: @"GnomeThemeAboutPill"])
+        {
+          pill = YES;
+        }
+      if ([view isKindOfClass: [NSTextField class]]
+        && [[(NSTextField *)view stringValue] isEqualToString: @"Probe About"])
+        {
+          nameSize = [[(NSTextField *)view font] pointSize];
+        }
+      if ([view isKindOfClass: [NSTextField class]]
+        && [[(NSTextField *)view stringValue] isEqualToString: description])
+        {
+          descriptionHeight = NSHeight ([view frame]);
+        }
+    }
+  if (iconView != nil)
+    {
+      [panel display];
+      iconInk = QuirkProbeMeasure (QuirkProbeRender (iconView), QuirkProbeIsProbeRed);
+    }
+  origin = [panel frame].origin;
+  [panel orderOut: nil];
+  {
+    NSImage *defaultLike = AUTORELEASE ([[NSImage alloc] initWithSize: NSMakeSize (48, 48)]);
+    NSBitmapImageRep *small = QuirkProbeSquareBitmap (48, 255, 0);
+    NSBitmapImageRep *large = QuirkProbeSquareBitmap (192, 0, 255);
+
+    [small setSize: NSMakeSize (48, 48)];
+    [large setSize: NSMakeSize (48, 48)];
+    [defaultLike addRepresentation: small];
+    [defaultLike addRepresentation: large];
+    largeInk = QuirkProbeAboutIconInk ([NSDictionary dictionaryWithObjectsAndKeys: @"Probe About",
+      @"ApplicationName", defaultLike, @"ApplicationIcon", nil], QuirkProbeIsProbeGreen);
+    smallInk = QuirkProbeAboutIconInk ([NSDictionary dictionaryWithObjectsAndKeys: @"Probe About",
+      @"ApplicationName", defaultLike, @"ApplicationIcon", nil], QuirkProbeIsProbeRed);
+  }
+  lineHeight = [[NSFont systemFontOfSize: 0] defaultLineHeightForFont];
+
+  detail = [NSString stringWithFormat: @"panel %@ at %@; icon %@, name at %gpt (interface %gpt), "
+    @"version pill %@, long description %gpt tall (line %gpt); a 32px icon drawn %ldx%ld at %ld,%ld "
+    @"(want 32x32 at 48,48); a 48pt icon with 48px and 192px bitmaps: the 192px one drawn %ldx%ld, "
+    @"the 48px one %lu pixels (want 128x128 and none); \"%@\" %@",
+    panel != nil ? @"350pt wide" : @"not found", NSStringFromPoint (origin), icon ? @"128pt" : @"missing",
+    nameSize, [[NSFont systemFontOfSize: 0] pointSize], pill ? @"shown" : @"missing",
+    descriptionHeight, lineHeight, (long)iconInk.width, (long)iconInk.height, (long)iconInk.minX,
+    (long)iconInk.minY, (long)largeInk.width, (long)largeInk.height, (unsigned long)smallInk.count,
+    themeLine, themeShown ? @"shown" : @"missing"];
+  if (panel != nil && icon && pill && nameSize >= 1.7 * [[NSFont systemFontOfSize: 0] pointSize]
+    && descriptionHeight >= 2.5 * lineHeight
+    && origin.x == floor (origin.x) && origin.y == floor (origin.y)
+    && iconInk.width == 32 && iconInk.height == 32 && iconInk.minX == 48 && iconInk.minY == 48 && themeShown
+    && largeInk.width == 128 && largeInk.height == 128 && smallInk.count == 0)
+    {
+      [self pass: @"about-panel" detail: detail];
+    }
+  else
+    {
+      [self fail: @"about-panel" detail: detail];
+    }
+}
+
 /* A hovered row of a menu (a pop-up button's too) is libadwaita's: the
    foreground at 10% over the menu, with the row's text in the text colour.
    It was the accent with white text, and in a pop-up button's menu, whose
@@ -8899,6 +9093,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
   [self checkPanelIcons];
+  [self checkAboutPanel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
@@ -9005,6 +9200,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpArchivedArrow];
   [self checkBrowserScrollerBezel];
   [self checkPanelIcons];
+  [self checkAboutPanel];
   [self checkTintedImageReps];
   [self checkMenuHoverTextColor];
   [self checkSearchPlaceholderFocused];
