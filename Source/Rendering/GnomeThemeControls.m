@@ -1704,6 +1704,22 @@ GnomeThemeButtonTitleRect(NSButtonCell *cell, NSRect cellFrame)
   return titleRect;
 }
 
+/* A one-line control's height as GTK's, the height a push button gets from
+   -cellSize: a line of `font` with 6pt above and below, and at least 34pt
+   (GtkButton, GtkEntry and GtkDropDown). */
+static CGFloat
+GnomeThemeControlRowHeight(NSFont *font)
+{
+  NSDictionary *attributes;
+
+  if (font == nil)
+    {
+      font = [NSFont controlContentFontOfSize: 0.0];
+    }
+  attributes = [NSDictionary dictionaryWithObject: font forKey: NSFontAttributeName];
+  return MAX (34.0, ceil ([@"Ag" sizeWithAttributes: attributes].height + 12.0));
+}
+
 static NSSize
 GnomeThemeButtonLabelSize(NSButtonCell *cell)
 {
@@ -5184,9 +5200,15 @@ GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
   NSEnumerator *enumerator = [[cell itemArray] objectEnumerator];
   NSMenuItem *item;
   CGFloat titleWidth = 0.0;
-  NSRect frame = NSMakeRect (0.0, 0.0, size.width,
-                             MAX (size.height, NSHeight ([[cell controlView] bounds])));
+  NSRect frame;
 
+  /* As tall as a push button: GtkDropDown's 34pt (libs-gui's was about
+     25, #86). The chevron's box, below, follows the height. */
+  if ([cell isBordered])
+    {
+      size.height = MAX (size.height, GnomeThemeControlRowHeight (font));
+    }
+  frame = NSMakeRect (0.0, 0.0, size.width, MAX (size.height, NSHeight ([[cell controlView] bounds])));
   while ((item = [enumerator nextObject]) != nil)
     {
       titleWidth = MAX (titleWidth, [[item title] sizeWithAttributes: attributes].width);
@@ -5194,6 +5216,22 @@ GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
   size.width = MAX (size.width,
                     ceil (10.0 + titleWidth + GnomeThemeButtonTitleSlack
                           + NSWidth (GnomeThemeComboBoxButtonRect (frame)) + 8.0));
+  return size;
+}
+
+/* A combo box as tall as a push button: GtkEntry's 34pt (libs-gui's was
+   about 25 beside a 34pt button, #86). */
+- (NSSize) _overrideNSComboBoxCellMethod_cellSize
+{
+  typedef NSSize (*CellSizeIMP)(id, SEL);
+  CellSizeIMP originalIMP = (CellSizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSComboBoxCell class]);
+  NSComboBoxCell *cell = (NSComboBoxCell *)self;
+  NSSize size = (originalIMP != NULL) ? originalIMP (self, _cmd) : NSZeroSize;
+
+  if ([cell isBezeled] || [cell isBordered])
+    {
+      size.height = MAX (size.height, GnomeThemeControlRowHeight ([cell font]));
+    }
   return size;
 }
 
@@ -5438,6 +5476,21 @@ GnomeThemeIsDropDownComboBox(id view)
       [(NSView *)self setNeedsDisplay: YES];
     }
   return resigned;
+}
+
+/* The frame it's given, as in Cocoa: libs-gui's -setFrame: makes every
+   combo box 21pt high ("We shouldn't harcode the height value"), so one
+   sized to fit (34pt, -cellSize) drew 21pt at the top of its row
+   (LinDirStat's folder combo box, #86). */
+- (void) _overrideNSComboBoxMethod_setFrame: (NSRect)frame
+{
+  typedef void (*SetFrameIMP)(id, SEL, NSRect);
+  SetFrameIMP superIMP = (SetFrameIMP)[[NSComboBox superclass] instanceMethodForSelector: _cmd];
+
+  if (superIMP != NULL)
+    {
+      superIMP (self, _cmd, frame);
+    }
 }
 
 - (void) _overrideNSComboBoxMethod_keyDown: (NSEvent *)theEvent

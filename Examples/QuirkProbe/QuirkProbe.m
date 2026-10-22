@@ -3401,6 +3401,100 @@ QuirkProbeSegmentContrast(NSBitmapImageRep *rep, NSInteger segment, NSUInteger *
     }
 }
 
+/* The rows of `rect` (pixels, top-left origin) in which some pixel is
+   more than 6 apart from the background at its top-left corner, from the
+   first such row to the last. */
+static NSInteger
+QuirkProbeRowsUnlikeBackground (NSBitmapImageRep *rep, NSRect rect)
+{
+  NSUInteger back[3], pixel[3];
+  NSInteger x, y, first = -1, last = -1;
+
+  QuirkProbePixelAt (rep, (NSInteger)NSMinX (rect), (NSInteger)NSMinY (rect), back);
+  for (y = (NSInteger)NSMinY (rect); y < (NSInteger)NSMaxY (rect) && y < [rep pixelsHigh]; y++)
+    {
+      for (x = (NSInteger)NSMinX (rect); x < (NSInteger)NSMaxX (rect) && x < [rep pixelsWide]; x++)
+        {
+          QuirkProbePixelAt (rep, x, y, pixel);
+          if (labs ((long)pixel[0] - (long)back[0]) + labs ((long)pixel[1] - (long)back[1])
+              + labs ((long)pixel[2] - (long)back[2]) > 6)
+            {
+              first = first < 0 ? y : first;
+              last = y;
+              break;
+            }
+        }
+    }
+  return first < 0 ? 0 : last - first + 1;
+}
+
+/* Sized to fit, a combo box and a pop-up button are as tall as a push
+   button: GTK's entry and GtkDropDown are 34px, as its buttons are
+   (LinDirStat's folder combo box was 25pt beside a 34pt Browse…, #86).
+   The combo box's field fills its frame, as LinDirStat builds it: sized
+   to fit while empty, placed, filled, and its window's first key view. */
+- (void) checkControlHeights
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 420, 70) title: @"Probe Control Heights"];
+  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (10, 10, 100, 20)]);
+  NSComboBox *combo = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (0, 0, 200, 34)]);
+  NSPopUpButton *popUp = AUTORELEASE ([[NSPopUpButton alloc] initWithFrame: NSMakeRect (280, 10, 120, 20)
+                                                                pullsDown: NO]);
+  CGFloat buttonHeight, comboHeight, placedHeight, popUpHeight;
+  NSInteger field, editedField;
+  NSString *detail;
+  NSRect strip;
+
+  [button setTitle: @"Browse…"];
+  [button setBezelStyle: NSRoundedBezelStyle];
+  [popUp addItemWithTitle: @"System Default"];
+  [combo setEditable: YES];
+  [combo setCompletes: NO];
+  [combo setUsesDataSource: NO];
+  [combo setNumberOfVisibleItems: 10];
+  [button sizeToFit];
+  [combo sizeToFit];
+  [popUp sizeToFit];
+  comboHeight = NSHeight ([combo frame]);
+  [combo setFrame: NSMakeRect (120, 10, 150, comboHeight)];
+  placedHeight = NSHeight ([combo frame]);
+  [[window contentView] addSubview: button];
+  [[window contentView] addSubview: combo];
+  [[window contentView] addSubview: popUp];
+  [combo addItemsWithObjectValues: [NSArray arrayWithObject: @"/usr/share/doc"]];
+  [combo setStringValue: @"/usr/share/doc"];
+  [window setInitialFirstResponder: combo];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  /* A strip of the combo box's field between its text and its chevron,
+     clear of the rounded corners, with the window's background above and
+     below. */
+  strip = NSMakeRect (NSMinX ([combo frame]) + 105, 0, 3, NSHeight ([[window contentView] frame]));
+  editedField = QuirkProbeRowsUnlikeBackground (QuirkProbeRender ([window contentView]), strip);
+  [window makeFirstResponder: nil];
+  [window display];
+  field = QuirkProbeRowsUnlikeBackground (QuirkProbeRender ([window contentView]), strip);
+  [self saveWindow: window named: @"control-heights"];
+  [window orderOut: nil];
+  buttonHeight = NSHeight ([button frame]);
+  popUpHeight = NSHeight ([popUp frame]);
+
+  detail = [NSString stringWithFormat: @"sized to fit: button %g, combo box %g, pop-up %g high "
+    @"(want 34 or more, within 1 of the button); the combo box %g high after -setFrame:, its field "
+    @"drawn %ld high, %ld as the first key view (want within 2 of its frame)", buttonHeight, comboHeight,
+    popUpHeight, placedHeight, (long)field, (long)editedField];
+  if (comboHeight >= 34.0 && popUpHeight >= 34.0
+    && fabs (comboHeight - buttonHeight) <= 1.0 && fabs (popUpHeight - buttonHeight) <= 1.0
+    && placedHeight == comboHeight && field >= comboHeight - 2.0 && editedField >= comboHeight - 2.0)
+    {
+      [self pass: @"control-heights" detail: detail];
+    }
+  else
+    {
+      [self fail: @"control-heights" detail: detail];
+    }
+}
+
 /* A focused push button, as in OneDriveServiceManager's Resync panel, where
    Cancel is the first key view. As in GTK, the ring shows only after a key
    press. It runs along the button's edge: not around the title (where NSCell
@@ -8833,6 +8927,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkPopUpClick];
   [self checkButtonFocusRing];
   [self checkFocusVisiblePerWindow];
+  [self checkControlHeights];
   [self checkCheckboxGap];
   [self checkTableDensity];
   [self checkTabView];
