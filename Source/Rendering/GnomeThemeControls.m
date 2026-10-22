@@ -3950,11 +3950,14 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
         }
     }
 
-  /* GTK list cells pad their text 6px from the column edge; headers match. */
+  /* GTK list cells pad their text 6px from the column edge; headers match,
+     less a sort indicator's room (GnomeThemeTableHeaderIndicatorRoom). */
   if (headerCell)
     {
-      titleRect.origin.x += 4.0;
-      titleRect.size.width = MAX (0.0, titleRect.size.width - 8.0);
+      CGFloat room = GnomeThemeTableHeaderIndicatorRoom ();
+
+      titleRect.origin.x += 4.0 + MAX (0.0, -room);
+      titleRect.size.width = MAX (0.0, titleRect.size.width - 8.0 - fabs (room));
     }
   else if ([[cell controlView] isKindOfClass: [NSTableView class]])
     {

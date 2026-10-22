@@ -1108,6 +1108,20 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   return drawRect;
 }
 
+/* While -drawTableHeaderRect:inView: draws a column with a sort
+   indicator: the indicator's room (its 16pt box and the 6pt before it),
+   kept from the title after it (positive) or, for a right-aligned title,
+   before it (negative). The header cells' title rect
+   (-[NSTextFieldCell titleRectForBounds:] in GnomeThemeControls.m) leaves
+   it out. */
+static CGFloat GnomeThemeHeaderIndicatorRoom = 0.0;
+
+CGFloat
+GnomeThemeTableHeaderIndicatorRoom(void)
+{
+  return GnomeThemeHeaderIndicatorRoom;
+}
+
 - (void) drawTableHeaderCell: (NSTableHeaderCell *)cell
                    withFrame: (NSRect)cellFrame
                       inView: (NSView *)controlView
@@ -1128,6 +1142,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
     {
       [cell setAlignment: NSLeftTextAlignment];
     }
+  /* A title too long for its column ends in an ellipsis, as GTK's, not
+     cut off (a right-aligned one lost its start). */
+  [cell setLineBreakMode: NSLineBreakByTruncatingTail];
 }
 
 /* GTK 4's sort indicator (pan-up-symbolic ascending, pan-down-symbolic
@@ -1231,6 +1248,10 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
 
       drawingRect.size.width = [column width];
       [cell setHighlighted: (column == highlighted || [tableView isColumnSelected: i])];
+      /* The title keeps clear of the indicator, as GTK's label is
+         ellipsized beside its arrow (#84). */
+      GnomeThemeHeaderIndicatorRoom = indicator == nil ? 0.0
+        : ([cell alignment] == GnomeThemeRightTextAlignment () ? -22.0 : 22.0);
       [cell drawWithFrame: drawingRect inView: headerView];
 
       if (indicator != nil)
@@ -1278,6 +1299,7 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
                               hints: nil];
             }
         }
+      GnomeThemeHeaderIndicatorRoom = 0.0;
       drawingRect.origin.x += [column width];
     }
 }

@@ -90,6 +90,10 @@ void GnomeThemeHeaderBarGiveTitleRoom(NSView *toolbarView);
    visibilityPriority (*fromEnd is YES when they're libs-gui's run from
    the start), and placing them after libs-gui's share-out. */
 NSIndexSet *GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd);
+/* While a table header draws a column with a sort indicator, the room
+   its title leaves for it: after the title (positive) or before a
+   right-aligned one (negative); 0 otherwise. */
+CGFloat GnomeThemeTableHeaderIndicatorRoom(void);
 void GnomeThemeToolbarPlaceKeptItems(NSView *toolbarView);
 
 /* Template (symbolic) images: whether `image` is one (-isTemplate, or a
