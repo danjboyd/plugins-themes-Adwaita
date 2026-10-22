@@ -26,8 +26,9 @@
    at 12%. GNUstep has no navigation pages, so what AdwAboutWindow puts on
    its Details and Legal pages follows inline, dimmed: the description and
    website, then the copyright and its description, and last, as in
-   GSInfoPanel, the current theme. An icon of bitmaps smaller than 128px
-   is drawn at its own size, not scaled up. The values come from
+   GSInfoPanel, the current theme. A bitmap icon is never scaled up: its
+   widest bitmap at 128pt, or at its own size when narrower. The values
+   come from
    the same places as GSInfoPanel's: the options dictionary, then the
    app's Info.plist. GNUstep's panel had NeXT's layout, with a GNUstep
    watermark behind it. */
@@ -38,25 +39,42 @@
 
 static NSPanel *GnomeThemeAboutPanel = nil;
 
-/* Whether `image` has only bitmaps, all fewer than `side` pixels wide: it
-   is drawn at its own size, not scaled up and jagged (GNUstep's logo, for
-   an app with no icon of its own). */
-static BOOL
-GnomeThemeAboutIconIsSmallBitmap(NSImage *image, CGFloat side)
+/* The icon for a `side`pt slot, never a bitmap scaled up. GNUstep picks
+   a bitmap by its size in points, and an app's default icon is 48pt with
+   a 48px and a 192px bitmap, so the 48px one was drawn at 128pt, jagged.
+   An image of bitmaps only becomes one of its widest: at `side`pt when
+   that is wide enough, else at its own size in pixels, which the slot
+   shows in its middle. An image with any other representation (a
+   vector one) is kept as it is. */
+static NSImage *
+GnomeThemeAboutIcon(NSImage *image, CGFloat side)
 {
   NSEnumerator *enumerator = [[image representations] objectEnumerator];
-  NSImageRep *rep;
-  BOOL any = NO;
+  NSImageRep *rep, *widest = nil;
+  NSImage *icon;
+  CGFloat width;
 
   while ((rep = [enumerator nextObject]) != nil)
     {
-      if ([rep isKindOfClass: [NSBitmapImageRep class]] == NO || [rep pixelsWide] >= side)
+      if ([rep isKindOfClass: [NSBitmapImageRep class]] == NO)
         {
-          return NO;
+          return image;
         }
-      any = YES;
+      if (widest == nil || [rep pixelsWide] > [widest pixelsWide])
+        {
+          widest = rep;
+        }
     }
-  return any;
+  if (widest == nil)
+    {
+      return image;
+    }
+  width = MIN (side, (CGFloat)[widest pixelsWide]);
+  widest = AUTORELEASE ([widest copy]);
+  [widest setSize: NSMakeSize (width, width * [widest pixelsHigh] / MAX (1, [widest pixelsWide]))];
+  icon = AUTORELEASE ([[NSImage alloc] initWithSize: [widest size]]);
+  [icon addRepresentation: widest];
+  return icon;
 }
 
 /* The first of `keys` with a value of `class`: in `options`, then in the
@@ -254,8 +272,10 @@ GnomeThemeMakeAboutPanel(GSTheme *theme, NSDictionary *options)
     {
       NSImageView *iconView = AUTORELEASE ([[NSImageView alloc] initWithFrame: NSMakeRect (0, 0, 128, 128)]);
 
+      icon = GnomeThemeAboutIcon (icon, 128.0);
       [iconView setImage: icon];
-      [iconView setImageScaling: GnomeThemeAboutIconIsSmallBitmap (icon, 128.0)
+      [iconView setImageScaling: [[icon representations] count] == 1
+        && [[[icon representations] objectAtIndex: 0] isKindOfClass: [NSBitmapImageRep class]]
         ? NSImageScaleProportionallyDown : NSImageScaleProportionallyUpOrDown];
       [views addObject: iconView];
       [gaps addObject: [NSNumber numberWithDouble: 0.0]];
@@ -342,9 +362,14 @@ GnomeThemeMakeAboutPanel(GSTheme *theme, NSDictionary *options)
 @implementation GnomeTheme (AboutPanel)
 
 /* -orderFrontStandardAboutPanelWithOptions: comes here. As GNUstep's, one
-   panel per app, made the first time. */
+   panel per app; made again each time it isn't on screen, so its options
+   and its current theme line are this call's. */
 - (void) _overrideNSApplicationMethod_orderFrontStandardInfoPanelWithOptions: (NSDictionary *)options
 {
+  if (GnomeThemeAboutPanel != nil && [GnomeThemeAboutPanel isVisible] == NO)
+    {
+      DESTROY (GnomeThemeAboutPanel);
+    }
   if (GnomeThemeAboutPanel == nil)
     {
       GnomeThemeAboutPanel = GnomeThemeMakeAboutPanel ([GSTheme theme], options);
