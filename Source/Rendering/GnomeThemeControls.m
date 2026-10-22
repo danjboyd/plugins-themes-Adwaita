@@ -40,6 +40,12 @@
 - (NSView *) _backView;
 @end
 
+/* GSToolbarView, private to libs-gui: the index in the toolbar of the
+   item being dragged while customising (NSNotFound for one coming in). */
+@interface NSObject (GnomeThemeToolbarViewPrivate)
++ (NSUInteger) draggedItemIndex;
+@end
+
 /* Associated-object keys on a toolbar button: its hover tracking-rect tag,
    and whether the pointer is over it. */
 static char GnomeThemeToolbarButtonTrackingKey;
@@ -4866,6 +4872,69 @@ GnomeThemePlaceToolbarView(NSView *backView, NSToolbarItem *item)
       [backViews addObject: [[items objectAtIndex: i] _backView]];
     }
   return backViews;
+}
+
+/* Where an item dragged while customising goes. libs-gui takes a
+   position among -_visibleBackViews as the item's index in the toolbar,
+   so with items kept by visibilityPriority (some before the end hidden)
+   it moved the item to the wrong place. The same rule, by the kept items'
+   own indexes: one dragged in goes before the first whose middle is
+   right of the pointer, one in the row moves past a neighbour once the
+   pointer crosses its middle, and one in the » menu goes where a new one
+   would. */
+- (int) _overrideGSToolbarViewMethod__insertionIndexAtPoint: (NSPoint)location
+{
+  typedef int (*InsertionIMP)(id, SEL, NSPoint);
+  Class toolbarViewClass = NSClassFromString (@"GSToolbarView");
+  InsertionIMP originalIMP = (InsertionIMP)GnomeThemeOriginalMethod (_cmd, self, toolbarViewClass);
+  NSArray *items = [[(id)self toolbar] items];
+  BOOL fromEnd = YES;
+  NSIndexSet *keep = GnomeThemeToolbarKeptItems ((NSView *)self, &fromEnd);
+  NSUInteger dragged = [toolbarViewClass draggedItemIndex];
+  NSUInteger i, first = [keep firstIndex], last = [keep lastIndex];
+  NSView *clipView;
+  CGFloat x;
+
+  if ((fromEnd && originalIMP != NULL) || first == NSNotFound)
+    {
+      return originalIMP != NULL ? originalIMP (self, _cmd, location) : (int)(dragged == NSNotFound ? 0 : dragged);
+    }
+  clipView = [[[items objectAtIndex: first] _backView] superview];
+  x = [clipView convertPoint: location fromView: nil].x;
+  if (dragged != NSNotFound && [keep containsIndex: dragged])
+    {
+      if (x < NSMidX ([[[items objectAtIndex: dragged] _backView] frame]))
+        {
+          for (i = first; i < dragged; i = [keep indexGreaterThanIndex: i])
+            {
+              if (x < NSMidX ([[[items objectAtIndex: i] _backView] frame]))
+                {
+                  return (int)i;
+                }
+            }
+        }
+      else
+        {
+          for (i = last; i > dragged; i = [keep indexLessThanIndex: i])
+            {
+              if (x > NSMidX ([[[items objectAtIndex: i] _backView] frame]))
+                {
+                  return (int)i;
+                }
+            }
+        }
+      return (int)dragged;
+    }
+  /* Before item i, or after the last kept; an item already in the
+     toolbar is taken out first, so the indexes past it are one less. */
+  for (i = first; i != NSNotFound; i = [keep indexGreaterThanIndex: i])
+    {
+      if (x < NSMidX ([[[items objectAtIndex: i] _backView] frame]))
+        {
+          return (int)(dragged != NSNotFound && dragged < i ? i - 1 : i);
+        }
+    }
+  return (int)(dragged != NSNotFound && dragged < last ? last : last + 1);
 }
 
 - (void) _overrideGSToolbarButtonMethod_layout

@@ -1991,25 +1991,29 @@ GnomeThemeHeaderBarTitleSpace(NSView *toolbarView, NSUInteger *index)
    whatever their visibilityPriority. Items go by ascending priority
    instead, right to left within one, until the rest and the » fit; a run
    of separators and spaces goes with the item on its left (a leading run
-   with the item on its right), and flexible spaces stay. When that order
-   is right to left anyway (every item Standard), the items kept are
-   libs-gui's run, as it counts it: *fromEnd is then YES and nothing
-   changes. The same rule as WinUITheme's. */
+   with the item on its right), and flexible spaces stay. The last item to
+   go can leave room for some that went before it with the same priority:
+   those come back, leftmost first (ScreenshotTool's Copy and Colour, which
+   went before its wide Tools). When that order is right to left anyway
+   (every item Standard) and nothing comes back, or every item has the
+   same priority, the items kept are libs-gui's run, as it counts it:
+   *fromEnd is then YES and nothing changes. The same rule as
+   WinUITheme's. */
 NSIndexSet *
 GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd)
 {
   NSUInteger titleIndex = NSNotFound;
   NSToolbarItem *titleSpace = GnomeThemeHeaderBarTitleSpace (toolbarView, &titleIndex);
   NSArray *items = [[toolbarView toolbar] items];
-  NSUInteger i, j, n = [items count], kept = 0, candidates = 0;
+  NSUInteger i, j, n = [items count], kept = 0, candidates = 0, gone, returned = 0;
   NSMutableIndexSet *keep = [NSMutableIndexSet indexSet];
   NSMutableData *data = [NSMutableData dataWithLength: MAX (n, 1) * (sizeof (CGFloat) + 2 * sizeof (NSUInteger))];
   CGFloat *counted = [data mutableBytes];
   NSUInteger *owner = (NSUInteger *)(counted + MAX (n, 1));
   NSUInteger *order = owner + MAX (n, 1);
   CGFloat width = NSWidth ([toolbarView frame]), total = 0.0, sum = 0.0;
-  NSInteger previous = NSIntegerMax;
-  BOOL rightToLeft = YES;
+  NSInteger previous = NSIntegerMax, last;
+  BOOL rightToLeft = YES, samePriority = YES;
 
   for (i = 0; i < n; i++)
     {
@@ -2024,6 +2028,7 @@ GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd)
           NSInteger priority = [item visibilityPriority];
 
           rightToLeft = rightToLeft && priority <= previous;
+          samePriority = samePriority && (previous == NSIntegerMax || priority == previous);
           previous = priority;
           owner[i] = i;
           /* The drop order: ascending priority, right to left within one. */
@@ -2040,28 +2045,10 @@ GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd)
     {
       *fromEnd = YES;
     }
-  if (rightToLeft)
-    {
-      for (i = 0; i < n; i++)
-        {
-          sum += counted[i];
-          if (sum + GnomeThemeToolbarClippedItemsWidth > width && (i < n - 1 || sum > width))
-            {
-              break;
-            }
-          kept = i + 1;
-        }
-      [keep addIndexesInRange: NSMakeRange (0, kept)];
-      return keep;
-    }
   if (total <= width)
     {
       [keep addIndexesInRange: NSMakeRange (0, n)];
       return keep;
-    }
-  if (fromEnd != NULL)
-    {
-      *fromEnd = NO;
     }
   /* A separator or space belongs to the nearest item on its left that
      isn't a space, else (at the start, or after a flexible space) to the
@@ -2099,16 +2086,61 @@ GnomeThemeToolbarKeptItems(NSView *toolbarView, BOOL *fromEnd)
     }
   [keep addIndexesInRange: NSMakeRange (0, n)];
   sum = total;
-  for (i = 0; i < candidates && sum + GnomeThemeToolbarClippedItemsWidth > width; i++)
+  for (gone = 0; gone < candidates && sum + GnomeThemeToolbarClippedItemsWidth > width; gone++)
     {
       for (j = 0; j < n; j++)
         {
-          if (owner[j] == order[i])
+          if (owner[j] == order[gone])
             {
               [keep removeIndex: j];
               sum -= counted[j];
             }
         }
+    }
+  /* Those that went before the last with its priority, in the reverse
+     order, come back where they fit; lower ones stay in the » menu, so no
+     item is kept while one above it isn't. */
+  last = gone > 0 ? [[items objectAtIndex: order[gone - 1]] visibilityPriority] : 0;
+  for (i = gone > 0 ? gone - 1 : 0; i > 0
+         && [[items objectAtIndex: order[i - 1]] visibilityPriority] == last; i--)
+    {
+      CGFloat group = 0.0;
+
+      for (j = 0; j < n; j++)
+        {
+          group += owner[j] == order[i - 1] ? counted[j] : 0.0;
+        }
+      if (sum + group + GnomeThemeToolbarClippedItemsWidth <= width)
+        {
+          for (j = 0; j < n; j++)
+            {
+              if (owner[j] == order[i - 1])
+                {
+                  [keep addIndex: j];
+                }
+            }
+          sum += group;
+          returned++;
+        }
+    }
+  if (rightToLeft && (returned == 0 || samePriority))
+    {
+      [keep removeAllIndexes];
+      for (i = 0, sum = 0.0; i < n; i++)
+        {
+          sum += counted[i];
+          if (sum + GnomeThemeToolbarClippedItemsWidth > width && (i < n - 1 || sum > width))
+            {
+              break;
+            }
+          kept = i + 1;
+        }
+      [keep addIndexesInRange: NSMakeRange (0, kept)];
+      return keep;
+    }
+  if (fromEnd != NULL)
+    {
+      *fromEnd = NO;
     }
   return keep;
 }

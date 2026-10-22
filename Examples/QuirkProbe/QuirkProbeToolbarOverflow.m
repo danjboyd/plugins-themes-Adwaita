@@ -22,8 +22,11 @@
    visibilityPriority, lowest first and right to left within one, as
    WinUITheme does (libs-gui took them from the end). A separator goes
    with the item on its left, the items kept are side by side, the others
-   hidden, and the » menu lists them in the toolbar's order. With every
-   item Standard, the toolbar is as libs-gui lays it out. */
+   hidden, and the » menu lists them in the toolbar's order. Items that
+   went before a wide one with their priority come back when they fit.
+   With every item Standard, the toolbar is as libs-gui lays it out.
+   Dragging while customising puts an item where the pointer is among the
+   items kept. */
 
 #import "QuirkProbe.h"
 
@@ -48,16 +51,22 @@
 
 @interface NSView (QuirkProbeToolbarOverflowPrivate)
 - (NSMenu *) overflowMenu;
+- (int) _insertionIndexAtPoint: (NSPoint)location;
+@end
+
+@interface NSObject (QuirkProbeToolbarOverflowDragPrivate)
++ (void) setDraggedItemIndex: (NSUInteger)index;
 @end
 
 /* Each item an 80pt slot as libs-gui counts it: a 60pt view and its 10pt
-   insets. `identifiers` in order; `priorities` by identifier, Standard
-   when absent. */
+   insets, or `widths`' view width. `identifiers` in order; `priorities`
+   by identifier, Standard when absent. */
 @interface QuirkProbeOverflowToolbarDelegate : NSObject
 {
 @public
   NSArray *identifiers;
   NSDictionary *priorities;
+  NSDictionary *widths;
 }
 @end
 
@@ -67,6 +76,7 @@
 {
   RELEASE (identifiers);
   RELEASE (priorities);
+  RELEASE (widths);
   [super dealloc];
 }
 
@@ -75,13 +85,14 @@
   willBeInsertedIntoToolbar: (BOOL)flag
 {
   NSToolbarItem *item = AUTORELEASE ([[NSToolbarItem alloc] initWithItemIdentifier: identifier]);
-  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (0, 0, 60, 24)]);
+  CGFloat width = [widths objectForKey: identifier] ? [[widths objectForKey: identifier] doubleValue] : 60.0;
+  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (0, 0, width, 24)]);
 
   [button setTitle: identifier];
   [item setLabel: identifier];
   [item setView: button];
-  [item setMinSize: NSMakeSize (60, 24)];
-  [item setMaxSize: NSMakeSize (60, 24)];
+  [item setMinSize: NSMakeSize (width, 24)];
+  [item setMaxSize: NSMakeSize (width, 24)];
   [item setVisibilityPriority: [[priorities objectForKey: identifier] integerValue]];
   return item;
 }
@@ -146,6 +157,13 @@ QuirkProbeOverflowName(NSToolbarItem *item)
       return @"|";
     }
   return identifier;
+}
+
+/* ScreenshotTool's Tools: nine segments, a 300pt view here. */
+static NSDictionary *
+QuirkProbeOverflowWideTools(void)
+{
+  return [NSDictionary dictionaryWithObject: [NSNumber numberWithDouble: 300.0] forKey: @"Tools"];
 }
 
 static QuirkProbeOverflowState
@@ -261,6 +279,17 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                             width: (CGFloat)width
                              name: (NSString *)name
 {
+  return [self overflowToolbarIn: windowOut identifiers: identifiers priorities: priorities
+                      itemWidths: nil width: width name: name];
+}
+
+- (NSToolbar *) overflowToolbarIn: (NSWindow **)windowOut
+                      identifiers: (NSArray *)identifiers
+                       priorities: (NSDictionary *)priorities
+                       itemWidths: (NSDictionary *)itemWidths
+                            width: (CGFloat)width
+                             name: (NSString *)name
+{
   static int serial = 0;
   QuirkProbeOverflowToolbarDelegate *delegate = AUTORELEASE ([QuirkProbeOverflowToolbarDelegate new]);
   NSWindow *window = [self windowWithFrame: NSMakeRect (40, 200, width, 160) title: name];
@@ -270,6 +299,7 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
 
   ASSIGN (delegate->identifiers, identifiers);
   ASSIGN (delegate->priorities, priorities);
+  ASSIGN (delegate->widths, itemWidths);
   /* The window keeps it: a toolbar doesn't retain its delegate. */
   objc_setAssociatedObject (window, &serial, delegate, OBJC_ASSOCIATION_RETAIN);
   [toolbar setDisplayMode: NSToolbarDisplayModeIconOnly];
@@ -295,9 +325,22 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                       menu: (NSString *)menu
                 contiguous: (BOOL)contiguous
 {
+  [self checkOverflowCase: ident identifiers: identifiers priorities: priorities itemWidths: nil
+                    width: width kept: kept menu: menu contiguous: contiguous];
+}
+
+- (void) checkOverflowCase: (NSString *)ident
+               identifiers: (NSArray *)identifiers
+                priorities: (NSDictionary *)priorities
+                itemWidths: (NSDictionary *)itemWidths
+                     width: (CGFloat)width
+                      kept: (NSString *)kept
+                      menu: (NSString *)menu
+                contiguous: (BOOL)contiguous
+{
   NSWindow *window;
   NSToolbar *toolbar = [self overflowToolbarIn: &window identifiers: identifiers priorities: priorities
-                                         width: width name: ident];
+                                    itemWidths: itemWidths width: width name: ident];
   QuirkProbeOverflowState state = QuirkProbeOverflowStateOf (toolbar, contiguous);
   NSString *detail = QuirkProbeOverflowDescription (state);
 
@@ -315,9 +358,15 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
 }
 
 /* Over a range of widths: no item kept while one of lower priority, or
-   of the same priority further right, is in the » menu, and the kept
-   items placed as above. */
+   (with every item the same width, so none comes back) of the same
+   priority further right, is in the » menu, and the kept items placed as
+   above. With `itemWidths`, items of the same priority come back. */
 - (void) checkOverflowSweep: (NSString *)ident contiguous: (BOOL)contiguous
+{
+  [self checkOverflowSweep: ident contiguous: contiguous itemWidths: nil];
+}
+
+- (void) checkOverflowSweep: (NSString *)ident contiguous: (BOOL)contiguous itemWidths: (NSDictionary *)itemWidths
 {
   NSArray *identifiers = QuirkProbeOverflowScreenshotToolItems ();
   NSDictionary *priorities = QuirkProbeOverflowScreenshotToolPriorities ();
@@ -325,11 +374,11 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
   int overflowed = 0;
   CGFloat width;
 
-  for (width = 160.0; width <= 760.0; width += 20.0)
+  for (width = 160.0; width <= (itemWidths != nil ? 1000.0 : 760.0); width += 20.0)
     {
       NSWindow *window;
       NSToolbar *toolbar = [self overflowToolbarIn: &window identifiers: identifiers priorities: priorities
-                                             width: width name: ident];
+                                        itemWidths: itemWidths width: width name: ident];
       QuirkProbeOverflowState state = QuirkProbeOverflowStateOf (toolbar, contiguous);
       NSArray *visible = [toolbar visibleItems];
       NSArray *items = [toolbar items];
@@ -353,7 +402,7 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
 
               if ([visible containsObject: other] && [other view] != nil
                 && ([other visibilityPriority] < [dropped visibilityPriority]
-                    || ([other visibilityPriority] == [dropped visibilityPriority] && j > i)))
+                    || (itemWidths == nil && [other visibilityPriority] == [dropped visibilityPriority] && j > i)))
                 {
                   [failures addObject: [NSString stringWithFormat: @"%g: %@ kept, %@ in the »", width,
                     [other itemIdentifier], [dropped itemIdentifier]]];
@@ -448,6 +497,129 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                contiguous: YES];
 
   [self checkOverflowSweep: @"toolbar-overflow-sweep" contiguous: YES];
+
+  /* With a 320pt Tools (a 300pt view): at 300pt (272pt beside the »),
+     Copy, Colour and then Tools go, the User items; Colour and Copy fit
+     again without Tools and come back. Save and Share (High) stay in the
+     ». The rule kept only the flexible space. */
+  [self checkOverflowCase: @"toolbar-overflow-same-priority-returns"
+              identifiers: screenshotTool
+               priorities: QuirkProbeOverflowScreenshotToolPriorities ()
+               itemWidths: QuirkProbeOverflowWideTools ()
+                    width: 300.0
+                     kept: @"Colour ~ Copy"
+                     menu: @"Undo Redo Tools Save Share Action"
+               contiguous: YES];
+  [self checkOverflowSweep: @"toolbar-overflow-sweep-wide" contiguous: YES itemWidths: QuirkProbeOverflowWideTools ()];
+
+  [self checkToolbarOverflowDragIndex];
+}
+
+/* Where -_insertionIndexAtPoint: puts an item dragged while customising,
+   at `point` (in the window), with `dragged` the index of the item being
+   dragged (NSNotFound for a new one): the name of the item it ends up
+   before ("end" for the last). */
+static NSString *
+QuirkProbeOverflowDropBefore(NSToolbar *toolbar, NSUInteger dragged, NSPoint point)
+{
+  NSView *toolbarView = [toolbar _toolbarView];
+  Class toolbarViewClass = NSClassFromString (@"GSToolbarView");
+  NSMutableArray *names = [NSMutableArray array];
+  NSEnumerator *enumerator = [[toolbar items] objectEnumerator];
+  NSToolbarItem *item;
+  NSUInteger index;
+
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      [names addObject: QuirkProbeOverflowName (item)];
+    }
+  [toolbarViewClass setDraggedItemIndex: dragged];
+  index = (NSUInteger)[toolbarView _insertionIndexAtPoint: point];
+  [toolbarViewClass setDraggedItemIndex: NSNotFound];
+  /* As -[NSToolbar _moveItemFromIndex:toIndex:...]: out, then in. */
+  if (dragged != NSNotFound)
+    {
+      [names removeObjectAtIndex: dragged];
+    }
+  return index < [names count] ? [names objectAtIndex: index] : @"end";
+}
+
+/* A point in the window `offset` points from `name`'s slot's left edge
+   (its right edge when negative). */
+static NSPoint
+QuirkProbeOverflowPointAt(NSToolbar *toolbar, NSString *name, CGFloat offset)
+{
+  NSEnumerator *enumerator = [[toolbar items] objectEnumerator];
+  NSToolbarItem *item;
+
+  while ((item = [enumerator nextObject]) != nil)
+    {
+      if ([QuirkProbeOverflowName (item) isEqualToString: name])
+        {
+          NSView *backView = [item _backView];
+          NSRect frame = [backView frame];
+          NSPoint point = NSMakePoint (offset >= 0.0 ? NSMinX (frame) + offset : NSMaxX (frame) + offset, NSMidY (frame));
+
+          return [[backView superview] convertPoint: point toView: nil];
+        }
+    }
+  return NSZeroPoint;
+}
+
+/* ScreenshotTool's toolbar at 500pt keeps Tools Colour ~ Save Copy Share
+   (indexes 2 to 7), Undo, Redo and Action in the ». libs-gui took a
+   position among the kept items for an index among all of them. */
+- (void) checkToolbarOverflowDragIndex
+{
+  NSString *ident = @"toolbar-overflow-drag-index";
+  NSArray *identifiers = QuirkProbeOverflowScreenshotToolItems ();
+  NSWindow *window;
+  NSToolbar *toolbar;
+  NSMutableArray *failures = [NSMutableArray array];
+  NSString *got;
+  struct { NSString *what; NSUInteger dragged; NSString *at; CGFloat offset; NSString *expected; } cases[] = {
+    { @"new item at Save's left", NSNotFound, @"Save", 2.0, @"Save" },
+    { @"new item at Share's right", NSNotFound, @"Share", -2.0, @"Action" },
+    { @"Copy to Tools' left", 6, @"Tools", 2.0, @"Tools" },
+    { @"Tools to Share's right", 2, @"Share", -2.0, @"Action" },
+    { @"Colour a little right", 3, @"Colour", 50.0, @"~" },
+    { @"Undo (in the ») to Save's left", 0, @"Save", 2.0, @"Save" },
+  };
+  NSUInteger i;
+
+  if (NSClassFromString (@"GSToolbarView") == Nil
+    || [NSClassFromString (@"GSToolbarView") respondsToSelector: @selector (setDraggedItemIndex:)] == NO)
+    {
+      [self skip: ident detail: @"no +[GSToolbarView setDraggedItemIndex:]"];
+      return;
+    }
+  toolbar = [self overflowToolbarIn: &window identifiers: identifiers
+                         priorities: QuirkProbeOverflowScreenshotToolPriorities () width: 500.0 name: ident];
+  if ([[[toolbar visibleItems] valueForKey: @"itemIdentifier"] count] != 6)
+    {
+      [self fail: ident detail: QuirkProbeOverflowDescription (QuirkProbeOverflowStateOf (toolbar, YES))];
+      [window orderOut: nil];
+      return;
+    }
+  for (i = 0; i < sizeof (cases) / sizeof (cases[0]); i++)
+    {
+      got = QuirkProbeOverflowDropBefore (toolbar, cases[i].dragged,
+                                          QuirkProbeOverflowPointAt (toolbar, cases[i].at, cases[i].offset));
+      if ([got isEqualToString: cases[i].expected] == NO)
+        {
+          [failures addObject: [NSString stringWithFormat: @"%@: before %@, not %@", cases[i].what, got, cases[i].expected]];
+        }
+    }
+  [window orderOut: nil];
+  if ([failures count] == 0)
+    {
+      [self pass: ident detail: [NSString stringWithFormat: @"%lu drops land by the kept items",
+        (unsigned long)(sizeof (cases) / sizeof (cases[0]))]];
+    }
+  else
+    {
+      [self fail: ident detail: [failures componentsJoinedByString: @"; "]];
+    }
 }
 
 /* The same in the header bar, with its title in the flexible space: the
@@ -485,6 +657,18 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
                      menu: @"Share Action"
                contiguous: NO];
   [self checkOverflowSweep: @"header-bar-toolbar-overflow-sweep" contiguous: YES];
+  /* With the title's 100pt, Tools doesn't fit at 400pt; Colour and Copy
+     do beside the title. */
+  [self checkOverflowCase: @"header-bar-toolbar-overflow-same-priority-returns"
+              identifiers: QuirkProbeOverflowScreenshotToolItems ()
+               priorities: QuirkProbeOverflowScreenshotToolPriorities ()
+               itemWidths: QuirkProbeOverflowWideTools ()
+                    width: 400.0
+                     kept: @"Colour ~ Copy"
+                     menu: @"Undo Redo Tools Save Share Action"
+               contiguous: YES];
+  [self checkOverflowSweep: @"header-bar-toolbar-overflow-sweep-wide" contiguous: YES
+                itemWidths: QuirkProbeOverflowWideTools ()];
 
   [searchList removeObject: @"QuirkProbeOverflowHeaderBar"];
   [defaults setSearchList: searchList];
