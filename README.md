@@ -639,6 +639,16 @@ version 2 of the License, or (at your option) any later version.
 
 See [COPYING.LIB](./COPYING.LIB).
 
+The icons in `Resources/ThemeImages` (the Open and Save panels' Home, Mount
+and Unmount buttons, the rating stars, the sort indicators, the outline
+chevron and the corner resize cursors) come from GNOME's
+[Adwaita icon theme](https://gitlab.gnome.org/GNOME/adwaita-icon-theme) and
+keep its licenses, not the theme's. Most are under the GNU LGPL v3 or
+CC-BY-SA 3.0 US; the pan-up, pan-down and pan-end chevrons are under
+CC-BY-SA 4.0. Attribution: the GNOME Project. The list of files and the
+license notices are in [THIRD-PARTY-NOTICES](./THIRD-PARTY-NOTICES), which
+also ships in the theme bundle's Resources.
+
 ## Author
 
 Daniel Boyd
