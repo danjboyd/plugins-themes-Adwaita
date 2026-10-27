@@ -4405,6 +4405,65 @@ QuirkProbeVisibleMenus (void)
     }
 }
 
+/* The pop-up list's window sizes while popUpListKeepsSize runs, each
+   marked when the list was on screen. */
+static NSMutableArray *QuirkProbePopUpListSizes = nil;
+
+- (void) popUpListDidResize: (NSNotification *)notification
+{
+  NSWindow *window = [notification object];
+
+  [QuirkProbePopUpListSizes addObject: [NSString stringWithFormat: @"%.0fx%.0f%@",
+    NSWidth ([window frame]), NSHeight ([window frame]), [window isVisible] ? @" on screen" : @""]];
+}
+
+/* Picking an item in a pop-up button's list doesn't resize the list while
+   it's on screen. -[NSMenu update] sized it down to its own width (from the
+   button's) just before it closed; under GNOME on Wayland, Mutter freezes an
+   XWayland window's commits on a resize until its next paint, and withdrawn
+   first the list never showed again (only its first opening did). */
+- (void) checkPopUpListKeepsSize
+{
+  NSPopUpButtonCell *cell = [_popUpButton cell];
+  NSInteger before = [_popUpButton indexOfSelectedItem];
+  NSWindow *menuWindow;
+  NSString *opened;
+  NSString *detail;
+  BOOL resizedOnScreen;
+
+  [cell attachPopUpWithFrame: [_popUpButton bounds] inView: _popUpButton];
+  menuWindow = [[[_popUpButton menu] menuRepresentation] window];
+  opened = [NSString stringWithFormat: @"%.0fx%.0f", NSWidth ([menuWindow frame]), NSHeight ([menuWindow frame])];
+  QuirkProbePopUpListSizes = [NSMutableArray array];
+  [[NSNotificationCenter defaultCenter] addObserver: self
+                                           selector: @selector(popUpListDidResize:)
+                                               name: NSWindowDidResizeNotification
+                                             object: menuWindow];
+  [[_popUpButton menu] performActionForItemAtIndex: (before == 0) ? 1 : 0];
+  [[_popUpButton menu] update];
+  [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                  name: NSWindowDidResizeNotification
+                                                object: menuWindow];
+  resizedOnScreen = [[QuirkProbePopUpListSizes componentsJoinedByString: @","] rangeOfString: @"on screen"].location != NSNotFound;
+  detail = [NSString stringWithFormat: @"list %@ on screen; resizes during the pick: %@; then %@",
+    opened, [QuirkProbePopUpListSizes count] > 0 ? [QuirkProbePopUpListSizes componentsJoinedByString: @", "] : @"none",
+    [menuWindow isVisible] ? @"still showing" : @"closed"];
+  QuirkProbePopUpListSizes = nil;
+  if ([menuWindow isVisible])
+    {
+      [cell dismissPopUp];
+    }
+  [_popUpButton selectItemAtIndex: before];
+  if (resizedOnScreen == NO)
+    {
+      [self pass: @"popup-list-keeps-size" detail: detail];
+    }
+  else
+    {
+      [self fail: @"popup-list-keeps-size" detail: detail];
+    }
+}
+
 /* Clicks a menu bar title, as a click with the pointer on it: the release
    is already queued when the press is handled. */
 /* Presses a menu bar title and holds it: no release follows. */
@@ -9132,6 +9191,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkToolbarHover];
   [self checkPopUpButton];
   [self checkPopUpClick];
+  [self checkPopUpListKeepsSize];
   [self checkButtonFocusRing];
   [self checkFocusVisiblePerWindow];
   [self checkControlHeights];
