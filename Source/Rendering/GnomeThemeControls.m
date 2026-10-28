@@ -3996,6 +3996,14 @@ GnomeThemeInkMask(NSBitmapImageRep *source, NSColor *background, NSColor *ink)
 
   titleRect.origin.y = aRect.origin.y + floor ((aRect.size.height - titleSize.height) / 2.0);
   titleRect.size.height = ceil (titleSize.height);
+  /* 2px to spare below the line, inside the cell. In a field on a half
+     pixel the field editor's clip view is offset half a pixel to put the
+     text on the pixel grid, which hid the line's last half pixel: typing
+     then scrolled to show it, and -[NSClipView constrainScrollPoint:]
+     rounds in the clip view's current coordinates, so the scroll moved the
+     text half a pixel off the grid and it went up and down a row as it was
+     typed. The text's position doesn't change. */
+  titleRect.size.height = MIN (titleRect.size.height + 2.0, NSMaxY (aRect) - NSMinY (titleRect));
 
   return titleRect;
 }
