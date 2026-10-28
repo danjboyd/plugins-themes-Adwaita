@@ -859,6 +859,32 @@ GnomeThemeMenuIsOwnedByPopUp(NSMenu *menu)
     && [(id)menu _ownedByPopUp];
 }
 
+/* A pop-up button's list keeps its size while it's on screen. Picking an
+   item changes the items' states, and -[NSMenu update] then sizes the list
+   down to its own width (from the button's) just before it closes. Under
+   GNOME on Wayland, Mutter freezes an XWayland window's commits when it's
+   resized and thaws them only after its next paint; withdrawn first, the
+   list keeps _XWAYLAND_ALLOW_COMMITS at 0, which only the window manager
+   may change, so it never shows again (only its first opening did;
+   GNOME/mutter#5080, gnustep/libs-gui#964). The next opening sizes the list
+   anyway. Elsewhere GNUstep's resize stays, as for tool tips. */
+- (void) _overrideNSMenuViewMethod_sizeToFit
+{
+  typedef void (*SizeIMP)(id, SEL);
+  SizeIMP originalIMP = (SizeIMP)GnomeThemeOriginalMethod (_cmd, self, [NSMenuView class]);
+  NSMenuView *menuView = (NSMenuView *)self;
+
+  if (GnomeThemeKeepsHiddenWindowSize () && GnomeThemeMenuIsOwnedByPopUp ([menuView menu])
+    && [[menuView window] isVisible])
+    {
+      return;
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+}
+
 /* The menu bar's, transient (context, ☰) and pop-up buttons' menus in
    in-window style: Escape closes them (GNUstep has no key for it), and in
    0.32 the release that ends nothing is dropped (see

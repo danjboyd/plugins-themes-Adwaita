@@ -527,10 +527,11 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
    NSZeroRect and then ordering it out. Under Mutter with Xwayland, resizing a
    mapped window freezes its content until Mutter next paints it, which never
    happens once the window is unmapped: the tool tip or drag image then shows
-   only the first time (GNOME/mutter#5080, gnustep/libs-gui#964). On Wayland,
-   order them out without shrinking. Elsewhere the shrink stays, since libs-gui
-   added it to avoid "ugly rectangles in some desktops". */
-static BOOL
+   only the first time (GNOME/mutter#5080, gnustep/libs-gui#964; fixed in
+   Mutter by its MR 5054). On Wayland, order them out without shrinking.
+   Elsewhere the shrink stays, since libs-gui added it to avoid "ugly
+   rectangles in some desktops". */
+BOOL
 GnomeThemeKeepsHiddenWindowSize(void)
 {
   return getenv ("WAYLAND_DISPLAY") != NULL;
