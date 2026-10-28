@@ -57,6 +57,11 @@ BOOL GnomeThemeUsesPrimaryMenu(void);
 /* Where a context menu opened at `point` goes: GTK's place by the pointer,
    kept on `screen` (#20). */
 NSPoint GnomeThemeContextMenuOrigin(NSPoint point, NSSize size, NSRect screen);
+/* YES on Wayland, where Mutter leaves an XWayland window frozen if it's
+   resized while on screen and hidden before its next paint
+   (GNOME/mutter#5080): the theme then doesn't resize windows about to be
+   hidden. */
+BOOL GnomeThemeKeepsHiddenWindowSize(void);
 
 /* YES when GNUstep draws the window decorations itself
    (GSX11HandlesWindowDecorations NO): the theme then draws libadwaita's

@@ -4417,19 +4417,15 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
     NSWidth ([window frame]), NSHeight ([window frame]), [window isVisible] ? @" on screen" : @""]];
 }
 
-/* Picking an item in a pop-up button's list doesn't resize the list while
-   it's on screen. -[NSMenu update] sized it down to its own width (from the
-   button's) just before it closed; under GNOME on Wayland, Mutter freezes an
-   XWayland window's commits on a resize until its next paint, and withdrawn
-   first the list never showed again (only its first opening did). */
-- (void) checkPopUpListKeepsSize
+/* Picks an item in the pop-up button's open list and says how the list
+   was resized; YES in `resized` when it was resized while on screen. */
+- (NSString *) pickInPopUpList: (BOOL *)resized
 {
   NSPopUpButtonCell *cell = [_popUpButton cell];
   NSInteger before = [_popUpButton indexOfSelectedItem];
   NSWindow *menuWindow;
   NSString *opened;
   NSString *detail;
-  BOOL resizedOnScreen;
 
   [cell attachPopUpWithFrame: [_popUpButton bounds] inView: _popUpButton];
   menuWindow = [[[_popUpButton menu] menuRepresentation] window];
@@ -4444,17 +4440,51 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   [[NSNotificationCenter defaultCenter] removeObserver: self
                                                   name: NSWindowDidResizeNotification
                                                 object: menuWindow];
-  resizedOnScreen = [[QuirkProbePopUpListSizes componentsJoinedByString: @","] rangeOfString: @"on screen"].location != NSNotFound;
-  detail = [NSString stringWithFormat: @"list %@ on screen; resizes during the pick: %@; then %@",
-    opened, [QuirkProbePopUpListSizes count] > 0 ? [QuirkProbePopUpListSizes componentsJoinedByString: @", "] : @"none",
-    [menuWindow isVisible] ? @"still showing" : @"closed"];
+  *resized = [[QuirkProbePopUpListSizes componentsJoinedByString: @","] rangeOfString: @"on screen"].location != NSNotFound;
+  detail = [NSString stringWithFormat: @"list %@; resizes during the pick: %@",
+    opened, [QuirkProbePopUpListSizes count] > 0 ? [QuirkProbePopUpListSizes componentsJoinedByString: @", "] : @"none"];
   QuirkProbePopUpListSizes = nil;
   if ([menuWindow isVisible])
     {
       [cell dismissPopUp];
     }
   [_popUpButton selectItemAtIndex: before];
-  if (resizedOnScreen == NO)
+  return detail;
+}
+
+/* Picking an item in a pop-up button's list doesn't resize the list while
+   it's on screen on Wayland. -[NSMenu update] sized it down to its own
+   width (from the button's) just before it closed; under GNOME on Wayland,
+   Mutter freezes an XWayland window's commits on a resize until its next
+   paint, and withdrawn first the list never showed again (only its first
+   opening did; GNOME/mutter#5080). Elsewhere GNUstep's resize stays, as for
+   tool tips. The theme reads WAYLAND_DISPLAY when it sizes the list, so
+   the check sets it for the Wayland pick. */
+- (void) checkPopUpListKeepsSize
+{
+  const char *saved = getenv ("WAYLAND_DISPLAY");
+  NSString *savedDisplay = (saved != NULL) ? [NSString stringWithUTF8String: saved] : nil;
+  NSString *x11Detail;
+  NSString *waylandDetail;
+  NSString *detail;
+  BOOL x11Resized;
+  BOOL waylandResized;
+
+  unsetenv ("WAYLAND_DISPLAY");
+  x11Detail = [self pickInPopUpList: &x11Resized];
+  setenv ("WAYLAND_DISPLAY", "quirk-probe", 1);
+  waylandDetail = [self pickInPopUpList: &waylandResized];
+  if (savedDisplay != nil)
+    {
+      setenv ("WAYLAND_DISPLAY", [savedDisplay UTF8String], 1);
+    }
+  else
+    {
+      unsetenv ("WAYLAND_DISPLAY");
+    }
+
+  detail = [NSString stringWithFormat: @"Wayland: %@; not Wayland: %@", waylandDetail, x11Detail];
+  if (waylandResized == NO && x11Resized)
     {
       [self pass: @"popup-list-keeps-size" detail: detail];
     }
