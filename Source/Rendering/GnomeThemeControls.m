@@ -3053,7 +3053,9 @@ GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
   /* In RGB: a palette colour may ignore -colorWithAlphaComponent:. */
   NSColor *trackColor = [(on ? accent : GnomeThemeBlend (background, text, highContrast ? 0.30 : 0.15))
                           colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  NSColor *knobColor = [GnomeThemeBlend ([NSColor whiteColor], view, 0.2)
+  /* libadwaita's knob: white when on; when off, white with a fifth of the
+     card colour (white in the light palette, #d2d2d2 in the dark). */
+  NSColor *knobColor = [(on ? [NSColor whiteColor] : GnomeThemeBlend ([NSColor whiteColor], view, 0.2))
                           colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
   NSView *focusView = [NSView focusView];
   BOOL flipped = [focusView isFlipped];
