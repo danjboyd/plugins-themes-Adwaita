@@ -2330,9 +2330,11 @@ GnomeThemeDrawTabLabel(NSString *label,
                       MIN (5.0, floor (NSHeight (bounds) / 4.0)));
 }
 
-/* The swatch: rounded, with a faint inner border so a colour close to the
-   button's still shows its edge (libadwaita's colorswatch), and faded when
-   the well is disabled. */
+/* The swatch: rounded, faded when the well is disabled, and with
+   libadwaita's faint inner ring (the foreground at 10%) when the colour is
+   light, so a white or light grey swatch still shows its edge. GTK calls
+   a colour light past an intensity of 0.5 (0.3 red, 0.59 green, 0.11
+   blue); a darker one has no ring. */
 - (void) _overrideNSColorWellMethod_drawWellInside: (NSRect)insideRect
 {
   NSColorWell *well = (NSColorWell *)self;
@@ -2340,6 +2342,9 @@ GnomeThemeDrawTabLabel(NSString *label,
   CGFloat radius = MIN (4.0, floor (MIN (NSWidth (insideRect), NSHeight (insideRect)) / 2.0));
   NSBezierPath *path = GnomeThemeRoundedPath (insideRect, radius);
   NSBezierPath *edge = GnomeThemeRoundedPath (NSInsetRect (insideRect, 0.5, 0.5), MAX (0.0, radius - 0.5));
+  NSColor *rgb = [[well color] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL light = (rgb != nil && 0.30 * [rgb redComponent] + 0.59 * [rgb greenComponent]
+                + 0.11 * [rgb blueComponent] > 0.5);
 
   if (NSIsEmptyRect (insideRect))
     {
@@ -2357,11 +2362,14 @@ GnomeThemeDrawTabLabel(NSString *label,
     }
   [NSGraphicsContext restoreGraphicsState];
 
-  /* Opaque, as it has always been drawn: the colour once came back as a
-     named system colour, which ignored -colorWithAlphaComponent:. */
-  [GnomeThemeColor (theme, @"controlShadowColor", [NSColor controlShadowColor]) set];
-  [edge setLineWidth: 1.0];
-  [edge stroke];
+  if (light)
+    {
+      /* In RGB: a palette colour may ignore -colorWithAlphaComponent:. */
+      [[[GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor])
+          colorUsingColorSpaceName: NSCalibratedRGBColorSpace] colorWithAlphaComponent: 0.1] set];
+      [edge setLineWidth: 1.0];
+      [edge stroke];
+    }
 }
 
 /* Whether the segment being drawn is enabled: -drawSegment:inFrame:withView:

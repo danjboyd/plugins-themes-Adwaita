@@ -1720,6 +1720,52 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
     }
 }
 
+/* The swatch's edge as libadwaita's: no ring round a dark colour (the
+   pixel just outside a red swatch is the button's), and a faint one, the
+   foreground at 10%, inside a light one (white: 5-40 below the white). */
+- (void) checkColorWellEdge
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 200, 70) title: @"Probe Swatch Edge"];
+  NSColorWell *red = AUTORELEASE ([[NSColorWell alloc] initWithFrame: NSMakeRect (10, 20, 64, 34)]);
+  NSColorWell *white = AUTORELEASE ([[NSColorWell alloc] initWithFrame: NSMakeRect (100, 20, 64, 34)]);
+  NSBitmapImageRep *rep;
+  QuirkProbeInk swatch;
+  NSUInteger outside[3], button[3], ring[3], inside[3];
+  NSInteger midY;
+  long redStep, whiteStep;
+  NSString *detail;
+
+  [red setColor: [NSColor colorWithCalibratedRed: 0.9 green: 0.1 blue: 0.1 alpha: 1.0]];
+  [white setColor: [NSColor colorWithCalibratedWhite: 1.0 alpha: 1.0]];
+  [[window contentView] addSubview: red];
+  [[window contentView] addSubview: white];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (red);
+  midY = [rep pixelsHigh] / 2;
+  swatch = QuirkProbeMeasure (rep, QuirkProbeIsRed);
+  QuirkProbePixelAt (rep, MAX (0, swatch.minX - 1), midY, outside);
+  QuirkProbePixelAt (rep, MAX (0, swatch.minX - 3), midY, button);
+  redStep = labs ((long)outside[0] - (long)button[0]);
+  /* The white swatch, the same shape: its first column (where the red
+     ink starts, with no ring round the red), against its middle. */
+  rep = QuirkProbeRender (white);
+  QuirkProbePixelAt (rep, swatch.minX, midY, ring);
+  QuirkProbePixelAt (rep, swatch.minX + swatch.width / 2, midY, inside);
+  whiteStep = (long)inside[0] - (long)ring[0];
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"red: %@ just outside, button %@; white: %@ at its edge, %@ inside",
+    QuirkProbeHex (outside), QuirkProbeHex (button), QuirkProbeHex (ring), QuirkProbeHex (inside)];
+  if (swatch.count > 0 && redStep <= 6 && whiteStep >= 5 && whiteStep <= 40)
+    {
+      [self pass: @"colorwell-swatch-edge" detail: detail];
+    }
+  else
+    {
+      [self fail: @"colorwell-swatch-edge" detail: detail];
+    }
+}
+
 /* A toolbar's row as libadwaita's: 46pt for icons or labels alone, sized
    to the content for icons with labels, keeping a 34pt button view, with
    spaces and separators not setting the height (plugins-themes-Adwaita#8). */
@@ -9268,6 +9314,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkFixedButtons];
   [self checkSteppers];
   [self checkColorWell];
+  [self checkColorWellEdge];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
