@@ -25,6 +25,7 @@
 
 #import <AppKit/AppKit.h>
 #import <AppKit/NSGraphics.h>
+#import <GNUstepGUI/GSFontInfo.h>
 #import <GNUstepGUI/GSTheme.h>
 #import <objc/runtime.h>
 #import <math.h>
@@ -117,6 +118,15 @@ static char GnomeThemeToolbarDefaultModeKey;
 @interface NSCell (GnomeThemePrivateEditing)
 - (BOOL) _inEditing;
 @end
+
+@interface NSGlyphGenerator (GnomeThemePrivateFonts)
+- (NSFont *) fontForCharactersWithAttributes: (NSDictionary *)attributes;
+@end
+
+/* GTK's password character, ● (GtkText's default invisible character),
+   for libs-gui's bullet, •, about half its size. */
+#define GnomeThemeSecureCharacter 0x25CF
+#define GnomeThemeLibsGuiBullet 0x2022
 
 @interface NSTextFieldCell (GnomeThemePrivateTextDrawing)
 - (BOOL) _inEditing;
@@ -1257,6 +1267,15 @@ GnomeThemeSecureTextDisplayString(NSTextFieldCell *cell,
 
   mutableString = AUTORELEASE ([string mutableCopy]);
   fullRange = NSMakeRange (0, [mutableString length]);
+  {
+    unichar bullet = GnomeThemeLibsGuiBullet;
+    unichar circle = GnomeThemeSecureCharacter;
+
+    [[mutableString mutableString] replaceOccurrencesOfString: [NSString stringWithCharacters: &bullet length: 1]
+                                                   withString: [NSString stringWithCharacters: &circle length: 1]
+                                                      options: 0
+                                                        range: fullRange];
+  }
   font = GnomeThemeControlFontForSecureTextFieldCell (cell);
   if (font != nil)
     {
@@ -4133,6 +4152,53 @@ GnomeThemeDrawEditingPlaceholder(NSTextFieldCell *cell, NSRect titleRect, NSView
     {
       [field setNeedsDisplay: YES];
     }
+}
+
+/* While a secure field is edited, its field editor's glyphs: GTK's ●, as
+   the field shows at rest (GnomeThemeSecureTextDisplayString), for
+   libs-gui's •. A font without ● keeps libs-gui's. */
+- (void) _overrideGSSimpleSecureGlyphGeneratorMethod_generateGlyphsForGlyphStorage: (id <NSGlyphStorage>)storage
+                                                         desiredNumberOfCharacters: (NSUInteger)num
+                                                                        glyphIndex: (NSUInteger *)glyph
+                                                                    characterIndex: (NSUInteger *)index
+{
+  typedef void (*GenerateIMP)(id, SEL, id <NSGlyphStorage>, NSUInteger, NSUInteger *, NSUInteger *);
+  GenerateIMP originalIMP = (GenerateIMP)GnomeThemeOriginalMethod (_cmd, self,
+                                                                   NSClassFromString (@"GSSimpleSecureGlyphGenerator"));
+  NSAttributedString *string = [storage attributedString];
+  NSDictionary *attributes;
+  GSFontInfo *info;
+  NSGlyph circle = NSNullGlyph;
+  NSGlyph *glyphs;
+  NSUInteger i;
+
+  if (num > 0 && *index < [string length])
+    {
+      attributes = [string attributesAtIndex: *index effectiveRange: NULL];
+      info = [[(NSGlyphGenerator *)self fontForCharactersWithAttributes: attributes] fontInfo];
+      if (info != nil)
+        {
+          circle = [info glyphForCharacter: GnomeThemeSecureCharacter];
+        }
+    }
+  if (circle == NSNullGlyph || circle == 0)
+    {
+      if (originalIMP != NULL)
+        {
+          originalIMP (self, _cmd, storage, num, glyph, index);
+        }
+      return;
+    }
+  glyphs = NSZoneMalloc (NSDefaultMallocZone (), num * sizeof (NSGlyph));
+  for (i = 0; i < num; i++)
+    {
+      glyphs[i] = circle;
+    }
+  [storage insertGlyphs: glyphs
+                 length: num
+forStartingGlyphAtIndex: *glyph
+         characterIndex: *index];
+  NSZoneFree (NSDefaultMallocZone (), glyphs);
 }
 
 - (void) _overrideNSTextFieldCellMethod_drawInteriorWithFrame: (NSRect)cellFrame

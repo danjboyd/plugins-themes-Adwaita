@@ -2072,6 +2072,54 @@ QuirkProbeIsWhiteText (NSUInteger red, NSUInteger green, NSUInteger blue)
   [window orderOut: nil];
 }
 
+/* A secure field's dots as GTK's: ● (GtkText's invisible character), at
+   rest and while typing; libs-gui's • is about half as tall. */
+- (void) checkSecureBullets
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 400, 320, 80) title: @"QuirkProbe Secure Field"];
+  NSSecureTextField *field = AUTORELEASE ([[NSSecureTextField alloc] initWithFrame: NSMakeRect (10, 20, 300, 34)]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3];
+  QuirkProbeInk rest, typing;
+  NSText *editor;
+  NSString *detail;
+
+  [field setEditable: YES];
+  [field setStringValue: @"secret"];
+  [[window contentView] addSubview: field];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (field);
+  QuirkProbePixelAt (rep, 200, 17, fill);
+  QuirkProbeInkBackground = fill[0] + fill[1] + fill[2];
+  rest = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (4, 4, 150, 26));
+  /* The first dot alone: past the last one, the caret. */
+  rest = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (rest.minX, 4, 5, 26));
+  [field setStringValue: @""];
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: field];
+  editor = [field currentEditor];
+  [editor insertText: @"secret"];
+  [window display];
+  rep = QuirkProbeRender (field);
+  typing = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (4, 4, 150, 26));
+  typing = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSMakeRect (typing.minX, 4, 5, 26));
+  QuirkProbeInkBackground = 750;
+  [window makeFirstResponder: nil];
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"first dot %ld high at rest, %ld while typing%@",
+    (long)rest.height, (long)typing.height,
+    editor ? @"" : @" (the field didn't start editing)"];
+  if (editor != nil && rest.height >= 6 && typing.height >= 6)
+    {
+      [self pass: @"secure-bullets" detail: detail];
+    }
+  else
+    {
+      [self fail: @"secure-bullets" detail: detail];
+    }
+}
+
 /* Shortcut labels as GTK writes them (gtk_accelerator_get_label): Shift,
    Ctrl, Alt, then the key; an uppercase key equivalent means Shift (#41). */
 - (void) checkShortcutLabels
@@ -9263,6 +9311,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];
   [self checkFieldEditorOnPixels];
+  [self checkSecureBullets];
   [self checkInlineMenuRow];
   [self checkSizedButtons];
   [self checkFixedButtons];
