@@ -52,6 +52,9 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   /* libadwaita 1.7's window_bg_color, with its slight blue. */
   [colors setColor: GnomeThemeColorFromHex (@"#fafafb") forKey: @"windowBackgroundColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"controlBackgroundColor"];
+  /* libadwaita's card colour (opaque): menus, pop-overs and the theme's
+     own button, segment and switch shading. */
+  [colors setColor: GnomeThemeColorFromHex (@"#ffffff") forKey: @"GnomeThemeCardColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#ebebeb") forKey: @"controlColor"];
   /* The light edges of 3D bevels (GNUstep's grooves and bezels, as in Gorm's
      boxes), not selection colours: GNUstep's own are white. */
@@ -120,7 +123,13 @@ static void
 GnomeThemePopulateDarkPalette(NSColorList *colors)
 {
   [colors setColor: GnomeThemeColorFromHex (@"#222226") forKey: @"windowBackgroundColor"];
-  [colors setColor: GnomeThemeColorFromHex (@"#303030") forKey: @"controlBackgroundColor"];
+  /* libadwaita's view_bg_color, as lists and text views draw it: a view
+     an app fills with controlBackgroundColor matches the lists beside it,
+     as in the light palette (#94). */
+  [colors setColor: GnomeThemeColorFromHex (@"#1d1d20") forKey: @"controlBackgroundColor"];
+  /* libadwaita's card colour (opaque): menus, pop-overs and the theme's
+     own button, segment and switch shading. */
+  [colors setColor: GnomeThemeColorFromHex (@"#303030") forKey: @"GnomeThemeCardColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3a3a3a") forKey: @"controlColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#484848") forKey: @"controlHighlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#555555") forKey: @"controlLightHighlightColor"];
@@ -270,7 +279,7 @@ GnomeThemeAddWidgetColors(NSColorList *colors, NSColor *foreground, BOOL highCon
 static void
 GnomeThemeAddLookupColors(NSColorList *colors)
 {
-  NSColor *view = [colors colorWithKey: @"controlBackgroundColor"];
+  NSColor *card = [colors colorWithKey: @"GnomeThemeCardColor"];
   NSColor *border = [colors colorWithKey: @"controlShadowColor"];
   NSColor *window = [colors colorWithKey: @"windowBackgroundColor"];
   NSColor *row = [colors colorWithKey: @"rowBackgroundColor"];
@@ -278,9 +287,9 @@ GnomeThemeAddLookupColors(NSColorList *colors)
   NSColor *text = [colors colorWithKey: @"controlTextColor"];
   NSColor *selection;
 
-  if (view != nil)
+  if (card != nil)
     {
-      [colors setColor: view forKey: @"menuBackgroundColor"];
+      [colors setColor: card forKey: @"menuBackgroundColor"];
     }
   if (border != nil)
     {
