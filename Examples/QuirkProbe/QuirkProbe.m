@@ -2017,6 +2017,61 @@ QuirkProbeIsWhiteText (NSUInteger red, NSUInteger green, NSUInteger blue)
   [window orderOut: nil];
 }
 
+/* A field on a half pixel (an app's layout put it at y = 100.5) keeps its
+   text on whole pixels while typing. The field editor's clip view offsets
+   its bounds half a pixel to put the text on the pixel grid; a scroll while
+   typing passed through -[NSClipView constrainScrollPoint:], which rounds
+   in the clip view's current coordinates and so swapped that offset for
+   the other half pixel: the text moved up and down a row as it was typed. */
+- (void) checkFieldEditorOnPixels
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 500, 320, 80) title: @"QuirkProbe Field Editor"];
+  NSTextField *field = AUTORELEASE ([[NSTextField alloc] initWithFrame: NSMakeRect (10, 20.5, 300, 28)]);
+  NSString *typed = @"Tyly gjpq";
+  NSMutableString *offsets = [NSMutableString string];
+  NSUInteger i, offGrid = 0;
+  NSText *editor;
+  NSString *detail;
+
+  [field setEditable: YES];
+  [field setFont: [NSFont systemFontOfSize: 14]];
+  [[window contentView] addSubview: field];
+  [window makeKeyAndOrderFront: nil];
+  [window makeFirstResponder: field];
+  [window display];
+  editor = [field currentEditor];
+  for (i = 0; editor != nil && i < [typed length]; i++)
+    {
+      NSView *document = editor;
+      NSPoint origin;
+      CGFloat fraction;
+
+      [editor insertText: [typed substringWithRange: NSMakeRange (i, 1)]];
+      [window display];
+      /* Where the text view's top edge lands in the window. */
+      origin = [document convertPoint: NSMakePoint (0, 0) toView: nil];
+      fraction = origin.y - floor (origin.y);
+      [offsets appendFormat: @"%@%g", i ? @" " : @"", fraction];
+      if (fraction != 0.0)
+        {
+          offGrid++;
+        }
+    }
+  detail = [NSString stringWithFormat: @"text view's fraction of a pixel after each of %lu keys: %@",
+                     (unsigned long)[typed length], offsets];
+  if (editor != nil && offGrid == 0)
+    {
+      [self pass: @"field-editor-on-pixels" detail: detail];
+    }
+  else
+    {
+      [self fail: @"field-editor-on-pixels"
+          detail: editor ? detail : @"the field didn't start editing"];
+    }
+  [window makeFirstResponder: nil];
+  [window orderOut: nil];
+}
+
 /* Shortcut labels as GTK writes them (gtk_accelerator_get_label): Shift,
    Ctrl, Alt, then the key; an uppercase key equivalent means Shift (#41). */
 - (void) checkShortcutLabels
@@ -9207,6 +9262,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkImageFreeButton];
   [self checkShortcutLabels];
   [self checkCustomBackgroundField];
+  [self checkFieldEditorOnPixels];
   [self checkInlineMenuRow];
   [self checkSizedButtons];
   [self checkFixedButtons];
