@@ -6956,6 +6956,57 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A determinate bar as libadwaita's: an 8px trough in a 20pt bar (Cocoa's
+   height), and the blue filling its height, as many rows as the trough
+   beside it. */
+- (void) checkProgressFill
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 240, 60) title: @"Probe Progress"];
+  NSView *content = [window contentView];
+  NSProgressIndicator *bar = AUTORELEASE ([[NSProgressIndicator alloc] initWithFrame: NSMakeRect (10, 20, 220, 20)]);
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3];
+  NSInteger y, fillRows = 0, troughRows = 0;
+  NSString *detail;
+
+  [bar setIndeterminate: NO];
+  [bar setMinValue: 0];
+  [bar setMaxValue: 100];
+  [bar setDoubleValue: 50];
+  [content addSubview: bar];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (content);
+  QuirkProbePixelAt (rep, 5, 5, windowRGB);
+  /* Columns well inside the fill (x 60) and the empty trough (x 180),
+     rows 20 to 40 from the top: the bar's frame. */
+  for (y = 20; y < 40; y++)
+    {
+      NSUInteger fill[3], trough[3];
+
+      QuirkProbePixelAt (rep, 60, y, fill);
+      QuirkProbePixelAt (rep, 180, y, trough);
+      if ((long)fill[2] > (long)fill[0] + 60)
+        {
+          fillRows++;
+        }
+      if (labs ((long)trough[0] - (long)windowRGB[0]) > 6)
+        {
+          troughRows++;
+        }
+    }
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"fill %ld rows, trough %ld rows", (long)fillRows, (long)troughRows];
+  if (troughRows >= 7 && troughRows <= 9 && labs (fillRows - troughRows) <= 1)
+    {
+      [self pass: @"progress-fill" detail: detail];
+    }
+  else
+    {
+      [self fail: @"progress-fill" detail: detail];
+    }
+}
+
 /* A slider's tick marks (libs-gui draws none) are GtkScale's: 1x6pt
    lines 6pt below the trough, one per tick across the knob's travel. */
 - (void) checkSliderTickMarks
@@ -9309,6 +9360,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
+  [self checkProgressFill];
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
   [self checkBottomTabs];
@@ -9419,6 +9471,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkLevelAndActivity];
+  [self checkProgressFill];
   [self checkSliderTickMarks];
   [self checkSplitViewDividers];
   [self checkBottomTabs];

@@ -983,10 +983,12 @@ GnomeThemeStyleComboBoxPopup(NSComboBoxCell *cell, GnomeTheme *theme)
     }
 }
 
+/* libadwaita's trough: 8px, whatever the bar's height (Cocoa's are 20pt
+   or 16pt tall), centred. */
 static NSRect
 GnomeThemeProgressTrackRect(NSRect bounds)
 {
-  CGFloat thickness = MIN (8.0, MAX (6.0, floor (bounds.size.height * 0.24)));
+  CGFloat thickness = MIN (8.0, floor (bounds.size.height));
   NSRect trackRect = bounds;
 
   trackRect.origin.x += 1.0;
@@ -2592,6 +2594,23 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
                                           accent, nil, 0.0);
       return;
     }
+  /* libadwaita's bar fills the trough's height. libs-gui hands
+     -drawProgressIndicatorBarDeterminate: the trough already, and taking
+     the track out of it again left a 6pt bar in the 8pt trough. */
+  if ([progress isIndeterminate] == NO && [progress isVertical] == NO)
+    {
+      NSRect trough = [progress isBezeled]
+        ? [self drawProgressIndicatorBezel: bounds withClip: rect]
+        : GnomeThemeProgressTrackRect (bounds);
+      NSRect bar = trough;
+
+      bar.size.width = floor (NSWidth (trough) * MAX (0.0, MIN (1.0, val)));
+      if (NSWidth (bar) > 0.0)
+        {
+          [self drawProgressIndicatorBarDeterminate: bar];
+        }
+      return;
+    }
   [super drawProgressIndicator: progress withBounds: bounds withClip: rect atCount: count forValue: val];
 }
 
@@ -2634,10 +2653,11 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
   return drawRect;
 }
 
+/* The bar: bounds is the filled part of the trough. */
 - (void) drawProgressIndicatorBarDeterminate: (NSRect)bounds
 {
   NSColor *fillColor = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
-  NSRect drawRect = GnomeThemeProgressTrackRect (bounds);
+  NSRect drawRect = bounds;
   CGFloat radius = floor (drawRect.size.height / 2.0);
 
   GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (drawRect, 0.5, 0.5),
