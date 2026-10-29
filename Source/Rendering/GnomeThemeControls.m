@@ -2087,7 +2087,7 @@ GnomeThemeDrawTabLabel(NSString *label,
   NSColor *fillColor = nil;
   NSColor *strokeColor = nil;
   NSColor *baseFill = GnomeThemeColor (self, @"controlColor", [NSColor controlColor]);
-  NSColor *backgroundFill = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
+  NSColor *backgroundFill = GnomeThemeColor (self, @"GnomeThemeCardColor", [NSColor controlBackgroundColor]);
   NSColor *accentFill = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   NSColor *borderBase = GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]);
   /* libadwaita's button colours: the foreground at 10% over the window,
@@ -2379,7 +2379,7 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
   BOOL selected = GnomeThemeStateIsSelected (state);
   BOOL disabled = GnomeThemeStateIsDisabled (state) || ([cell isEnabled] == NO)
     || GnomeThemeSegmentBeingDrawnIsEnabled == NO;
-  NSColor *baseFill = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
+  NSColor *baseFill = GnomeThemeColor (self, @"GnomeThemeCardColor", [NSColor controlBackgroundColor]);
   NSColor *segmentFill = GnomeThemeColor (self, @"controlColor", [NSColor controlColor]);
   NSColor *borderColor = GnomeThemeColor (self, @"controlShadowColor", [NSColor controlShadowColor]);
   NSColor *windowFill = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
@@ -3028,7 +3028,7 @@ GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
   CGFloat opacity = enabled ? 1.0 : (highContrast ? 0.4 : 0.5);
   NSColor *text = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
   NSColor *background = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
-  NSColor *view = GnomeThemeColor (self, @"controlBackgroundColor", [NSColor controlBackgroundColor]);
+  NSColor *view = GnomeThemeColor (self, @"GnomeThemeCardColor", [NSColor controlBackgroundColor]);
   NSColor *accent = GnomeThemeColor (self, @"selectedControlColor", [NSColor selectedControlColor]);
   /* In RGB: a palette colour may ignore -colorWithAlphaComponent:. */
   NSColor *trackColor = [(on ? accent : GnomeThemeBlend (background, text, highContrast ? 0.30 : 0.15))
@@ -5799,6 +5799,7 @@ GnomeThemeIsDropDownComboBox(id view)
     NSBezierPath *path = nil;
     BOOL checked = (state == NSOnState || state == NSMixedState);
     NSColor *windowColor = [NSColor windowBackgroundColor];
+    NSColor *card = GnomeThemeColor (theme, @"GnomeThemeCardColor", [NSColor controlBackgroundColor]);
     BOOL highContrast = [[theme settings] highContrastEnabled];
 
 
@@ -5830,10 +5831,10 @@ GnomeThemeIsDropDownComboBox(id view)
     if (enabled == NO)
       {
         fillColor = (fillColor != nil)
-          ? GnomeThemeBlend (fillColor, [NSColor controlBackgroundColor], 0.35)
+          ? GnomeThemeBlend (fillColor, card, 0.35)
           : nil;
         borderColor = checked
-          ? GnomeThemeBlend (borderColor, [NSColor controlBackgroundColor], 0.35)
+          ? GnomeThemeBlend (borderColor, card, 0.35)
           : GnomeThemeBlend (borderColor, windowColor, highContrast ? 0.6 : 0.5);
         markColor = [NSColor disabledControlTextColor];
       }

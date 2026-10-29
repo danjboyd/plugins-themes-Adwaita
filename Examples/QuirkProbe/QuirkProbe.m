@@ -509,6 +509,19 @@ static NSUInteger QuirkProbeTileMaxDepth = 0;
 }
 @end
 
+/* A content view as an AppKit app draws one: filled with
+   controlBackgroundColor (LinDirStat's empty treemap pane, #94). */
+@interface QuirkProbeContentFillView : NSView
+@end
+
+@implementation QuirkProbeContentFillView
+- (void) drawRect: (NSRect)rect
+{
+  [[NSColor controlBackgroundColor] set];
+  NSRectFill (rect);
+}
+@end
+
 /* A toolbar delegate whose items select a view, like Gorm's document
    toolbar. */
 @interface QuirkProbeSwitcherDelegate : NSObject
@@ -5713,6 +5726,73 @@ QuirkProbeHex(const NSUInteger rgb[3])
     }
 }
 
+/* A view an app fills with controlBackgroundColor matches an empty table
+   beside it: libadwaita's view colour, #ffffff in light and #1d1d20 in
+   dark. In dark it was the card colour, #303030, a lighter pane beside the
+   lists (#94). Menus keep the card colour. */
+- (void) checkContentBackground
+{
+  NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  BOOL dark = [windowColor redComponent] < 0.5;
+  unsigned int view = dark ? 0x1d1d20 : 0xffffff;
+  unsigned int card = dark ? 0x303030 : 0xffffff;
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 440, 160) title: @"Probe Content Background"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (20, 20, 190, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 190, 120)]);
+  NSTableColumn *column = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"c"]);
+  QuirkProbeContentFillView *pane = AUTORELEASE ([[QuirkProbeContentFillView alloc]
+                                                   initWithFrame: NSMakeRect (230, 20, 190, 120)]);
+  NSColor *menu = [[[[GSTheme theme] colors] colorWithKey: @"menuBackgroundColor"]
+                    colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSUInteger menuRGB[3] = { 0, 0, 0 };
+  NSUInteger tableRGB[3], paneRGB[3];
+  NSBitmapImageRep *rep;
+  NSString *detail;
+
+  [column setWidth: 170];
+  [table addTableColumn: column];
+  [table setHeaderView: nil];
+  [scrollView setDocumentView: table];
+  [scrollView setHasVerticalScroller: NO];
+  [scrollView setBorderType: NSNoBorder];
+  [[window contentView] addSubview: scrollView];
+  [[window contentView] addSubview: pane];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender ([window contentView]);
+  QuirkProbePixelAt (rep, 115, 80, tableRGB);
+  QuirkProbePixelAt (rep, 325, 80, paneRGB);
+  [self saveWindow: window named: @"content-background"];
+  [window orderOut: nil];
+  if (menu != nil)
+    {
+      menuRGB[0] = lround ([menu redComponent] * 255);
+      menuRGB[1] = lround ([menu greenComponent] * 255);
+      menuRGB[2] = lround ([menu blueComponent] * 255);
+    }
+
+  detail = [NSString stringWithFormat: @"%@: controlBackgroundColor pane %@, table %@ (want #%06x for both)",
+    dark ? @"dark" : @"light", QuirkProbeHex (paneRGB), QuirkProbeHex (tableRGB), view];
+  if (QuirkProbeNear (paneRGB, view, 2) && QuirkProbeNear (tableRGB, view, 2))
+    {
+      [self pass: @"content-background" detail: detail];
+    }
+  else
+    {
+      [self fail: @"content-background" detail: detail];
+    }
+  detail = [NSString stringWithFormat: @"%@: menuBackgroundColor %@ (want #%06x, the card colour)",
+    dark ? @"dark" : @"light", QuirkProbeHex (menuRGB), card];
+  if (menu != nil && QuirkProbeNear (menuRGB, card, 1))
+    {
+      [self pass: @"content-background-menus-keep-card" detail: detail];
+    }
+  else
+    {
+      [self fail: @"content-background-menus-keep-card" detail: detail];
+    }
+}
+
 /* The theme's colour lookup (GnomeThemeColor(), in the bundle) reads the
    palette first: a palette-only key comes back as the palette's colour,
    not the fallback. -colorNamed:state: alone reads GSTheme's extra colour
@@ -9157,6 +9237,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
   [self checkTableBackground];
+  [self checkContentBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
   [self checkPopUpMenuArrowImage];
@@ -9265,6 +9346,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkScrollViewFrame];
   [self checkPopUpChevron];
   [self checkTableBackground];
+  [self checkContentBackground];
   [self checkPaletteLookup];
   [self checkTableSelection];
   [self checkPopUpMenuArrowImage];
