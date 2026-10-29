@@ -8450,16 +8450,16 @@ QuirkProbeAboutIconInk (NSDictionary *options, QuirkProbePixelTest test)
     (unsigned long)offTrack[0], (unsigned long)offTrack[1], (unsigned long)offTrack[2],
     (unsigned long)offKnob[0], (unsigned long)offKnob[1], (unsigned long)offKnob[2],
     (unsigned long)disabledTrack[0], (unsigned long)disabledTrack[1], (unsigned long)disabledTrack[2]];
-  /* On: blue track, a light knob. Off: a grey track 15-30% of the way
-     from the window to the text (darker in the light palette, lighter in
-     the dark), the knob lighter than the track. Disabled: closer to the
-     window than the enabled one, still blue. */
+  /* On: blue track, a white knob, in the dark palette too. Off: a grey
+     track 15-30% of the way from the window to the text (darker in the
+     light palette, lighter in the dark), the knob lighter than the track.
+     Disabled: closer to the window than the enabled one, still blue. */
   {
     NSColor *windowColor = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
     long window = (long)([windowColor redComponent] * 255.0);
     long offStep = labs ((long)offTrack[0] - window);
 
-    ok = onTrack[2] > onTrack[0] + 60 && onKnob[0] > 200 && onKnob[1] > 200 && onKnob[2] > 200
+    ok = onTrack[2] > onTrack[0] + 60 && onKnob[0] >= 250 && onKnob[1] >= 250 && onKnob[2] >= 250
       && labs ((long)offTrack[0] - (long)offTrack[2]) < 12 && offStep >= 20 && offStep <= 80
       && offKnob[0] > offTrack[0] + 15
       && disabledTrack[2] > disabledTrack[0]
