@@ -2377,6 +2377,10 @@ GnomeThemeDrawTabLabel(NSString *label,
 /* Whether the segment being drawn is enabled: -drawSegment:inFrame:withView:
    knows the segment, -drawSegmentedControlSegment:... only the cell. */
 static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
+/* Whether the segment being drawn and the one before it are both
+   unselected: libadwaita's linked buttons overlap by 1px there, and the
+   column where their translucent fills meet reads as a separator. */
+static BOOL GnomeThemeSegmentBeingDrawnFollowsUnselected = NO;
 
 - (void) drawSegmentedControlSegment: (NSCell *)cell
                            withFrame: (NSRect)cellFrame
@@ -2398,6 +2402,7 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
   CGFloat interiorOverlap = 1.0;
   CGFloat radius = MIN (8.0, floor (drawRect.size.height / 2.0));
   NSBezierPath *path = nil;
+  NSColor *separatorFill = nil;
 
   (void)style;
   (void)controlView;
@@ -2420,9 +2425,14 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
                                             GnomeThemeBlend (segmentFill, baseFill, 0.4));
     }
 
+  /* The overlap's colour: the button's fill once more over itself,
+     measured in GTK as 9% of the way to the text colour (#d5d5d6 light,
+     #4a4a4d dark). High contrast's own separator is the outline below. */
+  separatorFill = GnomeThemeBlend (segmentFill, textColor, 0.09);
   if (disabled)
     {
       segmentFill = GnomeThemeBlend (segmentFill, windowFill, 0.5);
+      separatorFill = GnomeThemeBlend (separatorFill, windowFill, 0.5);
       if (borderColor != nil)
         {
           borderColor = GnomeThemeBlend (borderColor, windowFill, 0.6);
@@ -2444,6 +2454,13 @@ static BOOL GnomeThemeSegmentBeingDrawnIsEnabled = YES;
   [path fill];
   if (borderColor == nil)
     {
+      if (roundedLeft == NO && selected == NO && GnomeThemeSegmentBeingDrawnFollowsUnselected)
+        {
+          [separatorFill set];
+          NSRectFillUsingOperation (NSMakeRect (floor (NSMinX (cellFrame)), NSMinY (drawRect),
+                                                1.0, NSHeight (drawRect)),
+                                    NSCompositeSourceOver);
+        }
       return;
     }
   [borderColor set];
@@ -4354,6 +4371,12 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
     }
 
   GnomeThemeSegmentBeingDrawnIsEnabled = enabled;
+  if (segmentIndex > 0)
+    {
+      GnomeThemeSegmentBeingDrawnFollowsUnselected = ([cell trackingMode] == NSSegmentSwitchTrackingSelectOne)
+        ? ([cell selectedSegment] != segmentIndex - 1)
+        : ([cell isSelectedForSegment: segmentIndex - 1] == NO);
+    }
   [theme drawSegmentedControlSegment: cell
                            withFrame: frame
                               inView: (controlView != nil) ? controlView : view
@@ -4362,6 +4385,7 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
                          roundedLeft: roundedLeft
                         roundedRight: roundedRight];
   GnomeThemeSegmentBeingDrawnIsEnabled = YES;
+  GnomeThemeSegmentBeingDrawnFollowsUnselected = NO;
 
   if ([label length] > 0)
     {
@@ -5328,6 +5352,18 @@ GnomeThemeIsPopUpArrowImage(NSPopUpButtonCell *cell, NSImage *image)
 
       [fillColor set];
       NSRectFillUsingOperation (buttonFillRect, NSCompositeSourceOver);
+      /* An editable combo box is libadwaita's entry linked to a button:
+         where they overlap, 1px of the fill over itself (in GTK 6% of the
+         way to the text colour) separates them. A drop-down has none. */
+      if (GnomeThemeIsDropDownComboBox (controlView) == NO)
+        {
+          NSColor *text = GnomeThemeColor (theme, @"controlTextColor", [NSColor controlTextColor]);
+
+          [GnomeThemeBlend (fillColor, text, 0.06) set];
+          NSRectFillUsingOperation (NSMakeRect (NSMinX (buttonFillRect) - 1.0, NSMinY (cellFrame) + 0.5,
+                                                1.0, NSHeight (cellFrame) - 1.0),
+                                    NSCompositeSourceOver);
+        }
     }
 
   GnomeThemeDrawPopupChevron (NSInsetRect (buttonRect, 6.0, 6.0),

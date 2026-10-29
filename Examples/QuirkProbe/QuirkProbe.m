@@ -2951,6 +2951,63 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* Between two unselected segments, libadwaita's linked buttons overlap
+   by 1px, and their translucent fills over each other read as a
+   separator: one column, the fill taken 10-30 (of 255) further from the
+   window (darker in the light palette, lighter in the dark). High
+   contrast's is the outline, the foreground at 50%: further still. */
+- (void) checkSegmentSeparator
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 200, 300, 80) title: @"QuirkProbe Segment Separator"];
+  NSSegmentedControl *control = AUTORELEASE ([[NSSegmentedControl alloc] initWithFrame: NSMakeRect (20, 20, 240, 34)]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3], windowRGB[3];
+  NSInteger i, x, columns = 0, step = 0;
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSString *detail;
+
+  [control setSegmentCount: 3];
+  for (i = 0; i < 3; i++)
+    {
+      [control setLabel: [NSString stringWithFormat: @"Item %ld", (long)i + 1] forSegment: i];
+      [control setWidth: 80 forSegment: i];
+    }
+  [control setSelectedSegment: 0];
+  [[window contentView] addSubview: control];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender (control);
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  /* Near the top edge, clear of the labels: the third segment's fill,
+     and the columns around the second and third segments' edge. */
+  QuirkProbePixelAt (rep, 200, 6, fill);
+  for (x = 150; x < 170; x++)
+    {
+      NSUInteger px[3];
+      long d;
+
+      QuirkProbePixelAt (rep, x, 6, px);
+      d = (long)px[0] - (long)fill[0];
+      if (labs (d) > 4)
+        {
+          columns++;
+          /* Positive: away from the window. */
+          step = ((long)fill[0] < (long)windowRGB[0]) ? -d : d;
+        }
+    }
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"fill %@, %ld column(s) apart at the edge, %ld further from the window",
+    QuirkProbeHex (fill), (long)columns, (long)step];
+  if (columns == 1 && step >= 10 && (highContrast || step <= 30))
+    {
+      [self pass: @"segment-separator" detail: detail];
+    }
+  else
+    {
+      [self fail: @"segment-separator" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -6878,6 +6935,62 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* An editable combo box is libadwaita's entry linked to a button: one
+   column where they overlap sets the button off, 6-20 (of 255) from the
+   fill. A drop-down is one button, with none. */
+- (void) checkComboSeparator
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 260, 110) title: @"Probe Combo Separator"];
+  NSComboBox *editable = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 60, 220, 34)]);
+  NSComboBox *dropDown = AUTORELEASE ([[NSComboBox alloc] initWithFrame: NSMakeRect (20, 14, 220, 34)]);
+  NSInteger columns[2] = {0, 0}, step = 0, i, x;
+  NSString *detail;
+
+  [editable addItemWithObjectValue: @"Largest files"];
+  [editable setStringValue: @"Largest files"];
+  [dropDown addItemWithObjectValue: @"Largest files"];
+  [dropDown setStringValue: @"Largest files"];
+  [dropDown setEditable: NO];
+  [[window contentView] addSubview: editable];
+  [[window contentView] addSubview: dropDown];
+  [window orderFront: nil];
+  [window display];
+  for (i = 0; i < 2; i++)
+    {
+      NSBitmapImageRep *rep = QuirkProbeRender (i == 0 ? editable : dropDown);
+      NSUInteger fill[3];
+
+      /* Row 6, above the text and the chevron, from past the text to the
+         rounded end. */
+      QuirkProbePixelAt (rep, 120, 6, fill);
+      for (x = 140; x < 210; x++)
+        {
+          NSUInteger px[3];
+
+          QuirkProbePixelAt (rep, x, 6, px);
+          if (labs ((long)px[0] - (long)fill[0]) > 4)
+            {
+              columns[i]++;
+              if (i == 0)
+                {
+                  step = labs ((long)px[0] - (long)fill[0]);
+                }
+            }
+        }
+    }
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"editable: %ld column(s), %ld from the fill; drop-down: %ld column(s)",
+    (long)columns[0], (long)step, (long)columns[1]];
+  if (columns[0] == 1 && step >= 6 && step <= 20 && columns[1] == 0)
+    {
+      [self pass: @"combo-separator" detail: detail];
+    }
+  else
+    {
+      [self fail: @"combo-separator" detail: detail];
+    }
+}
+
 /* Level indicators and activity as libadwaita draws them (GtkLevelBar,
    GtkProgressBar pulsing, AdwSpinner): an 8pt bar in the accent (the
    warning colour past the warning value), discrete blocks 2pt apart, stars
@@ -9376,6 +9489,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkHeaderBarToolbarLive];
   [self checkHeaderBarToolbarPriorityOverflow];
       [self checkSegmentedSelection];
+      [self checkSegmentSeparator];
       [self checkSegmentedDisabled];
       [self checkHeaderBarSegmentedDisabled];
       [self checkMenuSeparatorAndShortcut];
@@ -9405,6 +9519,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
+  [self checkComboSeparator];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
@@ -9469,6 +9584,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkToolbarViewItemWidth];
   [self checkToolbarPriorityOverflow];
   [self checkSegmentedSelection];
+  [self checkSegmentSeparator];
       [self checkSegmentedDisabled];
       [self checkHeaderBarSegmentedDisabled];
   [self checkMenuSeparatorAndShortcut];
@@ -9517,6 +9633,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
+  [self checkComboSeparator];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
