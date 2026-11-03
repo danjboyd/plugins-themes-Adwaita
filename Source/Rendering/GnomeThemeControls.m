@@ -1065,12 +1065,13 @@ GnomeThemeSegmentIndexAtPoint(NSSegmentedCell *cell,
   return NSNotFound;
 }
 
-/* libadwaita's list-remove/add-symbolic: 10px across, 2px strokes (#59).
-   On a pixel boundary, so the 2px strokes stay sharp. */
+/* libadwaita's list-remove/add-symbolic: 10px across, 2px strokes (#59),
+   or less in a half too small for it (a Cocoa stepper's). On a pixel
+   boundary, so the 2px strokes stay sharp. */
 static void
 GnomeThemeDrawStepperGlyph(NSRect rect, BOOL increment, NSColor *color)
 {
-  CGFloat span = 5.0;
+  CGFloat span = MAX (3.0, MIN (5.0, floor ((MIN (NSWidth (rect), NSHeight (rect)) - 4.0) / 2.0)));
   NSPoint center = NSMakePoint (floor (NSMidX (rect)), floor (NSMidY (rect)));
   NSBezierPath *path = [NSBezierPath bezierPath];
 
@@ -3134,8 +3135,9 @@ GnomeThemeDrawScrollViewFrame(GnomeTheme *theme, NSScrollView *scrollView)
 
 /* GTK's spin button puts − and + side by side, each about 24pt wide, but
    Cocoa steppers are about 19x27pt and laid out for an up half and a down
-   half. A stepper taller than it is wide gets the halves, with chevrons; a
-   wider one keeps − and +, as a spin button's end. */
+   half. A stepper taller than it is wide gets the halves, + above −, as
+   libadwaita's vertical spin button; a wider one keeps − and + side by
+   side, as a spin button's end. */
 static BOOL
 GnomeThemeStepperIsVertical(NSRect frame)
 {
@@ -3152,26 +3154,6 @@ GnomeThemeStepperPath(NSRect frame)
       return GnomeThemeRoundedPath (drawRect, MIN (6.0, floor (NSWidth (drawRect) / 3.0)));
     }
   return GnomeThemeSegmentedControlPath (drawRect, MIN (8.0, floor (drawRect.size.height / 2.0)), NO, YES);
-}
-
-/* A chevron pointing up or down, for the vertical stepper's halves. */
-static void
-GnomeThemeDrawStepperChevron(NSRect rect, BOOL up, NSColor *color)
-{
-  CGFloat halfWidth = MIN (4.0, floor (NSWidth (rect) * 0.25));
-  CGFloat halfHeight = floor (halfWidth / 2.0 + 0.5);
-  NSPoint center = NSMakePoint (floor (NSMidX (rect)) + 0.5, floor (NSMidY (rect)) + 0.5);
-  CGFloat tip = up ? halfHeight : -halfHeight;
-  NSBezierPath *path = [NSBezierPath bezierPath];
-
-  [path moveToPoint: NSMakePoint (center.x - halfWidth, center.y - tip)];
-  [path lineToPoint: NSMakePoint (center.x, center.y + tip)];
-  [path lineToPoint: NSMakePoint (center.x + halfWidth, center.y - tip)];
-  [path setLineWidth: 1.5];
-  [path setLineCapStyle: NSRoundLineCapStyle];
-  [path setLineJoinStyle: NSRoundLineJoinStyle];
-  [color set];
-  [path stroke];
 }
 
 /* libadwaita's switch: a 46x26 pill (3pt round a 20pt knob), the text
@@ -3348,7 +3330,6 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
 {
   NSRect upRect = [self stepperUpButtonRectWithFrame: cellFrame];
   NSRect downRect = [self stepperDownButtonRectWithFrame: cellFrame];
-  BOOL vertical = GnomeThemeStepperIsVertical (cellFrame);
   BOOL canIncrement = [cell isEnabled];
   BOOL canDecrement = canIncrement;
   NSColor *textColor = GnomeThemeColor (self, @"controlTextColor", [NSColor controlTextColor]);
@@ -3373,16 +3354,8 @@ GnomeThemeFillStepperHalf(NSRect frame, NSRect half)
       GnomeThemeFillStepperHalf (cellFrame, downRect);
     }
 
-  if (vertical)
-    {
-      GnomeThemeDrawStepperChevron (upRect, YES, canIncrement ? textColor : dimColor);
-      GnomeThemeDrawStepperChevron (downRect, NO, canDecrement ? textColor : dimColor);
-    }
-  else
-    {
-      GnomeThemeDrawStepperGlyph (upRect, YES, canIncrement ? textColor : dimColor);
-      GnomeThemeDrawStepperGlyph (downRect, NO, canDecrement ? textColor : dimColor);
-    }
+  GnomeThemeDrawStepperGlyph (upRect, YES, canIncrement ? textColor : dimColor);
+  GnomeThemeDrawStepperGlyph (downRect, NO, canDecrement ? textColor : dimColor);
 }
 
 - (void) drawStepperUpButton: (NSRect)aRect
