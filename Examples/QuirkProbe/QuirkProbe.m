@@ -3178,6 +3178,50 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* The theme's own images (Resources/ThemeImages) carry a 2x
+   representation, so at GSScaleFactor 2 they're drawn from 32px, not
+   scaled up from 16px: each has a bitmap with twice its point width. The
+   cursors are left out: libs-back takes a cursor's hot spot in pixels. */
+- (void) checkThemeImages2x
+{
+  NSArray *names = [NSArray arrayWithObjects: @"common_Home", @"common_Mount", @"common_Unmount",
+    @"GnomeThemeStarred-symbolic", @"GnomeThemeNonStarred-symbolic", @"NSAscendingSortIndicator",
+    @"NSDescendingSortIndicator", @"GnomeThemeBranch-symbolic", nil];
+  NSMutableArray *missing = [NSMutableArray array];
+  NSEnumerator *enumerator = [names objectEnumerator];
+  NSString *name;
+
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      NSImage *image = [NSImage imageNamed: name];
+      NSEnumerator *reps = [[image representations] objectEnumerator];
+      NSImageRep *rep;
+      BOOL has2x = NO;
+
+      while ((rep = [reps nextObject]) != nil)
+        {
+          if ([rep pixelsWide] >= 2 * [image size].width && [image size].width > 0)
+            {
+              has2x = YES;
+            }
+        }
+      if (has2x == NO)
+        {
+          [missing addObject: image == nil ? [name stringByAppendingString: @" (none)"] : name];
+        }
+    }
+  if ([missing count] == 0)
+    {
+      [self pass: @"theme-images-2x" detail: [NSString stringWithFormat: @"%lu images with a 2x representation",
+        (unsigned long)[names count]]];
+    }
+  else
+    {
+      [self fail: @"theme-images-2x" detail: [NSString stringWithFormat: @"1x only: %@",
+        [missing componentsJoinedByString: @", "]]];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -9735,6 +9779,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSteppers];
   [self checkColorWell];
   [self checkColorWellEdge];
+  [self checkThemeImages2x];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
