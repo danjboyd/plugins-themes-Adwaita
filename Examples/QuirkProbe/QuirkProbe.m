@@ -6991,6 +6991,67 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* Over a text view's overlay scroller the cursor is the arrow, not the
+   text view's I-beam, whether the pointer comes from the text or straight
+   from outside the window; back over the text it's the I-beam. */
+- (void) checkOverlayScrollerCursor
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Scroller Cursor"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  NSTextView *text = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+  NSMutableString *lines = [NSMutableString string];
+  NSScroller *scroller;
+  NSPoint overScroller, overText, outside;
+  NSCursor *fromText, *backOnText, *fromOutside;
+  NSInteger i;
+  NSString *detail;
+
+  for (i = 0; i < 80; i++)
+    {
+      [lines appendFormat: @"Line %ld of text long enough to scroll\n", (long)i];
+    }
+  [text setString: lines];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setDocumentView: text];
+  [[window contentView] addSubview: scrollView];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  scroller = [scrollView verticalScroller];
+  if (NSWidth ([scroller frame]) <= 0.0 || NSMinX ([scroller frame]) >= NSWidth ([scrollView bounds]) - 1.0)
+    {
+      [window orderOut: nil];
+      [self skip: @"overlay-scroller-cursor" detail: @"no scroller on screen"];
+      return;
+    }
+  overScroller = [scroller convertPoint: NSMakePoint (NSMidX ([scroller bounds]), NSMidY ([scroller bounds])) toView: nil];
+  overText = [scrollView convertPoint: NSMakePoint (100, 90) toView: nil];
+  outside = NSMakePoint (-30, -30);
+
+  QuirkProbeMoveMouseForCursor (window, overText);
+  QuirkProbeMoveMouseForCursor (window, overScroller);
+  fromText = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, overText);
+  backOnText = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  QuirkProbeMoveMouseForCursor (window, overScroller);
+  fromOutside = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"over the scroller from the text: %@; back on the text: %@; over the scroller from outside: %@",
+    fromText == [NSCursor arrowCursor] ? @"arrow" : (fromText == [NSCursor IBeamCursor] ? @"I-beam" : @"other"),
+    backOnText == [NSCursor IBeamCursor] ? @"I-beam" : (backOnText == [NSCursor arrowCursor] ? @"arrow" : @"other"),
+    fromOutside == [NSCursor arrowCursor] ? @"arrow" : (fromOutside == [NSCursor IBeamCursor] ? @"I-beam" : @"other")];
+  if (fromText == [NSCursor arrowCursor] && backOnText == [NSCursor IBeamCursor] && fromOutside == [NSCursor arrowCursor])
+    {
+      [self pass: @"overlay-scroller-cursor" detail: detail];
+    }
+  else
+    {
+      [self fail: @"overlay-scroller-cursor" detail: detail];
+    }
+}
+
 /* Recessed and textured buttons are libadwaita's .flat buttons: nothing
    behind the label at rest, the foreground at 10% over the window while a
    toggle is on, 16% while pressed. A rounded button keeps its fill.
@@ -9764,6 +9825,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -9881,6 +9943,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkWindowManagerClose];
   [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
