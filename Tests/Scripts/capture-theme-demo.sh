@@ -161,9 +161,18 @@ if [ -n "$SCALE" ]; then
   DEFAULT_ARGS+=(-GSScaleFactor "$SCALE")
 fi
 
-APP="$REPO_DIR/Examples/ThemeDemo/ThemeDemo.app/ThemeDemo"
+# The demo built in this checkout, built now if it isn't yet. The installed
+# copy (~/GNUstep/Applications) can be months older, with another layout:
+# a capture from it once looked like a scaling bug. THEME_DEMO_APP names
+# another build on purpose.
+APP="${THEME_DEMO_APP:-$REPO_DIR/Examples/ThemeDemo/ThemeDemo.app/ThemeDemo}"
+if [ -z "${THEME_DEMO_APP:-}" ] && [ ! -x "$APP" ]; then
+  echo "building ThemeDemo in $REPO_DIR/Examples/ThemeDemo" >&2
+  make -s -C "$REPO_DIR/Examples/ThemeDemo" >&2 || { echo "could not build ThemeDemo" >&2; exit 1; }
+fi
 if [ ! -x "$APP" ]; then
-  APP="$HOME/GNUstep/Applications/ThemeDemo.app/ThemeDemo"
+  echo "ThemeDemo not found: $APP" >&2
+  exit 1
 fi
 
 MENU_IDS_BEFORE=""
