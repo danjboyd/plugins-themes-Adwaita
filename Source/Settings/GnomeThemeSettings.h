@@ -35,6 +35,7 @@ typedef enum
   CGFloat _monospaceFontSize;
   NSString *_gtkThemeName;
   GnomeThemeColorScheme _colorScheme;
+  NSString *_accentColorName;
   BOOL _highContrast;
   BOOL _overlayScrolling;
   NSInteger _fontHintStyle;
@@ -56,6 +57,10 @@ typedef enum
 - (CGFloat) monospaceFontSize;
 - (NSString *) gtkThemeName;
 - (BOOL) prefersDarkAppearance;
+/* GNOME's accent colour by name (accent-color: blue, teal, green, yellow,
+   orange, red, pink, purple or slate), or the app's GnomeThemeAccentColor;
+   blue before GNOME 47. */
+- (NSString *) accentColorName;
 - (BOOL) highContrastEnabled;
 /* GNOME's overlay-scrolling (on unless turned off): scrollbars that hide
    until needed, over the content. */

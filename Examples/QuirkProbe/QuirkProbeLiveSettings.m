@@ -206,12 +206,75 @@ QuirkProbeSampleWindow(NSWindow *window, NSInteger x, NSInteger y)
          @"heard after %.2fs; window %@ (was %@), system font %.3f (was %.3f)",
          heard, backWindow, lightWindow, backFont, lightFont]];
 
+  /* GNOME's accent (GNOME 47): teal, then blue again. */
+  {
+    NSString *blue = QuirkProbeHex ([NSColor selectedControlColor]);
+    NSString *teal, *tealFocus, *back;
+
+    heard = QuirkProbeWriteKeyfileAndWait (path, QuirkProbeKeyfileSetting (original, @"accent-color", @"'teal'"));
+    teal = QuirkProbeHex ([NSColor selectedControlColor]);
+    tealFocus = QuirkProbeHex ([NSColor keyboardFocusIndicatorColor]);
+    ok = heard >= 0.0 && [blue isEqualToString: @"#3584e4"] && [teal isEqualToString: @"#2190a4"]
+      && [tealFocus isEqualToString: teal] == NO;
+    heard = QuirkProbeWriteKeyfileAndWait (path, original);
+    back = QuirkProbeHex ([NSColor selectedControlColor]);
+    ok = ok && heard >= 0.0 && [back isEqualToString: @"#3584e4"];
+    [self liveSettingsResult: ok ident: @"live-settings-accent"
+          detail: [NSString stringWithFormat:
+           @"accent %@ -> teal %@ (want #2190a4; focus ring %@) -> back %@",
+           blue, teal, tealFocus, back]];
+  }
+
   [self checkLiveButtonLayout: window keyfile: path original: original];
   [[NSNotificationCenter defaultCenter] removeObserver: [QuirkProbeLiveSettingsListener class]];
   [after release];
   [text release];
   [before release];
   [window orderOut: nil];
+}
+
+/* GNOME's accent at launch (run-quirk-probe.sh with QUIRK_PROBE_ACCENT, and
+   -ProbeAccent naming it): the accent colours, and a default button
+   filled with it. */
+- (void) checkAccentAtLaunch
+{
+  NSString *name = [[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeAccent"];
+  NSDictionary *want = [NSDictionary dictionaryWithObjectsAndKeys:
+    @"#3584e4", @"blue", @"#2190a4", @"teal", @"#3a944a", @"green", @"#c88800", @"yellow",
+    @"#ed5b00", @"orange", @"#e62d42", @"red", @"#d56199", @"pink", @"#9141ac", @"purple",
+    @"#6f8396", @"slate", nil];
+  NSString *expected = [want objectForKey: name];
+  NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect (100, 100, 200, 80)
+                                                 styleMask: NSTitledWindowMask
+                                                   backing: NSBackingStoreBuffered
+                                                     defer: NO];
+  NSButton *button = [[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 120, 34)];
+  NSBitmapImageRep *rep;
+  NSString *fill, *control;
+
+  if (expected == nil)
+    {
+      [self skip: @"accent-at-launch" detail: @"needs -ProbeAccent and QUIRK_PROBE_ACCENT"];
+      [window release];
+      [button release];
+      return;
+    }
+  [button setTitle: @"Default"];
+  [button setKeyEquivalent: @"\r"];
+  [[window contentView] addSubview: button];
+  [window orderFront: nil];
+  [window display];
+  rep = [button bitmapImageRepForCachingDisplayInRect: [button bounds]];
+  [button cacheDisplayInRect: [button bounds] toBitmapImageRep: rep];
+  fill = QuirkProbeHex ([rep colorAtX: 8 y: 17]);
+  control = QuirkProbeHex ([NSColor selectedControlColor]);
+  [self liveSettingsResult: ([control isEqualToString: expected] && [fill isEqualToString: expected])
+                     ident: @"accent-at-launch"
+                    detail: [NSString stringWithFormat: @"%@: selectedControlColor %@, default button %@ (want %@)",
+                              name, control, fill, expected]];
+  [window orderOut: nil];
+  [window release];
+  [button release];
 }
 
 /* A forced scheme (#78): -GnomeThemeColorScheme or GTK_THEME's variant,

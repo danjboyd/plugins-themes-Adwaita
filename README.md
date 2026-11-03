@@ -102,8 +102,8 @@ windows, menus and tool tips have square corners and no shadow.
   radios, switches, sliders, steppers, segmented controls and tabs as
   libadwaita draws them, and tables and outlines in Adwaita's style; symbolic icons tinted with the text
   colour ([below](#symbolic-icons)); translucent tool tips.
-- **GNOME's settings:** light or dark style (`color-scheme`),
-  high contrast, the interface and monospace fonts, `font-hinting`,
+- **GNOME's settings:** light or dark style (`color-scheme`), the accent
+  colour (`accent-color`, GNOME 47), high contrast, the interface and monospace fonts, `font-hinting`,
   overlay scrollbars, the window buttons' layout and the title bar's
   double-click action.
 - **Dialogs:** alerts attached to the window they interrupt, without a bar,
@@ -290,6 +290,9 @@ designed):
   switches between light and dark while the app runs; fonts, Large Text and
   high contrast still follow GNOME, with high contrast over the forced
   palette. The choice is the user's, so it isn't read from an Info.plist.
+- `GnomeThemeAccentColor`: one of GNOME's accents (`blue`, `teal`, `green`,
+  `yellow`, `orange`, `red`, `pink`, `purple`, `slate`) for the app, over
+  GNOME's `accent-color`; set it as `GnomeThemeColorScheme` above.
 
 Scrollbars are GNOME's overlay scrollbars while GNOME's `overlay-scrolling`
 setting is on (its default): the content runs under them, and they show
@@ -574,7 +577,8 @@ you work on):
 - `make check-text-scaling`: fonts and metrics with GNOME's Large Text
   (text-scaling-factor 1.25 and 2.0).
 - `make check-live-settings`: GNOME's settings changed while an app runs
-  (dark style and Large Text on, then off).
+  (dark style and Large Text on, then off; the accent to teal and back),
+  and GNOME's accent at launch (teal light, purple dark).
 - `make check-color-scheme`: a forced light or dark style
   (`GnomeThemeColorScheme`, `GTK_THEME`) over GNOME's, while GNOME's
   `color-scheme` changes.

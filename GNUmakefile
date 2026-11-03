@@ -127,6 +127,8 @@ check-nib-metrics:
 check-live-settings:
 	QUIRK_PROBE_ARGS="-ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ACCENT=teal QUIRK_PROBE_ARGS="-ProbeOnly accent -ProbeAccent teal" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ACCENT=purple QUIRK_PROBE_ARGS="-ProbeOnly accent -ProbeAccent purple" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # A per-app scheme over GNOME's (#78): -GnomeThemeColorScheme each way,
 # GTK_THEME's variant each way, the default winning over GTK_THEME, and
