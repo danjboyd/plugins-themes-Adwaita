@@ -219,11 +219,11 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
     }
   [colors setColor: strongBorder forKey: @"controlDarkShadowColor"];
   [colors setColor: disabled forKey: @"disabledControlTextColor"];
-  /* Dimmed labels stay readable: 80%, 65% and 50% instead of 55%, 40%
-     and 25%. */
-  [colors setColor: [background blendedColorWithFraction: 0.8 ofColor: text] forKey: @"secondaryLabelColor"];
-  [colors setColor: [background blendedColorWithFraction: 0.65 ofColor: text] forKey: @"tertiaryLabelColor"];
-  [colors setColor: [background blendedColorWithFraction: 0.5 ofColor: text] forKey: @"quaternaryLabelColor"];
+  /* Dimmed labels are libadwaita's --dim-opacity, 90% in high contrast (the
+     next steps down at 75% and 60%), instead of 55%, 40% and 25%. */
+  [colors setColor: [background blendedColorWithFraction: 0.9 ofColor: text] forKey: @"secondaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.75 ofColor: text] forKey: @"tertiaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.6 ofColor: text] forKey: @"quaternaryLabelColor"];
 }
 
 /* libadwaita 1.7 draws its controls in the foreground colour at an opacity
