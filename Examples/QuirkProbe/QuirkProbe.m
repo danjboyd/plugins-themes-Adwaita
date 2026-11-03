@@ -3262,6 +3262,30 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* A dimmed label is libadwaita's --dim-opacity over the window: 55%, or
+   90% in high contrast. */
+- (void) checkDimLabelOpacity
+{
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSColor *window = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *text = [[NSColor controlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *dim = [[NSColor secondaryLabelColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  CGFloat span = [text redComponent] - [window redComponent];
+  CGFloat fraction = (span != 0.0) ? ([dim redComponent] - [window redComponent]) / span : 0.0;
+  CGFloat want = highContrast ? 0.9 : 0.55;
+  NSString *detail = [NSString stringWithFormat: @"secondaryLabelColor %.0f%% from the window to the text (want %.0f%%)",
+    fraction * 100.0, want * 100.0];
+
+  if (fabs (fraction - want) <= 0.02)
+    {
+      [self pass: @"dim-label-opacity" detail: detail];
+    }
+  else
+    {
+      [self fail: @"dim-label-opacity" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -9790,6 +9814,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
@@ -9907,6 +9932,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];

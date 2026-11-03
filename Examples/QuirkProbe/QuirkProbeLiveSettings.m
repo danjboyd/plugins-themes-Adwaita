@@ -206,6 +206,21 @@ QuirkProbeSampleWindow(NSWindow *window, NSInteger x, NSInteger y)
          @"heard after %.2fs; window %@ (was %@), system font %.3f (was %.3f)",
          heard, backWindow, lightWindow, backFont, lightFont]];
 
+  /* High contrast (org.gnome.desktop.a11y.interface): on, then off. */
+  {
+    NSString *border = QuirkProbeHex ([NSColor controlShadowColor]);
+    NSString *onBorder, *backBorder;
+
+    heard = QuirkProbeWriteKeyfileAndWait (path, QuirkProbeKeyfileSetting (original, @"high-contrast", @"true"));
+    onBorder = QuirkProbeHex ([NSColor controlShadowColor]);
+    ok = heard >= 0.0 && [onBorder isEqualToString: border] == NO;
+    heard = QuirkProbeWriteKeyfileAndWait (path, original);
+    backBorder = QuirkProbeHex ([NSColor controlShadowColor]);
+    ok = ok && heard >= 0.0 && [backBorder isEqualToString: border];
+    [self liveSettingsResult: ok ident: @"live-settings-high-contrast"
+          detail: [NSString stringWithFormat: @"border colour %@ -> %@ -> %@", border, onBorder, backBorder]];
+  }
+
   /* GNOME's accent (GNOME 47): teal, then blue again. */
   {
     NSString *blue = QuirkProbeHex ([NSColor selectedControlColor]);
