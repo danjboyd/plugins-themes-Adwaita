@@ -93,7 +93,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-hidpi check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -112,6 +112,12 @@ check-quirks:
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# At GSScaleFactor 2 and 1: the theme's font hinting (metrics hinting off
+# when scaled, as libs-back's own default).
+check-hidpi:
+	QUIRK_PROBE_ARGS="-GSScaleFactor 2 -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # Metrics per window (#24): check-quirks checks a window loaded from a Gorm
 # file with no choice made; these give every window GNOME's metrics, then

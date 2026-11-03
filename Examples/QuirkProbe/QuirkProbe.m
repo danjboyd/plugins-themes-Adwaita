@@ -3178,6 +3178,30 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* The theme's GSFontHinting: hinted metrics (high nibble 2) at scale 1,
+   whole-pixel advances; metrics hinting off (1) when GSScaleFactor isn't
+   1, as libs-back's own default, since hinted advances at a scale run
+   glyphs together ("mustalign" at 2x). */
+- (void) checkHiDPIFontHinting
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  float scale = [defaults floatForKey: @"GSScaleFactor"];
+  NSInteger hinting = [defaults integerForKey: @"GSFontHinting"];
+  BOOL scaled = (scale != 0.0f && scale != 1.0f);
+  NSInteger want = scaled ? 1 : 2;
+  NSString *detail = [NSString stringWithFormat: @"GSScaleFactor %g: GSFontHinting %ld, metrics nibble %ld (want %ld)",
+    scale, (long)hinting, (long)(hinting >> 4), (long)want];
+
+  if ((hinting >> 4) == want)
+    {
+      [self pass: @"hidpi-font-hinting" detail: detail];
+    }
+  else
+    {
+      [self fail: @"hidpi-font-hinting" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -9611,6 +9635,14 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"live-settings"])
     {
       [self checkLiveSettings];
+      [self finish];
+      return;
+    }
+  /* -ProbeOnly hidpi-fonts: the font hinting at GSScaleFactor 2 and 1
+     (make check-hidpi). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"hidpi-fonts"])
+    {
+      [self checkHiDPIFontHinting];
       [self finish];
       return;
     }
