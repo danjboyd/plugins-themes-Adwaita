@@ -1670,6 +1670,20 @@ QuirkProbeIsGlyphInk (NSUInteger red, NSUInteger green, NSUInteger blue)
       [self fail: @"stepper-vertical" detail: detail];
     }
 
+  /* The halves' glyphs are libadwaita's vertical spin button's: + above −,
+     not chevrons. A + is as tall as it is wide; a − is a 2px stroke. */
+  detail = [NSString stringWithFormat: @"up glyph %ldx%ld, down glyph %ldx%ld",
+    (long)up.width, (long)up.height, (long)down.width, (long)down.height];
+  if (up.count > 0 && down.count > 0 && up.height >= 6 && labs ((long)up.height - (long)up.width) <= 1
+    && down.height <= 2 && down.width >= 6)
+    {
+      [self pass: @"stepper-plus-minus" detail: detail];
+    }
+  else
+    {
+      [self fail: @"stepper-plus-minus" detail: detail];
+    }
+
   /* At its maximum, the up half is dimmed, as GTK's spin button. */
   [self measureStepper: _maxedStepper up: &up down: &down];
   detail = [NSString stringWithFormat: @"at the maximum: darkest up glyph pixel %lu, down %lu (r+g+b)",
