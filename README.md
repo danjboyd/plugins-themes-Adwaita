@@ -93,7 +93,7 @@ windows, menus and tool tips have square corners and no shadow.
   window manager, the window's toolbar in the bar if the app wants it, and
   a document window's file name as its title with a dot while it has
   unsaved changes ([Header bar](#header-bar)).
-- **Menus:** a menu bar inside the window, or GNOME's primary ☰ menu
+- **Menus:** GNOME's primary ☰ menu, or a menu bar inside the window
   ([Settings](#settings)); menus drawn as libadwaita's popovers; titles that
   don't fit a narrow window fold into an overflow menu at the bar's end;
   context menus open at the pointer; inline button rows such as a zoom row
@@ -258,7 +258,7 @@ designed):
   Set `gnome` or `compact` to give every window the same; `auto` is the
   same as not setting it. A code-built app whose Gorm files were laid out
   for GNOME's metrics (with the Adwaita palette below) sets `gnome`.
-- `GnomeThemeMenuStyle`: `menubar` (the default) or `primary`. With
+- `GnomeThemeMenuStyle`: `primary` (the default) or `menubar`. With
   `primary` the menu bar becomes GNOME's main menu button (☰): at the end of
   the window's toolbar when it shows one, otherwise alone in a slim bar.
   Clicking it shows the app's menus, then its application menu's items

@@ -62,6 +62,22 @@ static NSString *QuirkProbePath =
 /* Seconds to let windows lay out and draw before measuring. */
 static const NSTimeInterval QuirkProbeSettleDelay = 0.8;
 
+/* Whether the run has GNOME's primary menu: -GnomeThemeMenuStyle primary,
+   or no menu style at all with -ProbeMenuDefault YES (the theme's
+   default). */
+static BOOL
+QuirkProbeUsesPrimaryMenu(void)
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *style = [defaults stringForKey: @"GnomeThemeMenuStyle"];
+
+  if (style == nil)
+    {
+      return [defaults boolForKey: @"ProbeMenuDefault"];
+    }
+  return [style isEqualToString: @"primary"];
+}
+
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
@@ -4266,7 +4282,7 @@ static NSString *QuirkProbeOverflowShown = nil;
   NSString *narrowDetail, *widenDetail;
 
   if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
-    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    || QuirkProbeUsesPrimaryMenu ())
     {
       [self skip: @"menubar-overflow" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
       [self skip: @"menubar-overflow-widens-back" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
@@ -4950,7 +4966,7 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   NSString *afterClose;
 
   if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
-    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    || QuirkProbeUsesPrimaryMenu ())
     {
       [self skip: @"menubar-click-opens" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
       return;
@@ -5201,9 +5217,9 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   NSRect buttonInWindow;
   NSEvent *click;
 
-  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"] == NO)
+  if (QuirkProbeUsesPrimaryMenu () == NO)
     {
-      [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary"];
+      [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary or -ProbeMenuDefault YES"];
       return;
     }
 
@@ -9215,7 +9231,7 @@ QuirkProbeAboutIconInk (NSDictionary *options, QuirkProbePixelTest test)
     {
       wantedBarMenu = @"(libs-back's)";
     }
-  else if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+  else if (QuirkProbeUsesPrimaryMenu ())
     {
       wantedBarMenu = @"_NET_WM_WINDOW_TYPE_POPUP_MENU";
     }

@@ -106,9 +106,9 @@ probe:
 # palette and in high contrast over the light and the dark palette.
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
-	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_MENU_STYLE=unset QUIRK_PROBE_ARGS="-ProbeMenuDefault YES" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO" bash Tests/Scripts/run-quirk-probe.sh --no-build
-	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_MENU_STYLE=unset QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeMenuDefault YES" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
