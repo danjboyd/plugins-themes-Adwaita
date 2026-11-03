@@ -62,6 +62,18 @@ static NSString *QuirkProbePath =
 /* Seconds to let windows lay out and draw before measuring. */
 static const NSTimeInterval QuirkProbeSettleDelay = 0.8;
 
+/* Stands in for libs-gui's coming -[NSButton(Cell) hasDestructiveAction]
+   (Docs/design/destructive-button-api.md): a cell that says YES. */
+@interface QuirkProbeDestructiveCell : NSButtonCell
+@end
+
+@implementation QuirkProbeDestructiveCell
+- (BOOL) hasDestructiveAction
+{
+  return YES;
+}
+@end
+
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
@@ -3175,6 +3187,112 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   else
     {
       [self fail: @"box-title-font" detail: detail];
+    }
+}
+
+/* A destructive button: in a window, libadwaita's .destructive-action
+   (destructive_bg_color, white text); in an alert, AdwAlertDialog's
+   destructive response (destructive_color at 15% over the dialog, the
+   text in it). Sampled at the fill's left edge and by the text's ink. */
+- (NSString *) destructiveSampleOf: (NSButton *)button fill: (NSUInteger *)fill ink: (NSUInteger *)ink
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (button);
+  NSInteger x, y, best = -1;
+
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  ink[0] = fill[0]; ink[1] = fill[1]; ink[2] = fill[2];
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 12; x < [rep pixelsWide] - 12; x++)
+        {
+          NSUInteger px[3];
+          NSInteger d;
+
+          QuirkProbePixelAt (rep, x, y, px);
+          d = labs ((long)px[0] - (long)fill[0]) + labs ((long)px[1] - (long)fill[1]) + labs ((long)px[2] - (long)fill[2]);
+          if (d > best)
+            {
+              best = d;
+              ink[0] = px[0]; ink[1] = px[1]; ink[2] = px[2];
+            }
+        }
+    }
+  return [NSString stringWithFormat: @"fill %@, text %@", QuirkProbeHex (fill), QuirkProbeHex (ink)];
+}
+
+- (void) checkDestructiveButtons
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 220, 80) title: @"QuirkProbe Destructive"];
+  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 140, 34)]);
+  QuirkProbeDestructiveCell *cell = AUTORELEASE ([[QuirkProbeDestructiveCell alloc] initTextCell: @"Delete"]);
+  NSPanel *alert;
+  NSButton *alertButton = nil;
+  NSEnumerator *enumerator;
+  NSView *view;
+  NSUInteger fill[3], ink[3], windowRGB[3];
+  NSString *detail;
+  BOOL dark;
+
+  [cell setBezelStyle: NSRoundedBezelStyle];
+  [button setCell: cell];
+  [[window contentView] addSubview: button];
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  dark = (windowRGB[0] < 128);
+  detail = [self destructiveSampleOf: button fill: fill ink: ink];
+  [window orderOut: nil];
+  /* destructive_bg_color: #e01b24 (light) or #c01c28 (dark), white text. */
+  if (labs ((long)fill[0] - (dark ? 0xc0 : 0xe0)) <= 6 && fill[1] < 0x30 && fill[2] < 0x40
+    && ink[0] > 235 && ink[1] > 235 && ink[2] > 235)
+    {
+      [self pass: @"destructive-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-button" detail: detail];
+    }
+
+  /* The alert's first button made destructive, as NSAlert will when
+     libs-gui copies the flag to its panel. */
+  alert = NSGetAlertPanel (@"Delete “Report.md”?", @"It will be moved to the trash.", @"Delete", @"Cancel", nil);
+  enumerator = [[[alert contentView] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSButton class]] && [[(NSButton *)view title] isEqualToString: @"Delete"])
+        {
+          alertButton = (NSButton *)view;
+        }
+    }
+  if (alertButton == nil)
+    {
+      [self fail: @"destructive-alert-button" detail: @"no Delete button in the alert panel"];
+      NSReleaseAlertPanel (alert);
+      return;
+    }
+  {
+    QuirkProbeDestructiveCell *alertCell = AUTORELEASE ([[QuirkProbeDestructiveCell alloc] initTextCell: @"Delete"]);
+
+    [alertCell setBezelStyle: [[alertButton cell] bezelStyle]];
+    [alertCell setKeyEquivalent: [alertButton keyEquivalent]];
+    [alertCell setFont: [alertButton font]];
+    [alertButton setCell: alertCell];
+  }
+  [alert orderFront: nil];
+  [alert display];
+  detail = [self destructiveSampleOf: alertButton fill: fill ink: ink];
+  [alert orderOut: nil];
+  NSReleaseAlertPanel (alert);
+  /* destructive_color #c30000 (light) or #ff938c (dark) for the text, at
+     15% over the dialog for the fill: a red tint, not the accent blue. */
+  if ((dark ? (ink[0] > 0xf0 && labs ((long)ink[1] - 0x93) <= 12) : (labs ((long)ink[0] - 0xc3) <= 12 && ink[1] < 0x30))
+    && fill[0] > fill[2] + 8 && fill[0] > fill[1] + 8)
+    {
+      [self pass: @"destructive-alert-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-alert-button" detail: detail];
     }
 }
 
@@ -9691,6 +9809,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+      [self checkDestructiveButtons];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
@@ -9735,6 +9854,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSteppers];
   [self checkColorWell];
   [self checkColorWellEdge];
+  [self checkDestructiveButtons];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
