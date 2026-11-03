@@ -74,13 +74,15 @@ GnomeThemeUsesPrimaryMenu(void)
   NSString *style = [[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"];
   id declared = [[[NSBundle mainBundle] infoDictionary] objectForKey: @"GnomeThemeMenuStyle"];
 
-  /* The user's default, then the app's own choice in its Info.plist. */
+  /* The user's default, then the app's own choice in its Info.plist, then
+     GNOME's: a GNOME app keeps its menus in the primary menu (☰), with no
+     menu bar. */
   if (style == nil && [declared isKindOfClass: [NSString class]])
     {
       style = declared;
     }
 
-  return style != nil && [style caseInsensitiveCompare: @"primary"] == NSOrderedSame;
+  return style == nil || [style caseInsensitiveCompare: @"menubar"] != NSOrderedSame;
 }
 
 static BOOL
