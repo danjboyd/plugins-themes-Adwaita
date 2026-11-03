@@ -3056,6 +3056,101 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* Boxes as libadwaita's: a separator box is GtkSeparator, a line from the
+   window towards the text by 10 to 40 (high contrast: at least 40); an
+   untitled line-border box is a card, filled lighter than the window with
+   rounded corners; a titled box is a GtkFrame with the title at its left,
+   not centred. */
+- (void) checkBoxes
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (40, 200, 260, 220) title: @"QuirkProbe Boxes"];
+  NSBox *separator = AUTORELEASE ([[NSBox alloc] initWithFrame: NSMakeRect (10, 200, 240, 1)]);
+  NSBox *card = AUTORELEASE ([[NSBox alloc] initWithFrame: NSMakeRect (10, 120, 240, 60)]);
+  NSBox *frame = AUTORELEASE ([[NSBox alloc] initWithFrame: NSMakeRect (10, 10, 240, 90)]);
+  NSBitmapImageRep *rep;
+  NSUInteger windowRGB[3], line[3], centre[3], corner[3];
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  BOOL dark;
+  long step, lift, cornerStep;
+  NSInteger x, y, titleX = -1;
+  NSString *detail;
+
+  [separator setBoxType: NSBoxSeparator];
+  [card setTitlePosition: NSNoTitle];
+  [card setBorderType: NSLineBorder];
+  [card setContentViewMargins: NSZeroSize];
+  [frame setTitle: @"Options"];
+  [[window contentView] addSubview: separator];
+  [[window contentView] addSubview: card];
+  [[window contentView] addSubview: frame];
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  dark = (windowRGB[0] < 128);
+
+  QuirkProbePixelAt (QuirkProbeRender (separator), 120, 0, line);
+  /* Positive: towards the text colour. */
+  step = dark ? (long)line[0] - (long)windowRGB[0] : (long)windowRGB[0] - (long)line[0];
+  detail = [NSString stringWithFormat: @"window %@, line %@, %ld towards the text", QuirkProbeHex (windowRGB),
+    QuirkProbeHex (line), step];
+  if (step >= 10 && (highContrast ? YES : step <= 40))
+    {
+      [self pass: @"box-separator" detail: detail];
+    }
+  else
+    {
+      [self fail: @"box-separator" detail: detail];
+    }
+
+  rep = QuirkProbeRender (card);
+  QuirkProbePixelAt (rep, 120, 30, centre);
+  QuirkProbePixelAt (rep, 1, 1, corner);
+  lift = ((long)centre[0] + (long)centre[1] + (long)centre[2])
+    - ((long)windowRGB[0] + (long)windowRGB[1] + (long)windowRGB[2]);
+  cornerStep = labs ((long)corner[0] - (long)windowRGB[0]);
+  detail = [NSString stringWithFormat: @"window %@, centre %@ (%+ld), corner %@", QuirkProbeHex (windowRGB),
+    QuirkProbeHex (centre), lift, QuirkProbeHex (corner)];
+  if (lift >= 8 && cornerStep <= 6)
+    {
+      [self pass: @"box-card" detail: detail];
+    }
+  else
+    {
+      [self fail: @"box-card" detail: detail];
+    }
+
+  /* The title's first column of ink, below the frame's top edge and right
+     of its corner. */
+  rep = QuirkProbeRender (frame);
+  for (x = 4; x < [rep pixelsWide] && titleX < 0; x++)
+    {
+      for (y = 6; y < 24; y++)
+        {
+          NSUInteger px[3];
+
+          QuirkProbePixelAt (rep, x, y, px);
+          if (labs ((long)(px[0] + px[1] + px[2]) - (long)(windowRGB[0] + windowRGB[1] + windowRGB[2])) > 240)
+            {
+              titleX = x;
+              break;
+            }
+        }
+    }
+  QuirkProbePixelAt (rep, 1, 1, corner);
+  cornerStep = labs ((long)corner[0] - (long)windowRGB[0]);
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"title ink from x %ld of %ld, corner %@", (long)titleX,
+    (long)[rep pixelsWide], QuirkProbeHex (corner)];
+  if (titleX >= 4 && titleX <= 20 && cornerStep <= 6)
+    {
+      [self pass: @"box-frame-title" detail: detail];
+    }
+  else
+    {
+      [self fail: @"box-frame-title" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -9568,6 +9663,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkComboSeparator];
+  [self checkBoxes];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
@@ -9683,6 +9779,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkComboSeparator];
+  [self checkBoxes];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];

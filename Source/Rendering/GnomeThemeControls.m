@@ -2577,6 +2577,108 @@ static BOOL GnomeThemeSegmentBeingDrawnFollowsUnselected = NO;
     }
 }
 
+/* NSBox as libadwaita draws its counterparts; GSTheme drew NeXT's.
+   - A separator box (and an untitled groove 4pt or thinner, as the save
+     panel's and the alert's bars) is a GtkSeparator: a 1px line, the
+     foreground at 15%. GSTheme's controlShadowColor was darker than the
+     window in the dark style, so the line all but vanished.
+   - An untitled line-border box is libadwaita's .card, which is what apps
+     use one for (Markdown Viewer's preferences): the card colour, 12px
+     corners and a faint shade. Not when it is its window's content view,
+     as the combo box's and the autocomplete lists' are.
+   - A titled or untitled groove is a GtkFrame: a 1px border in the
+     separator colour with 12px corners, the title inside it at the top
+     left rather than centred on the line.
+   Custom and old-style boxes, bezel borders and titles at other
+   positions stay GSTheme's. */
+- (void) drawBoxInClipRect: (NSRect)clipRect
+                   boxType: (NSBoxType)boxType
+                borderType: (NSBorderType)borderType
+                    inView: (NSBox *)box
+{
+  NSColor *separator = GnomeThemeColor (self, @"GnomeThemeSeparatorColor", [NSColor gridColor]);
+  NSColor *window = [[box window] backgroundColor];
+  NSRect borderRect = [box borderRect];
+  NSTitlePosition titlePosition = [box titlePosition];
+  BOOL thin = (MIN (NSWidth (borderRect), NSHeight (borderRect)) <= 4.0);
+
+  if (window == nil)
+    {
+      window = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+    }
+
+  if (boxType == NSBoxSeparator
+    || (boxType == NSBoxPrimary && borderType == NSGrooveBorder
+        && titlePosition == NSNoTitle && thin))
+    {
+      NSColor *line = (boxType == NSBoxSeparator) ? [box borderColor] : nil;
+      NSRect lineRect = borderRect;
+
+      if (line == nil || [line alphaComponent] == 0.0)
+        {
+          line = separator;
+        }
+      if (boxType != NSBoxSeparator)
+        {
+          [window set];
+          NSRectFill (NSIntersectionRect (clipRect, borderRect));
+        }
+      if (NSWidth (borderRect) >= NSHeight (borderRect))
+        {
+          lineRect.origin.y = floor (NSMidY (borderRect) - 0.5);
+          lineRect.size.height = 1.0;
+        }
+      else
+        {
+          lineRect.origin.x = floor (NSMidX (borderRect) - 0.5);
+          lineRect.size.width = 1.0;
+        }
+      [line set];
+      NSRectFill (lineRect);
+      return;
+    }
+
+  if ((boxType != NSBoxPrimary && boxType != NSBoxSecondary)
+    || (borderType != NSLineBorder && borderType != NSGrooveBorder)
+    || (titlePosition != NSNoTitle && titlePosition != NSAtTop)
+    || (borderType == NSLineBorder && titlePosition == NSNoTitle
+        && [[box window] contentView] == box))
+    {
+      [super drawBoxInClipRect: clipRect boxType: boxType borderType: borderType inView: box];
+      return;
+    }
+
+  [window set];
+  NSRectFill (clipRect);
+
+  if (borderType == NSLineBorder && titlePosition == NSNoTitle)
+    {
+      NSColor *card = GnomeThemeColor (self, @"GnomeThemeCardColor", [NSColor controlBackgroundColor]);
+      NSColor *outline = GnomeThemeColor (self, @"GnomeThemeOutlineColor", nil);
+      NSColor *shade = [NSColor colorWithCalibratedRed: 0.0 green: 0.0 blue: 6.0 / 255.0 alpha: 0.07];
+
+      GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (borderRect, 0.5, 0.5), 12.0, card,
+                                          (outline != nil) ? outline : shade, 1.0);
+      return;
+    }
+
+  if (titlePosition == NSAtTop)
+    {
+      /* The border's top edge goes up to the title's, so the title sits
+         inside the frame. */
+      NSRect titleRect = [box titleRect];
+
+      borderRect.size.height = NSMaxY (titleRect) - NSMinY (borderRect);
+      GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (borderRect, 0.5, 0.5), 12.0, nil, separator, 1.0);
+      titleRect.origin.x = NSMinX (borderRect) + 6.0;
+      titleRect.origin.y -= 2.0;
+      [[box titleCell] drawWithFrame: titleRect inView: box];
+      return;
+    }
+
+  GnomeThemeFillAndStrokeRoundedRect (NSInsetRect (borderRect, 0.5, 0.5), 12.0, nil, separator, 1.0);
+}
+
 /* An indeterminate bar is GtkProgressBar pulsing: a pill a fifth of the
    trough long in the accent, going from end to end and back (GNUstep
    filled the bar with grey stripes in turn). A spinner is AdwSpinner: a
