@@ -106,6 +106,7 @@
 - (void) checkLiveSettings;
 - (void) checkForcedColorScheme;
 - (void) checkHiDPIFontHinting;
+- (void) checkAccentAtLaunch;
 @end
 
 @interface QuirkProbe (ContextMenu)
