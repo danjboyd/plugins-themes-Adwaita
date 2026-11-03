@@ -6991,6 +6991,57 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* A browser's selected row is every other list's selection, not the solid
+   accent: the table's selected-row colour, with the text colour unchanged
+   and well apart from the fill. */
+- (void) checkBrowserSelection
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Browser Selection"];
+  NSBrowser *browser = AUTORELEASE ([[NSBrowser alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  QuirkProbeBrowserDelegate *delegate = AUTORELEASE ([QuirkProbeBrowserDelegate new]);
+  NSColor *want = [[NSColor colorWithCatalogName: @"System" colorName: @"highlightedTableRowBackgroundColor"]
+                    colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSMatrix *matrix;
+  NSScrollView *scrollView;
+  NSBitmapImageRep *rep;
+  NSUInteger rowRGB[3];
+  NSInteger y;
+  long wantRed, wantBlue;
+  NSString *detail;
+
+  [browser setDelegate: delegate];
+  [browser setTitled: NO];
+  [browser setMaxVisibleColumns: 2];
+  [[window contentView] addSubview: browser];
+  [browser loadColumnZero];
+  [browser selectRow: 0 inColumn: 0];
+  [window orderFront: nil];
+  [window display];
+  matrix = [browser matrixInColumn: 0];
+  scrollView = [matrix enclosingScrollView];
+  rep = QuirkProbeRender ([scrollView contentView]);
+  y = (NSInteger)NSMidY ([matrix convertRect: [matrix cellFrameAtRow: 0 column: 0] toView: [scrollView contentView]])
+    - (NSInteger)NSMinY ([[scrollView contentView] bounds]);
+  if ([[scrollView contentView] isFlipped] == NO)
+    {
+      y = [rep pixelsHigh] - 1 - y;
+    }
+  QuirkProbePixelAt (rep, [rep pixelsWide] / 2, y, rowRGB);
+  [window orderOut: nil];
+  wantRed = lround ([want redComponent] * 255.0);
+  wantBlue = lround ([want blueComponent] * 255.0);
+  detail = [NSString stringWithFormat: @"selected row %@, want r %ld b %ld (a table's selected row)",
+    QuirkProbeHex (rowRGB), wantRed, wantBlue];
+  if (want != nil && labs ((long)rowRGB[0] - wantRed) <= 3 && labs ((long)rowRGB[2] - wantBlue) <= 3)
+    {
+      [self pass: @"browser-selection" detail: detail];
+    }
+  else
+    {
+      [self fail: @"browser-selection" detail: detail];
+    }
+}
+
 /* Recessed and textured buttons are libadwaita's .flat buttons: nothing
    behind the label at rest, the foreground at 10% over the window while a
    toggle is on, 16% while pressed. A rounded button keeps its fill.
@@ -9785,6 +9836,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkBrowserSelection];
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
@@ -9902,6 +9954,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkBrowserSelection];
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
