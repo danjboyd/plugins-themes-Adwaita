@@ -4601,6 +4601,23 @@ GnomeThemeDisabledSegmentColor(GSTheme *theme, NSView *controlView)
     }
 }
 
+/* A box's title is a GtkFrame's label: the interface font at its own size.
+   GNUstep gives a new box the small system font. Boxes decoded from a nib
+   or Gorm file keep their archived font (GnomeThemeNibMetrics sizes it). */
+- (id) _overrideNSBoxMethod_initWithFrame: (NSRect)frameRect
+{
+  typedef id (*InitIMP)(id, SEL, NSRect);
+  InitIMP originalIMP = (InitIMP)GnomeThemeOriginalMethod (_cmd, self, [NSBox class]);
+  NSBox *box = nil;
+
+  if (originalIMP != NULL)
+    {
+      box = originalIMP (self, _cmd, frameRect);
+    }
+  [box setTitleFont: [NSFont systemFontOfSize: 0.0]];
+  return box;
+}
+
 /* A tab view's content sits on the view background, as a GtkNotebook's does.
    GNUstep starts tab views without a background (Cocoa's default is to draw
    one); apps that turn it off keep theirs off, and tab views decoded from a

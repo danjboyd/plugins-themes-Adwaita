@@ -3163,6 +3163,19 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     {
       [self fail: @"box-frame-title" detail: detail];
     }
+
+  /* The title is in the interface font, as a GtkFrame's label, not the
+     small system font. */
+  detail = [NSString stringWithFormat: @"title font %@ %g, system font %g",
+    [[frame titleFont] fontName], [[frame titleFont] pointSize], [[NSFont systemFontOfSize: 0.0] pointSize]];
+  if (fabs ([[frame titleFont] pointSize] - [[NSFont systemFontOfSize: 0.0] pointSize]) < 0.01)
+    {
+      [self pass: @"box-title-font" detail: detail];
+    }
+  else
+    {
+      [self fail: @"box-title-font" detail: detail];
+    }
 }
 
 static NSImage *QuirkProbeRedImage(NSString *name);
