@@ -139,6 +139,7 @@ mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
 cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<KEYFILE
 [org/gnome/desktop/interface]
 color-scheme='$COLOR_SCHEME'
+accent-color='${QUIRK_PROBE_ACCENT:-blue}'
 gtk-theme='$GTK_THEME_NAME'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'

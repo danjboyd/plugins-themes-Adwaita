@@ -9614,6 +9614,13 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly accent: GNOME's accent at launch (make check-live-settings). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"accent"])
+    {
+      [self checkAccentAtLaunch];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly forced-scheme: a per-app light or dark scheme over
      GNOME's (make check-color-scheme). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"forced-scheme"])
