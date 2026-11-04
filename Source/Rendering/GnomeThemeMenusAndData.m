@@ -1071,8 +1071,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
   return NSInsetRect (bounds, 12.0, 6.0);
 }
 
-/* Dim header text (libadwaita: 45% of the text colour); a clicked or
-   sorted column's header gets the full text colour. */
+/* Dim header text: libadwaita's foreground at 40% over the list (#adadaf,
+   #777779), 60% in high contrast, for every column, sorted or not; a
+   selected column's header gets the full text colour. */
 - (NSColor *) tableHeaderTextColorForState: (GSThemeControlState)state
 {
   NSColor *textColor = GnomeThemeColor (self,
@@ -1094,7 +1095,9 @@ GnomeThemeMenuBarOverflowMouseDown(NSMenuView *menuView, NSEvent *event)
       return textColor;
     }
 
-  return GnomeThemePhase67Blend (textColor, background, 0.55);
+  return GnomeThemePhase67Blend (background,
+                                 GnomeThemeColor (self, @"GnomeThemeForegroundColor", textColor),
+                                 [[self settings] highContrastEnabled] ? 0.6 : 0.4);
 }
 
 - (NSRect) tableHeaderCellDrawingRectForBounds: (NSRect)theRect
@@ -1206,7 +1209,6 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
   NSTableHeaderView *headerView = (NSTableHeaderView *)view;
   NSTableView *tableView = [headerView tableView];
   NSArray *columns = [tableView tableColumns];
-  NSTableColumn *highlighted = [tableView highlightedTableColumn];
   NSInteger first, last, i;
   NSRect drawingRect;
   BOOL flipped = [view isFlipped];
@@ -1247,7 +1249,10 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
         }
 
       drawingRect.size.width = [column width];
-      [cell setHighlighted: (column == highlighted || [tableView isColumnSelected: i])];
+      /* libadwaita's headers have no sorted state: a highlighted column
+         (the one an app sorts by) is dim like the others, and so is its
+         arrow. */
+      [cell setHighlighted: [tableView isColumnSelected: i]];
       /* The title keeps clear of the indicator, as GTK's label is
          ellipsized beside its arrow (#84). */
       GnomeThemeHeaderIndicatorRoom = indicator == nil ? 0.0

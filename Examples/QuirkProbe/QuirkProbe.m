@@ -90,6 +90,18 @@ QuirkProbeUsesPrimaryMenu(void)
   return [style isEqualToString: @"primary"];
 }
 
+/* A scroll view that says it has a vertical scroller even when its autohiding
+   scroller is out of the view tree, as some libs-gui versions do. */
+@interface QuirkProbeDetachedScrollerScrollView : NSScrollView
+@end
+
+@implementation QuirkProbeDetachedScrollerScrollView
+- (BOOL) hasVerticalScroller
+{
+  return YES;
+}
+@end
+
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
@@ -3401,6 +3413,69 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   else
     {
       [self fail: @"dim-label-opacity" detail: detail];
+    }
+}
+
+/* Column headers as libadwaita's: the foreground at 40% over the list (60%
+   in high contrast), and
+   no sorted state, so a highlighted column's title is as dim as another's. */
+- (void) checkColumnHeaderColours
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Header Colours"];
+  NSScrollView *scroll = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 300, 120)]);
+  NSTableColumn *name = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"name"]);
+  NSTableColumn *size = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"size"]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3], px[3];
+  long sortedInk = 0, plainInk = 0, want, background;
+  NSInteger x, y;
+  NSString *detail;
+  BOOL dark, highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+
+  [[name headerCell] setStringValue: @"Name"];
+  [[size headerCell] setStringValue: @"Size"];
+  [name setWidth: 150];
+  [size setWidth: 150];
+  [table addTableColumn: name];
+  [table addTableColumn: size];
+  [scroll setHasVerticalScroller: YES];
+  [scroll setDocumentView: table];
+  [[window contentView] addSubview: scroll];
+  [table setHighlightedTableColumn: name];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender ([table headerView]);
+  QuirkProbePixelAt (rep, 120, [rep pixelsHigh] / 2, fill);
+  background = (long)fill[0];
+  dark = (background < 128);
+  /* The strongest ink in each column's title. */
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < 100; x++)
+        {
+          long a, b;
+
+          QuirkProbePixelAt (rep, x, y, px);
+          a = labs ((long)px[0] - background);
+          QuirkProbePixelAt (rep, x + 150, y, px);
+          b = labs ((long)px[0] - background);
+          sortedInk = MAX (sortedInk, a);
+          plainInk = MAX (plainInk, b);
+        }
+    }
+  [window orderOut: nil];
+  /* #adadaf on #ffffff; #777779 on #1d1d20; at 60% in high contrast. */
+  want = dark ? (highContrast ? 136 : 0x77 - 0x1d) : (highContrast ? 123 : 0xff - 0xad);
+  detail = [NSString stringWithFormat: @"on %@: sorted title %ld from the fill, another %ld, want %ld",
+    QuirkProbeHex (fill), sortedInk, plainInk, want];
+  if (labs (sortedInk - plainInk) <= 6 && labs (plainInk - want) <= 8)
+    {
+      [self pass: @"column-header-colours" detail: detail];
+    }
+  else
+    {
+      [self fail: @"column-header-colours" detail: detail];
     }
 }
 
@@ -7245,6 +7320,104 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* An autohiding scroll view takes its scroller out of the view tree while
+   the text fits: the text keeps its I-beam right up to the edge. When the
+   text grows and the scroller comes back, the scroller has the arrow. */
+- (void) checkAutohiddenScrollerCursor
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Autohidden Scroller"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  NSTextView *text = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+  NSMutableString *lines = [NSMutableString string];
+  NSScroller *scroller;
+  NSPoint overText, nearEdge, overScroller, outside = NSMakePoint (-30, -30);
+  NSCursor *shortMiddle, *shortEdge, *grownText = nil, *grownScroller = nil, *reportedMiddle;
+  BOOL detached;
+  NSInteger i;
+  NSString *detail;
+
+  [text setString: @"Short"];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setAutohidesScrollers: YES];
+  [scrollView setDocumentView: text];
+  [[window contentView] addSubview: scrollView];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  scroller = [scrollView verticalScroller];
+  detached = ([scroller superview] == nil);
+  overText = [scrollView convertPoint: NSMakePoint (100, 90) toView: nil];
+  nearEdge = [scrollView convertPoint: NSMakePoint (292, 90) toView: nil];
+
+  [window resetCursorRects];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  QuirkProbeMoveMouseForCursor (window, overText);
+  shortMiddle = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, nearEdge);
+  shortEdge = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+
+  for (i = 0; i < 80; i++)
+    {
+      [lines appendFormat: @"Line %ld of text long enough to scroll\n", (long)i];
+    }
+  [text setString: lines];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  if ([scroller superview] == scrollView)
+    {
+      overScroller = [scroller convertPoint: NSMakePoint (NSMidX ([scroller bounds]), NSMidY ([scroller bounds])) toView: nil];
+      QuirkProbeMoveMouseForCursor (window, overScroller);
+      grownScroller = [NSCursor currentCursor];
+      QuirkProbeMoveMouseForCursor (window, overText);
+      grownText = [NSCursor currentCursor];
+    }
+  QuirkProbeMoveMouseForCursor (window, outside);
+  [scrollView removeFromSuperview];
+
+  /* The same short text where the scroll view still says it has the
+     detached scroller: the scroller's frame means nothing then. */
+  {
+    QuirkProbeDetachedScrollerScrollView *reporting
+      = AUTORELEASE ([[QuirkProbeDetachedScrollerScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+    NSTextView *shortText = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+
+    [shortText setString: @"Short"];
+    [reporting setHasVerticalScroller: YES];
+    [reporting setAutohidesScrollers: YES];
+    [reporting setDocumentView: shortText];
+    [[window contentView] addSubview: reporting];
+    [[reporting verticalScroller] removeFromSuperview];
+    [window display];
+    [window resetCursorRects];
+    QuirkProbeMoveMouseForCursor (window, outside);
+    QuirkProbeMoveMouseForCursor (window, overText);
+    reportedMiddle = [NSCursor currentCursor];
+    QuirkProbeMoveMouseForCursor (window, outside);
+  }
+  [window orderOut: nil];
+
+#define QPCursorName(c) ((c) == [NSCursor IBeamCursor] ? @"I-beam" : ((c) == [NSCursor arrowCursor] ? @"arrow" : @"other"))
+  detail = [NSString stringWithFormat: @"scroller %@; short text: %@ in the middle, %@ near the edge; grown: %@ over the scroller, %@ on the text; detached but reported: %@",
+    detached ? @"detached" : @"attached", QPCursorName (shortMiddle), QPCursorName (shortEdge),
+    QPCursorName (grownScroller), QPCursorName (grownText), QPCursorName (reportedMiddle)];
+#undef QPCursorName
+  if (detached == NO)
+    {
+      [self skip: @"autohidden-scroller-cursor" detail: detail];
+    }
+  else if (shortMiddle == [NSCursor IBeamCursor] && shortEdge == [NSCursor IBeamCursor]
+    && grownScroller == [NSCursor arrowCursor] && grownText == [NSCursor IBeamCursor]
+    && reportedMiddle == [NSCursor IBeamCursor])
+    {
+      [self pass: @"autohidden-scroller-cursor" detail: detail];
+    }
+  else
+    {
+      [self fail: @"autohidden-scroller-cursor" detail: detail];
+    }
+}
+
 /* Recessed and textured buttons are libadwaita's .flat buttons: nothing
    behind the label at rest, the foreground at 10% over the window while a
    toggle is on, 16% while pressed. A rounded button keeps its fill.
@@ -10019,6 +10192,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkOverlayScrollerCursor];
+  [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -10046,7 +10220,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
-      [self checkDestructiveButtons];
+  [self checkColumnHeaderColours];
+  [self checkDestructiveButtons];
   [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
@@ -10141,6 +10316,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkOverlayScrollerCursor];
+  [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -10168,6 +10344,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkColumnHeaderColours];
   [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
