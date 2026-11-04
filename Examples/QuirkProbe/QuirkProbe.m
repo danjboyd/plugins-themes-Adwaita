@@ -78,6 +78,18 @@ QuirkProbeUsesPrimaryMenu(void)
   return [style isEqualToString: @"primary"];
 }
 
+/* A scroll view that says it has a vertical scroller even when its autohiding
+   scroller is out of the view tree, as some libs-gui versions do. */
+@interface QuirkProbeDetachedScrollerScrollView : NSScrollView
+@end
+
+@implementation QuirkProbeDetachedScrollerScrollView
+- (BOOL) hasVerticalScroller
+{
+  return YES;
+}
+@end
+
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
@@ -7127,6 +7139,104 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
     }
 }
 
+/* An autohiding scroll view takes its scroller out of the view tree while
+   the text fits: the text keeps its I-beam right up to the edge. When the
+   text grows and the scroller comes back, the scroller has the arrow. */
+- (void) checkAutohiddenScrollerCursor
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Autohidden Scroller"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  NSTextView *text = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+  NSMutableString *lines = [NSMutableString string];
+  NSScroller *scroller;
+  NSPoint overText, nearEdge, overScroller, outside = NSMakePoint (-30, -30);
+  NSCursor *shortMiddle, *shortEdge, *grownText = nil, *grownScroller = nil, *reportedMiddle;
+  BOOL detached;
+  NSInteger i;
+  NSString *detail;
+
+  [text setString: @"Short"];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setAutohidesScrollers: YES];
+  [scrollView setDocumentView: text];
+  [[window contentView] addSubview: scrollView];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  scroller = [scrollView verticalScroller];
+  detached = ([scroller superview] == nil);
+  overText = [scrollView convertPoint: NSMakePoint (100, 90) toView: nil];
+  nearEdge = [scrollView convertPoint: NSMakePoint (292, 90) toView: nil];
+
+  [window resetCursorRects];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  QuirkProbeMoveMouseForCursor (window, overText);
+  shortMiddle = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, nearEdge);
+  shortEdge = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+
+  for (i = 0; i < 80; i++)
+    {
+      [lines appendFormat: @"Line %ld of text long enough to scroll\n", (long)i];
+    }
+  [text setString: lines];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  if ([scroller superview] == scrollView)
+    {
+      overScroller = [scroller convertPoint: NSMakePoint (NSMidX ([scroller bounds]), NSMidY ([scroller bounds])) toView: nil];
+      QuirkProbeMoveMouseForCursor (window, overScroller);
+      grownScroller = [NSCursor currentCursor];
+      QuirkProbeMoveMouseForCursor (window, overText);
+      grownText = [NSCursor currentCursor];
+    }
+  QuirkProbeMoveMouseForCursor (window, outside);
+  [scrollView removeFromSuperview];
+
+  /* The same short text where the scroll view still says it has the
+     detached scroller: the scroller's frame means nothing then. */
+  {
+    QuirkProbeDetachedScrollerScrollView *reporting
+      = AUTORELEASE ([[QuirkProbeDetachedScrollerScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+    NSTextView *shortText = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+
+    [shortText setString: @"Short"];
+    [reporting setHasVerticalScroller: YES];
+    [reporting setAutohidesScrollers: YES];
+    [reporting setDocumentView: shortText];
+    [[window contentView] addSubview: reporting];
+    [[reporting verticalScroller] removeFromSuperview];
+    [window display];
+    [window resetCursorRects];
+    QuirkProbeMoveMouseForCursor (window, outside);
+    QuirkProbeMoveMouseForCursor (window, overText);
+    reportedMiddle = [NSCursor currentCursor];
+    QuirkProbeMoveMouseForCursor (window, outside);
+  }
+  [window orderOut: nil];
+
+#define QPCursorName(c) ((c) == [NSCursor IBeamCursor] ? @"I-beam" : ((c) == [NSCursor arrowCursor] ? @"arrow" : @"other"))
+  detail = [NSString stringWithFormat: @"scroller %@; short text: %@ in the middle, %@ near the edge; grown: %@ over the scroller, %@ on the text; detached but reported: %@",
+    detached ? @"detached" : @"attached", QPCursorName (shortMiddle), QPCursorName (shortEdge),
+    QPCursorName (grownScroller), QPCursorName (grownText), QPCursorName (reportedMiddle)];
+#undef QPCursorName
+  if (detached == NO)
+    {
+      [self skip: @"autohidden-scroller-cursor" detail: detail];
+    }
+  else if (shortMiddle == [NSCursor IBeamCursor] && shortEdge == [NSCursor IBeamCursor]
+    && grownScroller == [NSCursor arrowCursor] && grownText == [NSCursor IBeamCursor]
+    && reportedMiddle == [NSCursor IBeamCursor])
+    {
+      [self pass: @"autohidden-scroller-cursor" detail: detail];
+    }
+  else
+    {
+      [self fail: @"autohidden-scroller-cursor" detail: detail];
+    }
+}
+
 /* Recessed and textured buttons are libadwaita's .flat buttons: nothing
    behind the label at rest, the foreground at 10% over the window while a
    toggle is on, 16% while pressed. A rounded button keeps its fill.
@@ -9901,6 +10011,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkOverlayScrollerCursor];
+  [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -10021,6 +10132,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkTemplateImages];
   [self checkOverlayScrollers];
   [self checkOverlayScrollerCursor];
+  [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];

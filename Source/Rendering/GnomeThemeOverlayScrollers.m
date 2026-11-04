@@ -728,7 +728,10 @@ GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
    the scroller from outside the window enters both rects at once, and
    libs-gui's order leaves the text view's I-beam on top. Done here rather
    than in NSTextView, which installing an override would initialize while
-   the theme loads. */
+   the theme loads. An autohiding scroll view takes its scroller out of
+   the view tree while the content fits, without hiding it: there's nothing
+   to stop at then, and converting from it is wrong (a libs-gui that returns
+   the rect unchanged left the text no I-beam at all; another one asserts). */
 - (void) _overrideNSViewMethod_addCursorRect: (NSRect)rect cursor: (NSCursor *)cursor
 {
   typedef void (*AddIMP)(id, SEL, NSRect, NSCursor *);
@@ -741,13 +744,15 @@ GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
       NSScroller *vertical = [scrollView hasVerticalScroller] ? [scrollView verticalScroller] : nil;
       NSScroller *horizontal = [scrollView hasHorizontalScroller] ? [scrollView horizontalScroller] : nil;
 
-      if (vertical != nil && [vertical isHidden] == NO)
+      if (vertical != nil && [vertical isHidden] == NO && [vertical superview] == scrollView
+        && [view window] != nil && [vertical window] == [view window])
         {
           NSRect strip = [view convertRect: [vertical bounds] fromView: vertical];
 
           rect.size.width = MAX (0.0, MIN (NSMaxX (rect), NSMinX (strip)) - NSMinX (rect));
         }
-      if (horizontal != nil && [horizontal isHidden] == NO)
+      if (horizontal != nil && [horizontal isHidden] == NO && [horizontal superview] == scrollView
+        && [view window] != nil && [horizontal window] == [view window])
         {
           NSRect strip = [view convertRect: [horizontal bounds] fromView: horizontal];
 
