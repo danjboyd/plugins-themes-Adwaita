@@ -3248,6 +3248,99 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   return [NSString stringWithFormat: @"fill %@, text %@", QuirkProbeHex (fill), QuirkProbeHex (ink)];
 }
 
+/* With a libs-gui that has -[NSButton setHasDestructiveAction:]: the flag
+   itself, on a window's button and through NSAlert to its panel's button.
+   Skipped on one without it, where only the stand-in below can be checked. */
+- (void) sampleRealDestructiveAlert: (NSTimer *)timer
+{
+  NSWindow *panel = [NSApp modalWindow];
+  NSEnumerator *enumerator = [[[panel contentView] subviews] objectEnumerator];
+  NSView *view;
+
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSButton class]] && [[(NSButton *)view title] isEqualToString: @"Delete"])
+        {
+          NSUInteger fill[3], ink[3], windowRGB[3];
+          NSString *detail;
+          BOOL dark;
+
+          [panel display];
+          QuirkProbePixelAt (QuirkProbeRender ([panel contentView]), 2, 2, windowRGB);
+          dark = (windowRGB[0] < 128);
+          detail = [self destructiveSampleOf: (NSButton *)view fill: fill ink: ink];
+          if ((dark ? (ink[0] > 0xf0 && labs ((long)ink[1] - 0x93) <= 12) : (labs ((long)ink[0] - 0xc3) <= 12 && ink[1] < 0x30))
+            && fill[0] > fill[2] + 8 && fill[0] > fill[1] + 8)
+            {
+              [self pass: @"destructive-real-alert" detail: detail];
+            }
+          else
+            {
+              [self fail: @"destructive-real-alert" detail: detail];
+            }
+          [NSApp abortModal];
+          return;
+        }
+    }
+  [self fail: @"destructive-real-alert" detail: @"no Delete button in the running alert"];
+  [NSApp abortModal];
+}
+
+- (void) checkRealDestructiveFlag
+{
+  NSWindow *window;
+  NSButton *button;
+  NSAlert *alert;
+  NSButton *delete;
+  NSUInteger fill[3], ink[3], windowRGB[3];
+  NSString *detail;
+  BOOL dark;
+  void (*setFlag)(id, SEL, BOOL);
+
+  if ([NSButton instancesRespondToSelector: @selector(setHasDestructiveAction:)] == NO)
+    {
+      [self skip: @"destructive-real-button" detail: @"this libs-gui has no -setHasDestructiveAction:"];
+      [self skip: @"destructive-real-alert" detail: @"this libs-gui has no -setHasDestructiveAction:"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 60, 220, 80) title: @"QuirkProbe Destructive flag"];
+  button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 140, 34)]);
+  [button setBezelStyle: NSRoundedBezelStyle];
+  [button setTitle: @"Delete"];
+  setFlag = (void (*)(id, SEL, BOOL))[button methodForSelector: @selector(setHasDestructiveAction:)];
+  setFlag (button, @selector(setHasDestructiveAction:), YES);
+  [[window contentView] addSubview: button];
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  dark = (windowRGB[0] < 128);
+  detail = [self destructiveSampleOf: button fill: fill ink: ink];
+  [window orderOut: nil];
+  if (labs ((long)fill[0] - (dark ? 0xc0 : 0xe0)) <= 6 && fill[1] < 0x30 && fill[2] < 0x40
+    && ink[0] > 235 && ink[1] > 235 && ink[2] > 235)
+    {
+      [self pass: @"destructive-real-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-real-button" detail: detail];
+    }
+
+  alert = AUTORELEASE ([[NSAlert alloc] init]);
+  [alert setMessageText: @"Delete “Report.md”?"];
+  [alert setInformativeText: @"It will be moved to the trash."];
+  delete = [alert addButtonWithTitle: @"Delete"];
+  [alert addButtonWithTitle: @"Cancel"];
+  setFlag (delete, @selector(setHasDestructiveAction:), YES);
+  [[NSRunLoop currentRunLoop] addTimer: [NSTimer timerWithTimeInterval: 0.3
+                                                                target: self
+                                                              selector: @selector(sampleRealDestructiveAlert:)
+                                                              userInfo: nil
+                                                               repeats: NO]
+                               forMode: NSModalPanelRunLoopMode];
+  [alert runModal];
+}
+
 - (void) checkDestructiveButtons
 {
   NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 220, 80) title: @"QuirkProbe Destructive"];
@@ -10221,7 +10314,6 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkComboSeparator];
   [self checkBoxes];
   [self checkColumnHeaderColours];
-  [self checkDestructiveButtons];
   [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
@@ -10268,6 +10360,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkColorWell];
   [self checkColorWellEdge];
   [self checkDestructiveButtons];
+  [self checkRealDestructiveFlag];
   [self checkThemeImages2x];
   [self checkLabels];
   [self checkToolbar];
