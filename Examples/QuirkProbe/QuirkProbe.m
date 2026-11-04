@@ -3286,6 +3286,69 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* Column headers as libadwaita's: the foreground at 40% over the list (60%
+   in high contrast), and
+   no sorted state, so a highlighted column's title is as dim as another's. */
+- (void) checkColumnHeaderColours
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 140) title: @"Probe Header Colours"];
+  NSScrollView *scroll = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 120)]);
+  NSTableView *table = AUTORELEASE ([[NSTableView alloc] initWithFrame: NSMakeRect (0, 0, 300, 120)]);
+  NSTableColumn *name = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"name"]);
+  NSTableColumn *size = AUTORELEASE ([[NSTableColumn alloc] initWithIdentifier: @"size"]);
+  NSBitmapImageRep *rep;
+  NSUInteger fill[3], px[3];
+  long sortedInk = 0, plainInk = 0, want, background;
+  NSInteger x, y;
+  NSString *detail;
+  BOOL dark, highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+
+  [[name headerCell] setStringValue: @"Name"];
+  [[size headerCell] setStringValue: @"Size"];
+  [name setWidth: 150];
+  [size setWidth: 150];
+  [table addTableColumn: name];
+  [table addTableColumn: size];
+  [scroll setHasVerticalScroller: YES];
+  [scroll setDocumentView: table];
+  [[window contentView] addSubview: scroll];
+  [table setHighlightedTableColumn: name];
+  [window orderFront: nil];
+  [window display];
+  rep = QuirkProbeRender ([table headerView]);
+  QuirkProbePixelAt (rep, 120, [rep pixelsHigh] / 2, fill);
+  background = (long)fill[0];
+  dark = (background < 128);
+  /* The strongest ink in each column's title. */
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < 100; x++)
+        {
+          long a, b;
+
+          QuirkProbePixelAt (rep, x, y, px);
+          a = labs ((long)px[0] - background);
+          QuirkProbePixelAt (rep, x + 150, y, px);
+          b = labs ((long)px[0] - background);
+          sortedInk = MAX (sortedInk, a);
+          plainInk = MAX (plainInk, b);
+        }
+    }
+  [window orderOut: nil];
+  /* #adadaf on #ffffff; #777779 on #1d1d20; at 60% in high contrast. */
+  want = dark ? (highContrast ? 136 : 0x77 - 0x1d) : (highContrast ? 123 : 0xff - 0xad);
+  detail = [NSString stringWithFormat: @"on %@: sorted title %ld from the fill, another %ld, want %ld",
+    QuirkProbeHex (fill), sortedInk, plainInk, want];
+  if (labs (sortedInk - plainInk) <= 6 && labs (plainInk - want) <= 8)
+    {
+      [self pass: @"column-header-colours" detail: detail];
+    }
+  else
+    {
+      [self fail: @"column-header-colours" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -9928,6 +9991,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkColumnHeaderColours];
   [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
@@ -10048,6 +10112,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkColumnHeaderColours];
   [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
