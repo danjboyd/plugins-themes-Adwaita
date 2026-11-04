@@ -62,6 +62,18 @@ static NSString *QuirkProbePath =
 /* Seconds to let windows lay out and draw before measuring. */
 static const NSTimeInterval QuirkProbeSettleDelay = 0.8;
 
+/* Stands in for libs-gui's coming -[NSButton(Cell) hasDestructiveAction]
+   (Docs/design/destructive-button-api.md): a cell that says YES. */
+@interface QuirkProbeDestructiveCell : NSButtonCell
+@end
+
+@implementation QuirkProbeDestructiveCell
+- (BOOL) hasDestructiveAction
+{
+  return YES;
+}
+@end
+
 /* Whether the run has GNOME's primary menu: -GnomeThemeMenuStyle primary,
    or no menu style at all with -ProbeMenuDefault YES (the theme's
    default). */
@@ -214,12 +226,52 @@ QuirkProbeIsAccentBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
   return blue > red + 30 && blue > green + 10;
 }
 
+/* A libs-gui with Cocoa's -cacheDisplayInRect: draws only the view, over
+   what the bitmap holds, where the older one's result included the window's
+   background. The checks measure against that background, so give it to
+   both. */
+void
+QuirkProbeFillWithBackground (NSBitmapImageRep *rep, NSView *view)
+{
+  NSColor *background = [[view window] backgroundColor];
+  unsigned char *data = [rep bitmapData];
+  NSInteger samples = [rep samplesPerPixel];
+  NSInteger perRow = [rep bytesPerRow];
+  NSInteger x, y;
+
+  if (background == nil)
+    {
+      background = [NSColor windowBackgroundColor];
+    }
+  background = [background colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  if (background == nil)
+    {
+      return;
+    }
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < [rep pixelsWide]; x++)
+        {
+          unsigned char *pixel = data + y * perRow + x * samples;
+
+          pixel[0] = (unsigned char)lround ([background redComponent] * 255.0);
+          pixel[1] = (unsigned char)lround ([background greenComponent] * 255.0);
+          pixel[2] = (unsigned char)lround ([background blueComponent] * 255.0);
+          if (samples > 3)
+            {
+              pixel[3] = 255;
+            }
+        }
+    }
+}
+
 static NSBitmapImageRep *
 QuirkProbeRender (NSView *view)
 {
   NSRect bounds = [view bounds];
   NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect: bounds];
 
+  QuirkProbeFillWithBackground (rep, view);
   [view cacheDisplayInRect: bounds toBitmapImageRep: rep];
   return rep;
 }
@@ -3206,6 +3258,234 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* A destructive button: in a window, libadwaita's .destructive-action
+   (destructive_bg_color, white text); in an alert, AdwAlertDialog's
+   destructive response (destructive_color at 15% over the dialog, the
+   text in it). Sampled at the fill's left edge and by the text's ink. */
+- (NSString *) destructiveSampleOf: (NSButton *)button fill: (NSUInteger *)fill ink: (NSUInteger *)ink
+{
+  NSBitmapImageRep *rep = QuirkProbeRender (button);
+  NSInteger x, y, best = -1;
+
+  QuirkProbePixelAt (rep, 6, [rep pixelsHigh] / 2, fill);
+  ink[0] = fill[0]; ink[1] = fill[1]; ink[2] = fill[2];
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 12; x < [rep pixelsWide] - 12; x++)
+        {
+          NSUInteger px[3];
+          NSInteger d;
+
+          QuirkProbePixelAt (rep, x, y, px);
+          d = labs ((long)px[0] - (long)fill[0]) + labs ((long)px[1] - (long)fill[1]) + labs ((long)px[2] - (long)fill[2]);
+          if (d > best)
+            {
+              best = d;
+              ink[0] = px[0]; ink[1] = px[1]; ink[2] = px[2];
+            }
+        }
+    }
+  return [NSString stringWithFormat: @"fill %@, text %@", QuirkProbeHex (fill), QuirkProbeHex (ink)];
+}
+
+/* With a libs-gui that has -[NSButton setHasDestructiveAction:]: the flag
+   itself, on a window's button and through NSAlert to its panel's button.
+   Skipped on one without it, where only the stand-in below can be checked. */
+/* -abortModal only marks the run: an event lets it notice. */
+- (void) endRealDestructiveAlert
+{
+  [NSApp abortModal];
+  [NSApp postEvent: [NSEvent otherEventWithType: NSApplicationDefined
+                                       location: NSZeroPoint
+                                  modifierFlags: 0
+                                      timestamp: 0
+                                   windowNumber: 0
+                                        context: nil
+                                        subtype: 0
+                                          data1: 0
+                                          data2: 0]
+           atStart: NO];
+}
+
+- (void) sampleRealDestructiveAlert: (NSTimer *)timer
+{
+  static BOOL sampled = NO;
+  NSWindow *panel = [NSApp modalWindow];
+
+  /* The timer repeats until the run has ended. */
+  if (sampled)
+    {
+      [self endRealDestructiveAlert];
+      return;
+    }
+  sampled = YES;
+  {
+  NSEnumerator *enumerator = [[[panel contentView] subviews] objectEnumerator];
+  NSView *view;
+
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSButton class]] && [[(NSButton *)view title] isEqualToString: @"Delete"])
+        {
+          NSUInteger fill[3], ink[3], windowRGB[3];
+          NSString *detail;
+          BOOL dark;
+
+          [panel display];
+          QuirkProbePixelAt (QuirkProbeRender ([panel contentView]), 2, 2, windowRGB);
+          dark = (windowRGB[0] < 128);
+          detail = [self destructiveSampleOf: (NSButton *)view fill: fill ink: ink];
+          if ((dark ? (ink[0] > 0xf0 && labs ((long)ink[1] - 0x93) <= 12) : (labs ((long)ink[0] - 0xc3) <= 12 && ink[1] < 0x30))
+            && fill[0] > fill[2] + 8 && fill[0] > fill[1] + 8)
+            {
+              [self pass: @"destructive-real-alert" detail: detail];
+            }
+          else
+            {
+              [self fail: @"destructive-real-alert" detail: detail];
+            }
+          [self endRealDestructiveAlert];
+          return;
+        }
+    }
+  [self fail: @"destructive-real-alert" detail: @"no Delete button in the running alert"];
+  [self endRealDestructiveAlert];
+  }
+}
+
+- (void) checkRealDestructiveFlag
+{
+  NSWindow *window;
+  NSButton *button;
+  NSAlert *alert;
+  NSButton *delete;
+  NSUInteger fill[3], ink[3], windowRGB[3];
+  NSString *detail;
+  BOOL dark;
+  void (*setFlag)(id, SEL, BOOL);
+  NSTimer *timer;
+
+  if ([NSButton instancesRespondToSelector: @selector(setHasDestructiveAction:)] == NO)
+    {
+      [self skip: @"destructive-real-button" detail: @"this libs-gui has no -setHasDestructiveAction:"];
+      [self skip: @"destructive-real-alert" detail: @"this libs-gui has no -setHasDestructiveAction:"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 60, 220, 80) title: @"QuirkProbe Destructive flag"];
+  button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 140, 34)]);
+  [button setBezelStyle: NSRoundedBezelStyle];
+  [button setTitle: @"Delete"];
+  setFlag = (void (*)(id, SEL, BOOL))[button methodForSelector: @selector(setHasDestructiveAction:)];
+  setFlag (button, @selector(setHasDestructiveAction:), YES);
+  [[window contentView] addSubview: button];
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  dark = (windowRGB[0] < 128);
+  detail = [self destructiveSampleOf: button fill: fill ink: ink];
+  [window orderOut: nil];
+  if (labs ((long)fill[0] - (dark ? 0xc0 : 0xe0)) <= 6 && fill[1] < 0x30 && fill[2] < 0x40
+    && ink[0] > 235 && ink[1] > 235 && ink[2] > 235)
+    {
+      [self pass: @"destructive-real-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-real-button" detail: detail];
+    }
+
+  alert = AUTORELEASE ([[NSAlert alloc] init]);
+  [alert setMessageText: @"Delete “Report.md”?"];
+  [alert setInformativeText: @"It will be moved to the trash."];
+  delete = [alert addButtonWithTitle: @"Delete"];
+  [alert addButtonWithTitle: @"Cancel"];
+  setFlag (delete, @selector(setHasDestructiveAction:), YES);
+  timer = [NSTimer timerWithTimeInterval: 0.3
+                                  target: self
+                                selector: @selector(sampleRealDestructiveAlert:)
+                                userInfo: nil
+                                 repeats: YES];
+  [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSModalPanelRunLoopMode];
+  [alert runModal];
+  [timer invalidate];
+}
+
+- (void) checkDestructiveButtons
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 220, 80) title: @"QuirkProbe Destructive"];
+  NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: NSMakeRect (20, 20, 140, 34)]);
+  QuirkProbeDestructiveCell *cell = AUTORELEASE ([[QuirkProbeDestructiveCell alloc] initTextCell: @"Delete"]);
+  NSPanel *alert;
+  NSButton *alertButton = nil;
+  NSEnumerator *enumerator;
+  NSView *view;
+  NSUInteger fill[3], ink[3], windowRGB[3];
+  NSString *detail;
+  BOOL dark;
+
+  [cell setBezelStyle: NSRoundedBezelStyle];
+  [button setCell: cell];
+  [[window contentView] addSubview: button];
+  [window orderFront: nil];
+  [window display];
+  QuirkProbePixelAt (QuirkProbeRender ([window contentView]), 2, 2, windowRGB);
+  dark = (windowRGB[0] < 128);
+  detail = [self destructiveSampleOf: button fill: fill ink: ink];
+  [window orderOut: nil];
+  /* destructive_bg_color: #e01b24 (light) or #c01c28 (dark), white text. */
+  if (labs ((long)fill[0] - (dark ? 0xc0 : 0xe0)) <= 6 && fill[1] < 0x30 && fill[2] < 0x40
+    && ink[0] > 235 && ink[1] > 235 && ink[2] > 235)
+    {
+      [self pass: @"destructive-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-button" detail: detail];
+    }
+
+  /* The alert's first button made destructive, as NSAlert will when
+     libs-gui copies the flag to its panel. */
+  alert = NSGetAlertPanel (@"Delete “Report.md”?", @"It will be moved to the trash.", @"Delete", @"Cancel", nil);
+  enumerator = [[[alert contentView] subviews] objectEnumerator];
+  while ((view = [enumerator nextObject]) != nil)
+    {
+      if ([view isKindOfClass: [NSButton class]] && [[(NSButton *)view title] isEqualToString: @"Delete"])
+        {
+          alertButton = (NSButton *)view;
+        }
+    }
+  if (alertButton == nil)
+    {
+      [self fail: @"destructive-alert-button" detail: @"no Delete button in the alert panel"];
+      NSReleaseAlertPanel (alert);
+      return;
+    }
+  {
+    QuirkProbeDestructiveCell *alertCell = AUTORELEASE ([[QuirkProbeDestructiveCell alloc] initTextCell: @"Delete"]);
+
+    [alertCell setBezelStyle: [[alertButton cell] bezelStyle]];
+    [alertCell setKeyEquivalent: [alertButton keyEquivalent]];
+    [alertCell setFont: [alertButton font]];
+    [alertButton setCell: alertCell];
+  }
+  [alert orderFront: nil];
+  [alert display];
+  detail = [self destructiveSampleOf: alertButton fill: fill ink: ink];
+  [alert orderOut: nil];
+  NSReleaseAlertPanel (alert);
+  /* destructive_color #c30000 (light) or #ff938c (dark) for the text, at
+     15% over the dialog for the fill: a red tint, not the accent blue. */
+  if ((dark ? (ink[0] > 0xf0 && labs ((long)ink[1] - 0x93) <= 12) : (labs ((long)ink[0] - 0xc3) <= 12 && ink[1] < 0x30))
+    && fill[0] > fill[2] + 8 && fill[0] > fill[1] + 8)
+    {
+      [self pass: @"destructive-alert-button" detail: detail];
+    }
+  else
+    {
+      [self fail: @"destructive-alert-button" detail: detail];
+    }
+}
+
 /* The theme's GSFontHinting: hinted metrics (high nibble 2) at scale 1,
    whole-pixel advances; metrics hinting off (1) when GSScaleFactor isn't
    1, as libs-back's own default, since hinted advances at a scale run
@@ -4770,6 +5050,9 @@ static NSString *QuirkProbeOverflowShown = nil;
   [reference setDrawsBackground: NO];
   [view addSubview: reference];
 
+  /* libs-gui after 0.32 doesn't autosize a matrix by default, as AppKit's
+     doesn't, so the form's cell keeps its default size without this. */
+  [form setCellSize: NSMakeSize (260, 24)];
   [form addEntry: @"Title:"];
   [form setBezeled: YES];
   [view addSubview: form];
@@ -8160,7 +8443,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
       [self fail: @"ruler-marks" detail: @"no ruler"];
       return;
     }
-  rep = QuirkProbeRender (ruler);
+  /* What the window shows, not a bitmap render: the theme recolours the
+     marks by reading its own pixels back, which only a screen has. */
+  [ruler lockFocus];
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: [ruler bounds]]);
+  [ruler unlockFocus];
   QuirkProbePixelAt (rep, [rep pixelsWide] - 30, 2, rulerRGB);
   QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
   marks = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSZeroRect);
@@ -10231,6 +10518,8 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkSteppers];
   [self checkColorWell];
   [self checkColorWellEdge];
+  [self checkDestructiveButtons];
+  [self checkRealDestructiveFlag];
   [self checkThemeImages2x];
   [self checkLabels];
   [self checkToolbar];

@@ -1910,6 +1910,39 @@ static char GnomeThemeButtonStyleKey;
 
 @end
 
+/* Apple's -[NSButton hasDestructiveAction] (macOS 11), which libs-gui
+   doesn't have yet (Docs/design/destructive-button-api.md): asked of the
+   cell, then of its button, only where it answers, so the theme builds and
+   runs on a libs-gui without it. */
+@interface NSObject (GnomeThemeDestructiveAction)
+- (BOOL) hasDestructiveAction;
+@end
+
+static BOOL
+GnomeThemeButtonCellIsDestructive(NSCell *cell, NSView *view)
+{
+  if ([cell respondsToSelector: @selector(hasDestructiveAction)])
+    {
+      return [(id)cell hasDestructiveAction];
+    }
+  if ([view isKindOfClass: [NSButton class]] && [(NSButton *)view cell] == cell
+    && [view respondsToSelector: @selector(hasDestructiveAction)])
+    {
+      return [(id)view hasDestructiveAction];
+    }
+  return NO;
+}
+
+/* Whether the button is one of an alert's (GSAlertPanel, drawn as
+   AdwAlertDialog). */
+static BOOL
+GnomeThemeViewIsInAlert(NSView *view)
+{
+  Class alertPanel = NSClassFromString (@"GSAlertPanel");
+
+  return alertPanel != Nil && [[view window] isKindOfClass: alertPanel];
+}
+
 BOOL
 GnomeThemeButtonCellHasAccentStyle(NSCell *cell)
 {
@@ -2224,6 +2257,28 @@ GnomeThemeDrawTabLabel(NSString *label,
       else if (highlighted)
         {
           fillColor = pressedFill;
+        }
+    }
+  else if (disabled == NO && GnomeThemeButtonCellIsDestructive (cell, view))
+    {
+      /* A destructive button. In an alert, AdwAlertDialog's destructive
+         response: destructive_color at 15% over the dialog, the text in it
+         (#c30000 or #ff938c, measured from GTK), and not the default
+         button's blue. Elsewhere libadwaita's .destructive-action:
+         destructive_bg_color with white text. Pressed, as the accent
+         button is, darker. */
+      NSColor *red = GnomeThemeColor (self, @"GnomeThemeErrorColor", [NSColor redColor]);
+
+      if (GnomeThemeViewIsInAlert (view))
+        {
+          NSColor *text = GnomeThemeColor (self, @"GnomeThemeDestructiveTextColor", red);
+          NSColor *window = GnomeThemeColor (self, @"windowBackgroundColor", [NSColor windowBackgroundColor]);
+
+          fillColor = GnomeThemeBlend (window, text, (highlighted || momentaryPressed) ? 0.3 : 0.15);
+        }
+      else
+        {
+          fillColor = (highlighted || momentaryPressed) ? GnomeThemeBlend (red, [NSColor blackColor], 0.18) : red;
         }
     }
   else if (disabled && GnomeThemeButtonCellHasAccentStyle (cell))
@@ -5997,7 +6052,14 @@ GnomeThemeIsDropDownComboBox(id view)
         }
       defaultButton = defaultButton || GnomeThemeButtonCellHasAccentStyle (cell);
 
-      if (defaultButton && enabled)
+      if (enabled && GnomeThemeButtonCellIsDestructive (cell, controlView))
+        {
+          /* As the bezel: destructive_color in an alert, white elsewhere. */
+          textColor = GnomeThemeViewIsInAlert (controlView)
+            ? GnomeThemeColor (GnomeThemeActiveTheme (), @"GnomeThemeDestructiveTextColor", [NSColor redColor])
+            : [NSColor whiteColor];
+        }
+      else if (defaultButton && enabled)
         {
           textColor = [NSColor selectedControlTextColor];
         }

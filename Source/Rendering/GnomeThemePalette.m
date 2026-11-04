@@ -96,6 +96,9 @@ GnomeThemePopulateLightPalette(NSColorList *colors)
   /* libadwaita's warning_bg_color and error_bg_color (yellow_5, red_3). */
   [colors setColor: GnomeThemeColorFromHex (@"#e5a50a") forKey: @"GnomeThemeWarningColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#e01b24") forKey: @"GnomeThemeErrorColor"];
+  /* libadwaita's destructive_color, for destructive text: red_3 with its
+     Oklab lightness at most 0.5. */
+  [colors setColor: GnomeThemeColorFromHex (@"#c30000") forKey: @"GnomeThemeDestructiveTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#1c71d8") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#3584e4") forKey: @"highlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#8c8c8c") forKey: @"shadowColor"];
@@ -173,6 +176,9 @@ GnomeThemePopulateDarkPalette(NSColorList *colors)
   /* libadwaita's dark warning_bg_color and error_bg_color (red_4). */
   [colors setColor: GnomeThemeColorFromHex (@"#cd9309") forKey: @"GnomeThemeWarningColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#c01c28") forKey: @"GnomeThemeErrorColor"];
+  /* libadwaita's dark destructive_color: red_4 with its Oklab lightness at
+     least 0.85. */
+  [colors setColor: GnomeThemeColorFromHex (@"#ff938c") forKey: @"GnomeThemeDestructiveTextColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"keyboardFocusIndicatorColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#78aeed") forKey: @"highlightColor"];
   [colors setColor: GnomeThemeColorFromHex (@"#101010") forKey: @"shadowColor"];
