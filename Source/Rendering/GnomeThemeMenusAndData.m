@@ -1304,6 +1304,41 @@ GnomeThemeIsSortIndicatorImage(NSImage *image, BOOL *ascending)
     }
 }
 
+/* A browser's selected row as every other list's: the accent at 25% over
+   the row with the row's own text (highlightedTableRowBackgroundColor).
+   GSTheme filled it with the solid accent and left the text alone, so dark
+   on blue in the light style. Its image and chevron are the selected
+   ones' where a cell has them; GSTheme draws the rest of the cell. Here,
+   not in an NSBrowserCell override: installing one would initialize the
+   class while the theme loads. */
+- (void) drawBrowserInteriorWithFrame: (NSRect)cellFrame
+                             withCell: (NSBrowserCell *)cell
+                               inView: (NSView *)controlView
+                            withImage: (NSImage *)theImage
+                       alternateImage: (NSImage *)alternateImage
+                        isHighlighted: (BOOL)isHighlighted
+                                state: (int)state
+                               isLeaf: (BOOL)isLeaf
+{
+  if (isHighlighted || state)
+    {
+      [GnomeThemeColor (self, @"highlightedTableRowBackgroundColor", [NSColor selectedControlColor]) set];
+      NSRectFill (cellFrame);
+      if (alternateImage != nil)
+        {
+          theImage = alternateImage;
+        }
+    }
+  [super drawBrowserInteriorWithFrame: cellFrame
+                             withCell: cell
+                               inView: controlView
+                            withImage: theImage
+                       alternateImage: nil
+                        isHighlighted: NO
+                                state: 0
+                               isLeaf: isLeaf];
+}
+
 /* NSBrowser's column titles (GNUstep's own Open panel, the font panel):
    GSTheme's are white (windowFrameTextColor, the NeXT title bar's) on a
    light grey bezel, so they didn't show (#72). GNOME has no browser; they

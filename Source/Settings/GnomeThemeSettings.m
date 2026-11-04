@@ -290,6 +290,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   RELEASE (_interfaceFontName);
   RELEASE (_monospaceFontName);
   RELEASE (_gtkThemeName);
+  RELEASE (_accentColorName);
   RELEASE (_buttonLayout);
   RELEASE (_titlebarDoubleClickAction);
   RELEASE (_titlebarMiddleClickAction);
@@ -308,6 +309,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   CGFloat fontSize = 0.0;
   CGFloat monoSize = 0.0;
   GnomeThemeColorScheme colorScheme = GnomeThemeColorSchemeDefault;
+  NSString *accentColor = nil;
   BOOL highContrast = NO;
   BOOL overlayScrolling = YES;
   NSInteger fontHintStyle = 2;
@@ -400,8 +402,28 @@ GnomeThemeResolveFont(NSString *preferredName,
             }
         }
 
+      if (g_settings_schema_has_key (schema, "accent-color"))
+        {
+          gchar *value = g_settings_get_string (settings, "accent-color");
+          if (value != NULL)
+            {
+              accentColor = [NSString stringWithUTF8String: value];
+              g_free (value);
+            }
+        }
+
       g_object_unref (settings);
       g_settings_schema_unref (schema);
+    }
+
+  /* The app's own accent wins over GNOME's, as its color scheme does. */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeAccentColor"] length] > 0)
+    {
+      accentColor = [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeAccentColor"] lowercaseString];
+    }
+  if ([accentColor length] == 0)
+    {
+      accentColor = @"blue";
     }
 
   GnomeThemeParseFontSpec (fontSpec, &fontName, &fontSize);
@@ -497,6 +519,7 @@ GnomeThemeResolveFont(NSString *preferredName,
   _monospaceFontSize = monoSize;
   ASSIGNCOPY (_gtkThemeName, gtkThemeName);
   _colorScheme = colorScheme;
+  ASSIGNCOPY (_accentColorName, accentColor);
   _highContrast = highContrast;
   _overlayScrolling = overlayScrolling;
   _fontHintStyle = fontHintStyle;
@@ -631,6 +654,11 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (BOOL) prefersDarkAppearance
 {
   return (_colorScheme == GnomeThemeColorSchemePreferDark);
+}
+
+- (NSString *) accentColorName
+{
+  return _accentColorName;
 }
 
 - (BOOL) highContrastEnabled

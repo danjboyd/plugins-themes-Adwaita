@@ -74,6 +74,22 @@ static const NSTimeInterval QuirkProbeSettleDelay = 0.8;
 }
 @end
 
+/* Whether the run has GNOME's primary menu: -GnomeThemeMenuStyle primary,
+   or no menu style at all with -ProbeMenuDefault YES (the theme's
+   default). */
+static BOOL
+QuirkProbeUsesPrimaryMenu(void)
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *style = [defaults stringForKey: @"GnomeThemeMenuStyle"];
+
+  if (style == nil)
+    {
+      return [defaults boolForKey: @"ProbeMenuDefault"];
+    }
+  return [style isEqualToString: @"primary"];
+}
+
 /* Ink extent of the pixels a test accepts, in pixels. */
 typedef struct
 {
@@ -3296,6 +3312,98 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* The theme's GSFontHinting: hinted metrics (high nibble 2) at scale 1,
+   whole-pixel advances; metrics hinting off (1) when GSScaleFactor isn't
+   1, as libs-back's own default, since hinted advances at a scale run
+   glyphs together ("mustalign" at 2x). */
+- (void) checkHiDPIFontHinting
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  float scale = [defaults floatForKey: @"GSScaleFactor"];
+  NSInteger hinting = [defaults integerForKey: @"GSFontHinting"];
+  BOOL scaled = (scale != 0.0f && scale != 1.0f);
+  NSInteger want = scaled ? 1 : 2;
+  NSString *detail = [NSString stringWithFormat: @"GSScaleFactor %g: GSFontHinting %ld, metrics nibble %ld (want %ld)",
+    scale, (long)hinting, (long)(hinting >> 4), (long)want];
+
+  if ((hinting >> 4) == want)
+    {
+      [self pass: @"hidpi-font-hinting" detail: detail];
+    }
+  else
+    {
+      [self fail: @"hidpi-font-hinting" detail: detail];
+    }
+}
+
+/* The theme's own images (Resources/ThemeImages) carry a 2x
+   representation, so at GSScaleFactor 2 they're drawn from 32px, not
+   scaled up from 16px: each has a bitmap with twice its point width. The
+   cursors are left out: libs-back takes a cursor's hot spot in pixels. */
+- (void) checkThemeImages2x
+{
+  NSArray *names = [NSArray arrayWithObjects: @"common_Home", @"common_Mount", @"common_Unmount",
+    @"GnomeThemeStarred-symbolic", @"GnomeThemeNonStarred-symbolic", @"NSAscendingSortIndicator",
+    @"NSDescendingSortIndicator", @"GnomeThemeBranch-symbolic", nil];
+  NSMutableArray *missing = [NSMutableArray array];
+  NSEnumerator *enumerator = [names objectEnumerator];
+  NSString *name;
+
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      NSImage *image = [NSImage imageNamed: name];
+      NSEnumerator *reps = [[image representations] objectEnumerator];
+      NSImageRep *rep;
+      BOOL has2x = NO;
+
+      while ((rep = [reps nextObject]) != nil)
+        {
+          if ([rep pixelsWide] >= 2 * [image size].width && [image size].width > 0)
+            {
+              has2x = YES;
+            }
+        }
+      if (has2x == NO)
+        {
+          [missing addObject: image == nil ? [name stringByAppendingString: @" (none)"] : name];
+        }
+    }
+  if ([missing count] == 0)
+    {
+      [self pass: @"theme-images-2x" detail: [NSString stringWithFormat: @"%lu images with a 2x representation",
+        (unsigned long)[names count]]];
+    }
+  else
+    {
+      [self fail: @"theme-images-2x" detail: [NSString stringWithFormat: @"1x only: %@",
+        [missing componentsJoinedByString: @", "]]];
+    }
+}
+
+/* A dimmed label is libadwaita's --dim-opacity over the window: 55%, or
+   90% in high contrast. */
+- (void) checkDimLabelOpacity
+{
+  BOOL highContrast = [[NSUserDefaults standardUserDefaults] boolForKey: @"ProbeHighContrast"];
+  NSColor *window = [[NSColor windowBackgroundColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *text = [[NSColor controlTextColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSColor *dim = [[NSColor secondaryLabelColor] colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  CGFloat span = [text redComponent] - [window redComponent];
+  CGFloat fraction = (span != 0.0) ? ([dim redComponent] - [window redComponent]) / span : 0.0;
+  CGFloat want = highContrast ? 0.9 : 0.55;
+  NSString *detail = [NSString stringWithFormat: @"secondaryLabelColor %.0f%% from the window to the text (want %.0f%%)",
+    fraction * 100.0, want * 100.0];
+
+  if (fabs (fraction - want) <= 0.02)
+    {
+      [self pass: @"dim-label-opacity" detail: detail];
+    }
+  else
+    {
+      [self fail: @"dim-label-opacity" detail: detail];
+    }
+}
+
 static NSImage *QuirkProbeRedImage(NSString *name);
 
 /* How far a segment's label stands out from its fill (r+g+b), whichever
@@ -4316,7 +4424,7 @@ static NSString *QuirkProbeOverflowShown = nil;
   NSString *narrowDetail, *widenDetail;
 
   if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
-    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    || QuirkProbeUsesPrimaryMenu ())
     {
       [self skip: @"menubar-overflow" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
       [self skip: @"menubar-overflow-widens-back" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
@@ -5000,7 +5108,7 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   NSString *afterClose;
 
   if (NSInterfaceStyleForKey (@"NSMenuInterfaceStyle", nil) != NSWindows95InterfaceStyle
-    || [[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+    || QuirkProbeUsesPrimaryMenu ())
     {
       [self skip: @"menubar-click-opens" detail: @"needs the menu bar (NSWindows95InterfaceStyle, not primary)"];
       return;
@@ -5251,9 +5359,9 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   NSRect buttonInWindow;
   NSEvent *click;
 
-  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"] == NO)
+  if (QuirkProbeUsesPrimaryMenu () == NO)
     {
-      [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary"];
+      [self skip: @"primary-menu" detail: @"needs -GnomeThemeMenuStyle primary or -ProbeMenuDefault YES"];
       return;
     }
 
@@ -7022,6 +7130,118 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
   else
     {
       [self fail: @"browser-lists" detail: detail];
+    }
+}
+
+/* A browser's selected row is every other list's selection, not the solid
+   accent: the table's selected-row colour, with the text colour unchanged
+   and well apart from the fill. */
+- (void) checkBrowserSelection
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Browser Selection"];
+  NSBrowser *browser = AUTORELEASE ([[NSBrowser alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  QuirkProbeBrowserDelegate *delegate = AUTORELEASE ([QuirkProbeBrowserDelegate new]);
+  NSColor *want = [[NSColor colorWithCatalogName: @"System" colorName: @"highlightedTableRowBackgroundColor"]
+                    colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  NSMatrix *matrix;
+  NSScrollView *scrollView;
+  NSBitmapImageRep *rep;
+  NSUInteger rowRGB[3];
+  NSInteger y;
+  long wantRed, wantBlue;
+  NSString *detail;
+
+  [browser setDelegate: delegate];
+  [browser setTitled: NO];
+  [browser setMaxVisibleColumns: 2];
+  [[window contentView] addSubview: browser];
+  [browser loadColumnZero];
+  [browser selectRow: 0 inColumn: 0];
+  [window orderFront: nil];
+  [window display];
+  matrix = [browser matrixInColumn: 0];
+  scrollView = [matrix enclosingScrollView];
+  rep = QuirkProbeRender ([scrollView contentView]);
+  y = (NSInteger)NSMidY ([matrix convertRect: [matrix cellFrameAtRow: 0 column: 0] toView: [scrollView contentView]])
+    - (NSInteger)NSMinY ([[scrollView contentView] bounds]);
+  if ([[scrollView contentView] isFlipped] == NO)
+    {
+      y = [rep pixelsHigh] - 1 - y;
+    }
+  QuirkProbePixelAt (rep, [rep pixelsWide] / 2, y, rowRGB);
+  [window orderOut: nil];
+  wantRed = lround ([want redComponent] * 255.0);
+  wantBlue = lround ([want blueComponent] * 255.0);
+  detail = [NSString stringWithFormat: @"selected row %@, want r %ld b %ld (a table's selected row)",
+    QuirkProbeHex (rowRGB), wantRed, wantBlue];
+  if (want != nil && labs ((long)rowRGB[0] - wantRed) <= 3 && labs ((long)rowRGB[2] - wantBlue) <= 3)
+    {
+      [self pass: @"browser-selection" detail: detail];
+    }
+  else
+    {
+      [self fail: @"browser-selection" detail: detail];
+    }
+}
+
+/* Over a text view's overlay scroller the cursor is the arrow, not the
+   text view's I-beam, whether the pointer comes from the text or straight
+   from outside the window; back over the text it's the I-beam. */
+- (void) checkOverlayScrollerCursor
+{
+  NSWindow *window = [self windowWithFrame: NSMakeRect (60, 60, 320, 200) title: @"Probe Scroller Cursor"];
+  NSScrollView *scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 300, 180)]);
+  NSTextView *text = AUTORELEASE ([[NSTextView alloc] initWithFrame: NSMakeRect (0, 0, 300, 180)]);
+  NSMutableString *lines = [NSMutableString string];
+  NSScroller *scroller;
+  NSPoint overScroller, overText, outside;
+  NSCursor *fromText, *backOnText, *fromOutside;
+  NSInteger i;
+  NSString *detail;
+
+  for (i = 0; i < 80; i++)
+    {
+      [lines appendFormat: @"Line %ld of text long enough to scroll\n", (long)i];
+    }
+  [text setString: lines];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setDocumentView: text];
+  [[window contentView] addSubview: scrollView];
+  [window makeKeyAndOrderFront: nil];
+  [window display];
+  [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: QuirkProbeSettleDelay]];
+  scroller = [scrollView verticalScroller];
+  if (NSWidth ([scroller frame]) <= 0.0 || NSMinX ([scroller frame]) >= NSWidth ([scrollView bounds]) - 1.0)
+    {
+      [window orderOut: nil];
+      [self skip: @"overlay-scroller-cursor" detail: @"no scroller on screen"];
+      return;
+    }
+  overScroller = [scroller convertPoint: NSMakePoint (NSMidX ([scroller bounds]), NSMidY ([scroller bounds])) toView: nil];
+  overText = [scrollView convertPoint: NSMakePoint (100, 90) toView: nil];
+  outside = NSMakePoint (-30, -30);
+
+  QuirkProbeMoveMouseForCursor (window, overText);
+  QuirkProbeMoveMouseForCursor (window, overScroller);
+  fromText = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, overText);
+  backOnText = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  QuirkProbeMoveMouseForCursor (window, overScroller);
+  fromOutside = [NSCursor currentCursor];
+  QuirkProbeMoveMouseForCursor (window, outside);
+  [window orderOut: nil];
+  detail = [NSString stringWithFormat: @"over the scroller from the text: %@; back on the text: %@; over the scroller from outside: %@",
+    fromText == [NSCursor arrowCursor] ? @"arrow" : (fromText == [NSCursor IBeamCursor] ? @"I-beam" : @"other"),
+    backOnText == [NSCursor IBeamCursor] ? @"I-beam" : (backOnText == [NSCursor arrowCursor] ? @"arrow" : @"other"),
+    fromOutside == [NSCursor arrowCursor] ? @"arrow" : (fromOutside == [NSCursor IBeamCursor] ? @"I-beam" : @"other")];
+  if (fromText == [NSCursor arrowCursor] && backOnText == [NSCursor IBeamCursor] && fromOutside == [NSCursor arrowCursor])
+    {
+      [self pass: @"overlay-scroller-cursor" detail: detail];
+    }
+  else
+    {
+      [self fail: @"overlay-scroller-cursor" detail: detail];
     }
 }
 
@@ -9265,7 +9485,7 @@ QuirkProbeAboutIconInk (NSDictionary *options, QuirkProbePixelTest test)
     {
       wantedBarMenu = @"(libs-back's)";
     }
-  else if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"GnomeThemeMenuStyle"] isEqualToString: @"primary"])
+  else if (QuirkProbeUsesPrimaryMenu ())
     {
       wantedBarMenu = @"_NET_WM_WINDOW_TYPE_POPUP_MENU";
     }
@@ -9732,6 +9952,21 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly hidpi-fonts: the font hinting at GSScaleFactor 2 and 1
+     (make check-hidpi). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"hidpi-fonts"])
+    {
+      [self checkHiDPIFontHinting];
+      [self finish];
+      return;
+    }
+  /* -ProbeOnly accent: GNOME's accent at launch (make check-live-settings). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"accent"])
+    {
+      [self checkAccentAtLaunch];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly forced-scheme: a per-app light or dark scheme over
      GNOME's (make check-color-scheme). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"forced-scheme"])
@@ -9783,6 +10018,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -9804,12 +10040,14 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkBrowserSelection];
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
       [self checkDestructiveButtons];
+  [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];
@@ -9855,6 +10093,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkColorWell];
   [self checkColorWellEdge];
   [self checkDestructiveButtons];
+  [self checkThemeImages2x];
   [self checkLabels];
   [self checkToolbar];
   [self checkTables];
@@ -9901,6 +10140,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkWindowManagerClose];
   [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayScrollerCursor];
   [self checkSwitch];
   [self checkControlColors];
   [self checkAccentButtons];
@@ -9922,11 +10162,13 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkDropDownComboFocus];
   [self checkBrowserTitles];
   [self checkBrowserLists];
+  [self checkBrowserSelection];
   [self checkShapedButtons];
   [self checkFlatButtons];
   [self checkEditableComboWeight];
   [self checkComboSeparator];
   [self checkBoxes];
+  [self checkDimLabelOpacity];
   [self checkLevelAndActivity];
   [self checkProgressFill];
   [self checkSliderTickMarks];

@@ -139,6 +139,7 @@ mkdir -p "$SETTINGS_DIR/glib-2.0/settings"
 cat >"$SETTINGS_DIR/glib-2.0/settings/keyfile" <<KEYFILE
 [org/gnome/desktop/interface]
 color-scheme='$COLOR_SCHEME'
+accent-color='${QUIRK_PROBE_ACCENT:-blue}'
 gtk-theme='$GTK_THEME_NAME'
 font-name='Cantarell 11'
 monospace-font-name='Noto Sans Mono 11'
@@ -192,8 +193,9 @@ case "${QUIRK_PROBE_ARGS:-}" in
 esac
 # The menu bar unless the run asks for the primary menu, whatever the
 # user's own defaults say.
-case "${QUIRK_PROBE_ARGS:-}" in
-  *GnomeThemeMenuStyle*) ;;
+# QUIRK_PROBE_MENU_STYLE=unset leaves it to the theme's default.
+case "${QUIRK_PROBE_ARGS:-}:${QUIRK_PROBE_MENU_STYLE:-}" in
+  *GnomeThemeMenuStyle*|*:unset) ;;
   *) PROBE_ARGS+=(-GnomeThemeMenuStyle menubar) ;;
 esac
 # Extra defaults for the probe, e.g. QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary".

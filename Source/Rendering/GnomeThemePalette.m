@@ -22,6 +22,7 @@
 #import "../Settings/GnomeThemeSettings.h"
 
 #import <AppKit/AppKit.h>
+#include <math.h>
 
 static NSColor *
 GnomeThemeColorFromHex(NSString *hex)
@@ -224,11 +225,11 @@ GnomeThemeApplyHighContrast(NSColorList *colors)
     }
   [colors setColor: strongBorder forKey: @"controlDarkShadowColor"];
   [colors setColor: disabled forKey: @"disabledControlTextColor"];
-  /* Dimmed labels stay readable: 80%, 65% and 50% instead of 55%, 40%
-     and 25%. */
-  [colors setColor: [background blendedColorWithFraction: 0.8 ofColor: text] forKey: @"secondaryLabelColor"];
-  [colors setColor: [background blendedColorWithFraction: 0.65 ofColor: text] forKey: @"tertiaryLabelColor"];
-  [colors setColor: [background blendedColorWithFraction: 0.5 ofColor: text] forKey: @"quaternaryLabelColor"];
+  /* Dimmed labels are libadwaita's --dim-opacity, 90% in high contrast (the
+     next steps down at 75% and 60%), instead of 55%, 40% and 25%. */
+  [colors setColor: [background blendedColorWithFraction: 0.9 ofColor: text] forKey: @"secondaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.75 ofColor: text] forKey: @"tertiaryLabelColor"];
+  [colors setColor: [background blendedColorWithFraction: 0.6 ofColor: text] forKey: @"quaternaryLabelColor"];
 }
 
 /* libadwaita 1.7 draws its controls in the foreground colour at an opacity
@@ -318,6 +319,111 @@ GnomeThemeAddLookupColors(NSColorList *colors)
     }
 }
 
+/* GNOME's accent colour (org.gnome.desktop.interface accent-color, GNOME
+   47), as libadwaita's accent_bg_color. Blue keeps the palettes above as
+   they are. */
+static NSString *
+GnomeThemeAccentHex(NSString *name)
+{
+  static NSDictionary *accents = nil;
+
+  if (accents == nil)
+    {
+      accents = [[NSDictionary alloc] initWithObjectsAndKeys:
+        @"#3584e4", @"blue", @"#2190a4", @"teal", @"#3a944a", @"green",
+        @"#c88800", @"yellow", @"#ed5b00", @"orange", @"#e62d42", @"red",
+        @"#d56199", @"pink", @"#9141ac", @"purple", @"#6f8396", @"slate", nil];
+    }
+  return (name != nil) ? [accents objectForKey: name] : nil;
+}
+
+static CGFloat
+GnomeThemeLinear(CGFloat c)
+{
+  return (c <= 0.04045) ? c / 12.92 : pow ((c + 0.055) / 1.055, 2.4);
+}
+
+static CGFloat
+GnomeThemeGamma(CGFloat c)
+{
+  c = MAX (0.0, MIN (1.0, c));
+  return (c <= 0.0031308) ? c * 12.92 : 1.055 * pow (c, 1.0 / 2.4) - 0.055;
+}
+
+/* libadwaita's accent_color, the accent for text and focus rings:
+   accent_bg_color in Oklab with its lightness at most 0.5 (light) or at
+   least 0.85 (dark). */
+static NSColor *
+GnomeThemeStandaloneAccent(NSColor *background, BOOL dark)
+{
+  NSColor *rgb = [background colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  CGFloat r = GnomeThemeLinear ([rgb redComponent]);
+  CGFloat g = GnomeThemeLinear ([rgb greenComponent]);
+  CGFloat b = GnomeThemeLinear ([rgb blueComponent]);
+  CGFloat l = cbrt (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  CGFloat m = cbrt (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  CGFloat s = cbrt (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  CGFloat L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  CGFloat A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  CGFloat B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+
+  L = dark ? MAX (L, 0.85) : MIN (L, 0.5);
+  l = L + 0.3963377774 * A + 0.2158037573 * B;
+  m = L - 0.1055613458 * A - 0.0638541728 * B;
+  s = L - 0.0894841775 * A - 1.2914855480 * B;
+  l = l * l * l;
+  m = m * m * m;
+  s = s * s * s;
+  return [NSColor colorWithCalibratedRed: GnomeThemeGamma (4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s)
+                                   green: GnomeThemeGamma (-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s)
+                                    blue: GnomeThemeGamma (-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s)
+                                   alpha: 1.0];
+}
+
+/* The accent's colours, for an accent other than blue: fills are
+   accent_bg_color, text and focus rings accent_color, and the paler
+   selections the accent over the view colour as blue's are. */
+static void
+GnomeThemeApplyAccent(NSColorList *colors, NSString *name, BOOL dark)
+{
+  NSString *hex = GnomeThemeAccentHex (name);
+  NSColor *accent, *standalone, *view;
+
+  if (hex == nil || [name isEqualToString: @"blue"])
+    {
+      return;
+    }
+  accent = GnomeThemeColorFromHex (hex);
+  standalone = GnomeThemeStandaloneAccent (accent, dark);
+  view = [colors colorWithKey: @"textBackgroundColor"];
+  [colors setColor: accent forKey: @"selectedControlColor"];
+  [colors setColor: standalone forKey: @"keyboardFocusIndicatorColor"];
+  if (dark)
+    {
+      [colors setColor: standalone forKey: @"highlightColor"];
+      [colors setColor: standalone forKey: @"selectedTextBackgroundColor"];
+      [colors setColor: [standalone blendedColorWithFraction: 0.55 ofColor: view]
+                forKey: @"alternateSelectedControlColor"];
+      [colors setColor: [standalone blendedColorWithFraction: 0.55 ofColor: view]
+                forKey: @"selectedMenuItemColor"];
+      [colors setColor: [view blendedColorWithFraction: 0.3 ofColor: accent]
+                forKey: @"secondarySelectedControlColor"];
+    }
+  else
+    {
+      [colors setColor: accent forKey: @"highlightColor"];
+      [colors setColor: accent forKey: @"selectedMenuItemColor"];
+      [colors setColor: [view blendedColorWithFraction: 0.5 ofColor: accent]
+                forKey: @"selectedTextBackgroundColor"];
+      [colors setColor: [view blendedColorWithFraction: 0.5 ofColor: accent]
+                forKey: @"alternateSelectedControlColor"];
+      [colors setColor: [accent blendedColorWithFraction: 0.7 ofColor: [NSColor blackColor]]
+                forKey: @"alternateSelectedControlTextColor"];
+      [colors setColor: [view blendedColorWithFraction: 0.12 ofColor: accent]
+                forKey: @"secondarySelectedControlColor"];
+    }
+}
+
 @implementation GnomeThemePalette
 
 + (NSColorList *) colorListForSettings: (GnomeThemeSettings *)settings
@@ -335,6 +441,7 @@ GnomeThemeAddLookupColors(NSColorList *colors)
     {
       GnomeThemePopulateLightPalette (colors);
     }
+  GnomeThemeApplyAccent (colors, [settings accentColorName], dark);
   if (highContrast)
     {
       GnomeThemeApplyHighContrast (colors);

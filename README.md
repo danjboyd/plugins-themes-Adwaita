@@ -93,7 +93,7 @@ windows, menus and tool tips have square corners and no shadow.
   window manager, the window's toolbar in the bar if the app wants it, and
   a document window's file name as its title with a dot while it has
   unsaved changes ([Header bar](#header-bar)).
-- **Menus:** a menu bar inside the window, or GNOME's primary ☰ menu
+- **Menus:** GNOME's primary ☰ menu, or a menu bar inside the window
   ([Settings](#settings)); menus drawn as libadwaita's popovers; titles that
   don't fit a narrow window fold into an overflow menu at the bar's end;
   context menus open at the pointer; inline button rows such as a zoom row
@@ -102,8 +102,8 @@ windows, menus and tool tips have square corners and no shadow.
   radios, switches, sliders, steppers, segmented controls and tabs as
   libadwaita draws them, and tables and outlines in Adwaita's style; symbolic icons tinted with the text
   colour ([below](#symbolic-icons)); translucent tool tips.
-- **GNOME's settings:** light or dark style (`color-scheme`),
-  high contrast, the interface and monospace fonts, `font-hinting`,
+- **GNOME's settings:** light or dark style (`color-scheme`), the accent
+  colour (`accent-color`, GNOME 47), high contrast, the interface and monospace fonts, `font-hinting`,
   overlay scrollbars, the window buttons' layout and the title bar's
   double-click action.
 - **Dialogs:** alerts attached to the window they interrupt, without a bar,
@@ -258,7 +258,7 @@ designed):
   Set `gnome` or `compact` to give every window the same; `auto` is the
   same as not setting it. A code-built app whose Gorm files were laid out
   for GNOME's metrics (with the Adwaita palette below) sets `gnome`.
-- `GnomeThemeMenuStyle`: `menubar` (the default) or `primary`. With
+- `GnomeThemeMenuStyle`: `primary` (the default) or `menubar`. With
   `primary` the menu bar becomes GNOME's main menu button (☰): at the end of
   the window's toolbar when it shows one, otherwise alone in a slim bar.
   Clicking it shows the app's menus, then its application menu's items
@@ -290,6 +290,9 @@ designed):
   switches between light and dark while the app runs; fonts, Large Text and
   high contrast still follow GNOME, with high contrast over the forced
   palette. The choice is the user's, so it isn't read from an Info.plist.
+- `GnomeThemeAccentColor`: one of GNOME's accents (`blue`, `teal`, `green`,
+  `yellow`, `orange`, `red`, `pink`, `purple`, `slate`) for the app, over
+  GNOME's `accent-color`; set it as `GnomeThemeColorScheme` above.
 
 Scrollbars are GNOME's overlay scrollbars while GNOME's `overlay-scrolling`
 setting is on (its default): the content runs under them, and they show
@@ -574,7 +577,8 @@ you work on):
 - `make check-text-scaling`: fonts and metrics with GNOME's Large Text
   (text-scaling-factor 1.25 and 2.0).
 - `make check-live-settings`: GNOME's settings changed while an app runs
-  (dark style and Large Text on, then off).
+  (dark style and Large Text on, then off; the accent to teal and back),
+  and GNOME's accent at launch (teal light, purple dark).
 - `make check-color-scheme`: a forced light or dark style
   (`GnomeThemeColorScheme`, `GTK_THEME`) over GNOME's, while GNOME's
   `color-scheme` changes.

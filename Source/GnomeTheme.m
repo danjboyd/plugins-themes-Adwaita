@@ -1016,8 +1016,15 @@ static const CGFloat GnomeThemeToolTipRadius = 9.0;
          nibble 2): whole-pixel advances and line heights. GTK 4 doesn't
          hint the metrics, but libs-gui sizes tool tips, menus and cells
          from text without rounding, so fractional metrics give windows
-         fractional frames. A user's own GSFontHinting still wins. */
-      [dictionary setObject: [NSNumber numberWithInteger: 32 + [_settings fontHintStyle]]
+         fractional frames. Scaled (GSScaleFactor not 1), metrics hinting
+         off (nibble 1), as libs-back's own default is then: hinted
+         advances at a scale broke the spacing between glyphs ("must
+         align" drawn "mustalign" at 2x). A user's own GSFontHinting
+         still wins. */
+      float scale = [[NSUserDefaults standardUserDefaults] floatForKey: @"GSScaleFactor"];
+      NSInteger metrics = (scale == 0.0f || scale == 1.0f) ? 32 : 16;
+
+      [dictionary setObject: [NSNumber numberWithInteger: metrics + [_settings fontHintStyle]]
                      forKey: @"GSFontHinting"];
       [dictionary setObject: [NSNumber numberWithFloat: [_metrics minimumTabHeight]]
                      forKey: @"GSMinimumTabHeight"];

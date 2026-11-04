@@ -40,7 +40,7 @@ ADDITIONAL_LDFLAGS += $(GIO_LIBS) $(X11_LIBS)
 PACKAGE_NAME = Adwaita
 BUNDLE_NAME = Adwaita
 BUNDLE_EXTENSION = .theme
-VERSION = 0.1.0-alpha20
+VERSION = 0.1.0-alpha21
 
 Adwaita_PRINCIPAL_CLASS = GnomeTheme
 Adwaita_INSTALL_DIR = $(GNUSTEP_LIBRARY)/Themes
@@ -93,7 +93,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-hidpi check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -106,12 +106,18 @@ probe:
 # palette and in high contrast over the light and the dark palette.
 check-quirks:
 	bash Tests/Scripts/run-quirk-probe.sh
-	QUIRK_PROBE_ARGS="-GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_MENU_STYLE=unset QUIRK_PROBE_ARGS="-ProbeMenuDefault YES" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO" bash Tests/Scripts/run-quirk-probe.sh --no-build
-	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -GnomeThemeMenuStyle primary" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_MENU_STYLE=unset QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeMenuDefault YES" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# At GSScaleFactor 2 and 1: the theme's font hinting (metrics hinting off
+# when scaled, as libs-back's own default).
+check-hidpi:
+	QUIRK_PROBE_ARGS="-GSScaleFactor 2 -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # Metrics per window (#24): check-quirks checks a window loaded from a Gorm
 # file with no choice made; these give every window GNOME's metrics, then
@@ -127,6 +133,8 @@ check-nib-metrics:
 check-live-settings:
 	QUIRK_PROBE_ARGS="-ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly live-settings" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ACCENT=teal QUIRK_PROBE_ARGS="-ProbeOnly accent -ProbeAccent teal" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_STYLE=dark QUIRK_PROBE_ACCENT=purple QUIRK_PROBE_ARGS="-ProbeOnly accent -ProbeAccent purple" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # A per-app scheme over GNOME's (#78): -GnomeThemeColorScheme each way,
 # GTK_THEME's variant each way, the default winning over GTK_THEME, and

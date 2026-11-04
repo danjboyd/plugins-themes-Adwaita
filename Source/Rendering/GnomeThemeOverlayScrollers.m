@@ -723,6 +723,71 @@ GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
   return originalIMP != NULL ? originalIMP (self, _cmd) : YES;
 }
 
+/* A text view's cursor rects stop at the overlay scrollers over it. The
+   scroller's own arrow rect isn't enough: a pointer coming straight onto
+   the scroller from outside the window enters both rects at once, and
+   libs-gui's order leaves the text view's I-beam on top. Done here rather
+   than in NSTextView, which installing an override would initialize while
+   the theme loads. */
+- (void) _overrideNSViewMethod_addCursorRect: (NSRect)rect cursor: (NSCursor *)cursor
+{
+  typedef void (*AddIMP)(id, SEL, NSRect, NSCursor *);
+  AddIMP originalIMP = (AddIMP)GnomeThemeOriginalMethod (_cmd, self, [NSView class]);
+  NSView *view = (NSView *)self;
+
+  if ([view isKindOfClass: [NSTextView class]] && GnomeThemeUsesOverlayScrollers ())
+    {
+      NSScrollView *scrollView = [view enclosingScrollView];
+      NSScroller *vertical = [scrollView hasVerticalScroller] ? [scrollView verticalScroller] : nil;
+      NSScroller *horizontal = [scrollView hasHorizontalScroller] ? [scrollView horizontalScroller] : nil;
+
+      if (vertical != nil && [vertical isHidden] == NO)
+        {
+          NSRect strip = [view convertRect: [vertical bounds] fromView: vertical];
+
+          rect.size.width = MAX (0.0, MIN (NSMaxX (rect), NSMinX (strip)) - NSMinX (rect));
+        }
+      if (horizontal != nil && [horizontal isHidden] == NO)
+        {
+          NSRect strip = [view convertRect: [horizontal bounds] fromView: horizontal];
+
+          if ([view isFlipped])
+            {
+              rect.size.height = MAX (0.0, MIN (NSMaxY (rect), NSMinY (strip)) - NSMinY (rect));
+            }
+          else
+            {
+              CGFloat top = NSMaxY (rect);
+
+              rect.origin.y = MAX (NSMinY (rect), NSMaxY (strip));
+              rect.size.height = MAX (0.0, top - NSMinY (rect));
+            }
+        }
+    }
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd, rect, cursor);
+    }
+}
+
+/* An overlay scroller lies over the content, whose cursor rects (a text
+   view's I-beam) cover it too; over the scroller it's the arrow, as over
+   GTK's. A scroller beside its content needs no rect of its own. */
+- (void) _overrideNSScrollerMethod_resetCursorRects
+{
+  typedef void (*ResetIMP)(id, SEL);
+  ResetIMP originalIMP = (ResetIMP)GnomeThemeOriginalMethod (_cmd, self, [NSScroller class]);
+
+  if (originalIMP != NULL)
+    {
+      originalIMP (self, _cmd);
+    }
+  if (GnomeThemeUsesOverlayScrollers () && [[(NSView *)self superview] isKindOfClass: [NSScrollView class]])
+    {
+      [(NSView *)self addCursorRect: [(NSView *)self bounds] cursor: [NSCursor arrowCursor]];
+    }
+}
+
 /* Hidden, a scroller lets presses through to the content under it. */
 - (NSView *) _overrideNSScrollerMethod_hitTest: (NSPoint)point
 {
