@@ -270,6 +270,8 @@ QuirkProbeOverflowDescription(QuirkProbeOverflowState state)
     state.width, state.kept, state.menu, state.placement];
 }
 
+void QuirkProbeFillWithBackground (NSBitmapImageRep *rep, NSView *view);
+
 /* The » mark drawn alone: the darkest and lightest grey levels (0 to
    255) of its opaque pixels, the mark's ink and what is behind it in
    either order; -1 with no mark. */
@@ -295,6 +297,7 @@ QuirkProbeOverflowMarkInk(NSToolbar *toolbar, CGFloat *lightest)
       return -1.0;
     }
   rep = [mark bitmapImageRepForCachingDisplayInRect: [mark bounds]];
+  QuirkProbeFillWithBackground (rep, mark);
   [mark cacheDisplayInRect: [mark bounds] toBitmapImageRep: rep];
   for (y = 0; y < [rep pixelsHigh]; y++)
     {

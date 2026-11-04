@@ -226,45 +226,52 @@ QuirkProbeIsAccentBlue (NSUInteger red, NSUInteger green, NSUInteger blue)
   return blue > red + 30 && blue > green + 10;
 }
 
-static NSBitmapImageRep *
-QuirkProbeRender (NSView *view)
+/* A libs-gui with Cocoa's -cacheDisplayInRect: draws only the view, over
+   what the bitmap holds, where the older one's result included the window's
+   background. The checks measure against that background, so give it to
+   both. */
+void
+QuirkProbeFillWithBackground (NSBitmapImageRep *rep, NSView *view)
 {
-  NSRect bounds = [view bounds];
-  NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect: bounds];
   NSColor *background = [[view window] backgroundColor];
+  unsigned char *data = [rep bitmapData];
+  NSInteger samples = [rep samplesPerPixel];
+  NSInteger perRow = [rep bytesPerRow];
+  NSInteger x, y;
 
-  /* A libs-gui with Cocoa's -cacheDisplayInRect: draws only the view, over
-     what the bitmap holds, where the older one's result included the window's
-     background. The checks measure against that background, so give it to
-     both. */
   if (background == nil)
     {
       background = [NSColor windowBackgroundColor];
     }
   background = [background colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
-  if (background != nil)
+  if (background == nil)
     {
-      unsigned char *data = [rep bitmapData];
-      NSInteger x, y;
-      NSInteger samples = [rep samplesPerPixel];
-      NSInteger perRow = [rep bytesPerRow];
-
-      for (y = 0; y < [rep pixelsHigh]; y++)
+      return;
+    }
+  for (y = 0; y < [rep pixelsHigh]; y++)
+    {
+      for (x = 0; x < [rep pixelsWide]; x++)
         {
-          for (x = 0; x < [rep pixelsWide]; x++)
-            {
-              unsigned char *pixel = data + y * perRow + x * samples;
+          unsigned char *pixel = data + y * perRow + x * samples;
 
-              pixel[0] = (unsigned char)lround ([background redComponent] * 255.0);
-              pixel[1] = (unsigned char)lround ([background greenComponent] * 255.0);
-              pixel[2] = (unsigned char)lround ([background blueComponent] * 255.0);
-              if (samples > 3)
-                {
-                  pixel[3] = 255;
-                }
+          pixel[0] = (unsigned char)lround ([background redComponent] * 255.0);
+          pixel[1] = (unsigned char)lround ([background greenComponent] * 255.0);
+          pixel[2] = (unsigned char)lround ([background blueComponent] * 255.0);
+          if (samples > 3)
+            {
+              pixel[3] = 255;
             }
         }
     }
+}
+
+static NSBitmapImageRep *
+QuirkProbeRender (NSView *view)
+{
+  NSRect bounds = [view bounds];
+  NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect: bounds];
+
+  QuirkProbeFillWithBackground (rep, view);
   [view cacheDisplayInRect: bounds toBitmapImageRep: rep];
   return rep;
 }
@@ -5043,6 +5050,9 @@ static NSString *QuirkProbeOverflowShown = nil;
   [reference setDrawsBackground: NO];
   [view addSubview: reference];
 
+  /* libs-gui after 0.32 doesn't autosize a matrix by default, as AppKit's
+     doesn't, so the form's cell keeps its default size without this. */
+  [form setCellSize: NSMakeSize (260, 24)];
   [form addEntry: @"Title:"];
   [form setBezeled: YES];
   [view addSubview: form];
@@ -8433,7 +8443,11 @@ QuirkProbeStripedBitmap (NSInteger pixels, BOOL striped)
       [self fail: @"ruler-marks" detail: @"no ruler"];
       return;
     }
-  rep = QuirkProbeRender (ruler);
+  /* What the window shows, not a bitmap render: the theme recolours the
+     marks by reading its own pixels back, which only a screen has. */
+  [ruler lockFocus];
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: [ruler bounds]]);
+  [ruler unlockFocus];
   QuirkProbePixelAt (rep, [rep pixelsWide] - 30, 2, rulerRGB);
   QuirkProbeInkBackground = windowRGB[0] + windowRGB[1] + windowRGB[2];
   marks = QuirkProbeMeasureIn (rep, QuirkProbeIsInk, NSZeroRect);
