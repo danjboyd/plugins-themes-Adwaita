@@ -57,6 +57,25 @@ static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
    room: a short title, or a long one shortened with "…". Toolbar items go
    into the » menu first. */
 static const CGFloat GnomeThemeHeaderBarMinimumTitleWidth = 100.0;
+
+/* rect grown to whole device pixels. At a fractional scale a window's edges
+   fall inside a pixel: clearing and filling them there covers that pixel only
+   partly, and what's under it (black, in an X window) shows as a dark line. */
+static NSRect
+GnomeThemeRectOutwardToPixels(NSRect rect, CGFloat factor)
+{
+  CGFloat minX, minY, maxX, maxY;
+
+  if (factor <= 0.0)
+    {
+      return rect;
+    }
+  minX = floor (NSMinX (rect) * factor) / factor;
+  minY = floor (NSMinY (rect) * factor) / factor;
+  maxX = ceil (NSMaxX (rect) * factor) / factor;
+  maxY = ceil (NSMaxY (rect) * factor) / factor;
+  return NSMakeRect (minX, minY, maxX - minX, maxY - minY);
+}
 /* libs-gui's » button and the inset on each side of an item's view
    (ClippedItemsViewWidth and InsetItemViewX in GSToolbarView.m). */
 static const CGFloat GnomeThemeToolbarClippedItemsWidth = 28.0;
@@ -1248,8 +1267,10 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
     {
       /* As GSWindowDecorationView: the outermost view clears the content
          area in case the window's background isn't opaque. */
-      NSRectFillUsingOperation (contentRect, NSCompositeClear);
-      [[GSTheme theme] drawWindowBackground: contentRect view: self];
+      NSRect fill = GnomeThemeRectOutwardToPixels (contentRect, [window userSpaceScaleFactor]);
+
+      NSRectFillUsingOperation (fill, NSCompositeClear);
+      [[GSTheme theme] drawWindowBackground: fill view: self];
     }
 }
 

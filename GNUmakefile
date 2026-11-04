@@ -114,10 +114,12 @@ check-quirks:
 	QUIRK_PROBE_STYLE=high-contrast-dark QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly header-bar" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # At GSScaleFactor 2 and 1: the theme's font hinting (metrics hinting off
-# when scaled, as libs-back's own default).
+# when scaled, as libs-back's own default). At 1.5 too: a window's edges at a
+# fractional scale.
 check-hidpi:
-	QUIRK_PROBE_ARGS="-GSScaleFactor 2 -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh
-	QUIRK_PROBE_ARGS="-ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ARGS="-GSScaleFactor 2 -GSX11HandlesWindowDecorations NO -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-GSScaleFactor 1.5 -GSX11HandlesWindowDecorations NO -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh --no-build
+	QUIRK_PROBE_ARGS="-GSX11HandlesWindowDecorations NO -ProbeOnly hidpi-fonts" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # Metrics per window (#24): check-quirks checks a window loaded from a Gorm
 # file with no choice made; these give every window GNOME's metrics, then
