@@ -231,7 +231,40 @@ QuirkProbeRender (NSView *view)
 {
   NSRect bounds = [view bounds];
   NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect: bounds];
+  NSColor *background = [[view window] backgroundColor];
 
+  /* A libs-gui with Cocoa's -cacheDisplayInRect: draws only the view, over
+     what the bitmap holds, where the older one's result included the window's
+     background. The checks measure against that background, so give it to
+     both. */
+  if (background == nil)
+    {
+      background = [NSColor windowBackgroundColor];
+    }
+  background = [background colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+  if (background != nil)
+    {
+      unsigned char *data = [rep bitmapData];
+      NSInteger x, y;
+      NSInteger samples = [rep samplesPerPixel];
+      NSInteger perRow = [rep bytesPerRow];
+
+      for (y = 0; y < [rep pixelsHigh]; y++)
+        {
+          for (x = 0; x < [rep pixelsWide]; x++)
+            {
+              unsigned char *pixel = data + y * perRow + x * samples;
+
+              pixel[0] = (unsigned char)lround ([background redComponent] * 255.0);
+              pixel[1] = (unsigned char)lround ([background greenComponent] * 255.0);
+              pixel[2] = (unsigned char)lround ([background blueComponent] * 255.0);
+              if (samples > 3)
+                {
+                  pixel[3] = 255;
+                }
+            }
+        }
+    }
   [view cacheDisplayInRect: bounds toBitmapImageRep: rep];
   return rep;
 }
@@ -3251,9 +3284,35 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
 /* With a libs-gui that has -[NSButton setHasDestructiveAction:]: the flag
    itself, on a window's button and through NSAlert to its panel's button.
    Skipped on one without it, where only the stand-in below can be checked. */
+/* -abortModal only marks the run: an event lets it notice. */
+- (void) endRealDestructiveAlert
+{
+  [NSApp abortModal];
+  [NSApp postEvent: [NSEvent otherEventWithType: NSApplicationDefined
+                                       location: NSZeroPoint
+                                  modifierFlags: 0
+                                      timestamp: 0
+                                   windowNumber: 0
+                                        context: nil
+                                        subtype: 0
+                                          data1: 0
+                                          data2: 0]
+           atStart: NO];
+}
+
 - (void) sampleRealDestructiveAlert: (NSTimer *)timer
 {
+  static BOOL sampled = NO;
   NSWindow *panel = [NSApp modalWindow];
+
+  /* The timer repeats until the run has ended. */
+  if (sampled)
+    {
+      [self endRealDestructiveAlert];
+      return;
+    }
+  sampled = YES;
+  {
   NSEnumerator *enumerator = [[[panel contentView] subviews] objectEnumerator];
   NSView *view;
 
@@ -3278,12 +3337,13 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
             {
               [self fail: @"destructive-real-alert" detail: detail];
             }
-          [NSApp abortModal];
+          [self endRealDestructiveAlert];
           return;
         }
     }
   [self fail: @"destructive-real-alert" detail: @"no Delete button in the running alert"];
-  [NSApp abortModal];
+  [self endRealDestructiveAlert];
+  }
 }
 
 - (void) checkRealDestructiveFlag
@@ -3296,6 +3356,7 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   NSString *detail;
   BOOL dark;
   void (*setFlag)(id, SEL, BOOL);
+  NSTimer *timer;
 
   if ([NSButton instancesRespondToSelector: @selector(setHasDestructiveAction:)] == NO)
     {
@@ -3332,13 +3393,14 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
   delete = [alert addButtonWithTitle: @"Delete"];
   [alert addButtonWithTitle: @"Cancel"];
   setFlag (delete, @selector(setHasDestructiveAction:), YES);
-  [[NSRunLoop currentRunLoop] addTimer: [NSTimer timerWithTimeInterval: 0.3
-                                                                target: self
-                                                              selector: @selector(sampleRealDestructiveAlert:)
-                                                              userInfo: nil
-                                                               repeats: NO]
-                               forMode: NSModalPanelRunLoopMode];
+  timer = [NSTimer timerWithTimeInterval: 0.3
+                                  target: self
+                                selector: @selector(sampleRealDestructiveAlert:)
+                                userInfo: nil
+                                 repeats: YES];
+  [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSModalPanelRunLoopMode];
   [alert runModal];
+  [timer invalidate];
 }
 
 - (void) checkDestructiveButtons
