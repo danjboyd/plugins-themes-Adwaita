@@ -3230,6 +3230,88 @@ QuirkProbeHeaderTitleInk(NSWindow *window)
     }
 }
 
+/* What a pixel shows on an X window, which ignores alpha: the colour times
+   its alpha, black under what's transparent. */
+static float
+QuirkProbeShownRed (NSColor *color)
+{
+  NSColor *rgb = [color colorUsingColorSpaceName: NSCalibratedRGBColorSpace];
+
+  return [rgb redComponent] * [rgb alphaComponent];
+}
+
+/* A window's edge at a scale: no pixel beside the border or round the
+   content is darker than the border and the background. At 1.5 the content
+   area's edge falls inside a pixel, and it used to show a dark line. Needs the
+   theme's own border (-GSX11HandlesWindowDecorations NO). */
+- (void) checkWindowEdgeAtScale
+{
+  NSWindow *window = AUTORELEASE ([[NSWindow alloc] initWithContentRect: NSMakeRect (60, 200, 300, 160)
+                                                              styleMask: NSTitledWindowMask
+                                                                backing: NSBackingStoreBuffered
+                                                                  defer: NO]);
+  NSView *frameView;
+  NSBitmapImageRep *rep;
+  NSInteger wide, high, x, y;
+  float darkest = 1.0f;
+  float limit;
+  NSString *where = @"none";
+  NSString *detail;
+
+  [window orderFront: nil];
+  [window display];
+  /* Each redraw clears and fills the edge again, as in a running app. */
+  [window display];
+  frameView = [[window contentView] superview];
+  if (NSMinX ([[window contentView] frame]) <= 0.0)
+    {
+      [self skip: @"window-edge-at-scale" detail: @"no theme border on this run"];
+      [window orderOut: nil];
+      return;
+    }
+  [frameView lockFocus];
+  rep = AUTORELEASE ([[NSBitmapImageRep alloc] initWithFocusedViewRect: [frameView bounds]]);
+  [frameView unlockFocus];
+  wide = [rep pixelsWide];
+  high = [rep pixelsHigh];
+  /* The outermost pixels are the border, GNOME's lightest edge and the limit. */
+  limit = QuirkProbeShownRed ([rep colorAtX: 0 y: high / 2]) - 0.03f;
+  /* The read itself can run half a pixel past the window: not the outermost
+     pixels. */
+  for (x = 1; x < wide - 1; x++)
+    {
+      float shown = QuirkProbeShownRed ([rep colorAtX: x y: high - 4]);
+
+      if (shown < darkest)
+        {
+          darkest = shown;
+          where = [NSString stringWithFormat: @"x %ld of %ld", (long)x, (long)wide];
+        }
+    }
+  for (y = 1; y < high - 1; y++)
+    {
+      float shown = QuirkProbeShownRed ([rep colorAtX: wide - 6 y: y]);
+
+      if (shown < darkest)
+        {
+          darkest = shown;
+          where = [NSString stringWithFormat: @"y %ld of %ld", (long)y, (long)high];
+        }
+    }
+  detail = [NSString stringWithFormat: @"GSScaleFactor %g: darkest %.3f at %@, border %.3f",
+    [[NSUserDefaults standardUserDefaults] floatForKey: @"GSScaleFactor"],
+    darkest, where, limit + 0.03f];
+  [window orderOut: nil];
+  if (darkest >= limit)
+    {
+      [self pass: @"window-edge-at-scale" detail: detail];
+    }
+  else
+    {
+      [self fail: @"window-edge-at-scale" detail: detail];
+    }
+}
+
 /* The theme's own images (Resources/ThemeImages) carry a 2x
    representation, so at GSScaleFactor 2 they're drawn from 32px, not
    scaled up from 16px: each has a bitmap with twice its point width. The
@@ -10012,6 +10094,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"hidpi-fonts"])
     {
       [self checkHiDPIFontHinting];
+      [self checkWindowEdgeAtScale];
       [self finish];
       return;
     }
