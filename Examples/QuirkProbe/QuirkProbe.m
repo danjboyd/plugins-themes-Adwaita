@@ -701,7 +701,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 @interface QuirkProbe ()
 - (void) after: (NSTimeInterval)delay perform: (SEL)selector;
-- (void) after: (NSTimeInterval)delay perform: (SEL)selector mode: (NSString *)mode;
+- (NSTimer *) after: (NSTimeInterval)delay perform: (SEL)selector mode: (NSString *)mode;
 - (void) pass: (NSString *)ident detail: (NSString *)detail;
 - (void) fail: (NSString *)ident detail: (NSString *)detail;
 - (void) known: (NSString *)ident detail: (NSString *)detail;
@@ -1101,7 +1101,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
 
 /* A timer in one run loop mode. (A timer added to two modes can fire in
    both.) */
-- (void) after: (NSTimeInterval)delay perform: (SEL)selector mode: (NSString *)mode
+- (NSTimer *) after: (NSTimeInterval)delay perform: (SEL)selector mode: (NSString *)mode
 {
   NSTimer *timer = [NSTimer timerWithTimeInterval: delay
                                            target: self
@@ -1110,6 +1110,7 @@ QuirkProbeProfileDistance (NSArray *a, NSArray *b, BOOL reversed)
                                           repeats: NO];
 
   [[NSRunLoop currentRunLoop] addTimer: timer forMode: mode];
+  return timer;
 }
 
 - (void) after: (NSTimeInterval)delay perform: (SEL)selector
@@ -5144,6 +5145,10 @@ static NSString *QuirkProbeOverflowShown = nil;
 static NSMutableArray *QuirkProbePrimaryTitles = nil;
 /* Set when the Escape check had to close the menu with a click. */
 static BOOL QuirkProbeEscapeNeededClick = NO;
+/* Set when the Escape check's timer pressed Escape before the check's click
+   returned. It isn't when something else had already closed the menu: the
+   check then proves nothing about Escape. */
+static BOOL QuirkProbeEscapePressed = NO;
 static NSRect QuirkProbePrimaryFrame;
 /* The menus a menu bar click showed, seen from inside its tracking loop. */
 static NSString *QuirkProbeMenuBarOpen = nil;
@@ -5157,10 +5162,27 @@ QuirkProbePrimaryButtonIn (NSView *view)
   return QuirkProbeFindViewOfClass (view, NSClassFromString (@"GnomeThemePrimaryMenuButton"));
 }
 
+/* Drops an Escape that found no menu: left queued, it closes the next popup
+   that tracks (a combo box's list). */
+static void
+QuirkProbeDropStaleKeys (void)
+{
+  NSEvent *event;
+
+  while ((event = [NSApp nextEventMatchingMask: NSKeyDownMask | NSKeyUpMask
+                                     untilDate: [NSDate distantPast]
+                                        inMode: NSDefaultRunLoopMode
+                                       dequeue: YES]) != nil)
+    {
+    }
+}
+
 /* Fires while the ☰'s menu is tracking: presses Escape. */
 - (void) pressEscape: (NSTimer *)timer
 {
   NSString *escape = [NSString stringWithFormat: @"%C", (unichar)0x1b];
+
+  QuirkProbeEscapePressed = YES;
 
   [NSApp postEvent: [NSEvent keyEventWithType: NSKeyDown
                                      location: NSZeroPoint
@@ -5522,17 +5544,23 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
     NSTimer *fallback = [NSTimer timerWithTimeInterval: 1.5 target: self selector: @selector(closeMenuAfterEscape:)
                                               userInfo: nil repeats: NO];
 
+    NSTimer *escape;
+
     QuirkProbeEscapeNeededClick = NO;
+    QuirkProbeEscapePressed = NO;
     [[NSRunLoop currentRunLoop] addTimer: fallback forMode: NSEventTrackingRunLoopMode];
     ASSIGN (QuirkProbeMenuBarOpen, @"");
-    [self after: 0.3 perform: @selector(pressEscapeOnMenuBar:) mode: NSEventTrackingRunLoopMode];
+    escape = [self after: 0.3 perform: @selector(pressEscapeOnMenuBar:) mode: NSEventTrackingRunLoopMode];
     [self clickMenuBar: bar item: index];
     [fallback invalidate];
+    [escape invalidate];
+    QuirkProbeDropStaleKeys ();
     afterClose = QuirkProbeVisibleMenus ();
     detail = [NSString stringWithFormat: @"showing \"%@\" before Escape; after it: %@, showing \"%@\"",
       QuirkProbeMenuBarOpen,
-      QuirkProbeEscapeNeededClick ? @"still tracking (closed by a click)" : @"tracking ended", afterClose];
-    if ([QuirkProbeMenuBarOpen isEqualToString: @"File"] && QuirkProbeEscapeNeededClick == NO
+      QuirkProbeEscapePressed == NO ? @"never pressed (tracking had ended)"
+        : QuirkProbeEscapeNeededClick ? @"still tracking (closed by a click)" : @"tracking ended", afterClose];
+    if ([QuirkProbeMenuBarOpen isEqualToString: @"File"] && QuirkProbeEscapePressed && QuirkProbeEscapeNeededClick == NO
       && [afterClose length] == 0)
       {
         [self pass: @"menubar-click-escape" detail: detail];
@@ -5662,11 +5690,13 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
             }
         }
     }
-  up = [NSEvent mouseEventWithType: NSLeftMouseUp location: NSMakePoint (-50, -50) modifierFlags: 0
-                         timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 0];
-  down = [NSEvent mouseEventWithType: NSLeftMouseDown location: NSMakePoint (-50, -50) modifierFlags: 0
-                           timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 1];
-  [NSApp postEvent: up atStart: NO];
+  /* A click on the window, clear of the menu, as a user closes it. */
+  up = [NSEvent mouseEventWithType: NSLeftMouseUp location: NSMakePoint (5, 5) modifierFlags: 0
+                         timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil eventNumber: 0
+                        clickCount: 1 pressure: 0];
+  down = [NSEvent mouseEventWithType: NSLeftMouseDown location: NSMakePoint (5, 5) modifierFlags: 0
+                           timestamp: 0 windowNumber: [_controlsWindow windowNumber] context: nil eventNumber: 0
+                          clickCount: 1 pressure: 1];
   [NSApp postEvent: down atStart: NO];
   [NSApp postEvent: up atStart: NO];
 }
@@ -5758,6 +5788,7 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   /* Escape closes it. */
   {
     NSTimer *fallback;
+    NSTimer *escape;
 
     barButton = QuirkProbePrimaryButtonIn ([[_controlsWindow contentView] superview]);
     [NSApp postEvent: [NSEvent mouseEventWithType: NSLeftMouseUp
@@ -5770,13 +5801,19 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
                                        clickCount: 1
                                          pressure: 0.0]
              atStart: NO];
-    [self after: 0.3 perform: @selector(pressEscape:) mode: NSEventTrackingRunLoopMode];
+    QuirkProbeEscapeNeededClick = NO;
+    QuirkProbeEscapePressed = NO;
+    escape = [self after: 0.3 perform: @selector(pressEscape:) mode: NSEventTrackingRunLoopMode];
     fallback = [NSTimer timerWithTimeInterval: 1.5 target: self selector: @selector(closeMenuAfterEscape:)
                                      userInfo: nil repeats: NO];
     [[NSRunLoop currentRunLoop] addTimer: fallback forMode: NSEventTrackingRunLoopMode];
     [barButton mouseDown: click];
     [fallback invalidate];
-    if (QuirkProbeEscapeNeededClick == NO)
+    [escape invalidate];
+    QuirkProbeDropStaleKeys ();
+    if (QuirkProbeEscapePressed == NO)
+      [self fail: @"primary-menu-escape" detail: @"the menu had closed before Escape (or never opened)"];
+    else if (QuirkProbeEscapeNeededClick == NO)
       [self pass: @"primary-menu-escape" detail: @"Escape closed the menu"];
     else
       [self fail: @"primary-menu-escape" detail: @"the menu stayed open after Escape"];
