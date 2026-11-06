@@ -84,7 +84,7 @@ trap 'rm -rf --one-file-system -- "${WORK:?}"' EXIT
 gcc_diagnostics() {
   local file=$1; shift
   local name; name=$(basename "$file")
-  (cd "$(dirname "$file")" && gcc "${BASE_FLAGS[@]}" "$@" "$name" 2>&1) \
+  (cd "$(dirname "$file")" && gcc "$@" "${BASE_FLAGS[@]}" "$name" 2>&1) \
     | grep -E "^$(printf '%s' "$name" | sed 's/[.[\*^$]/\\&/g'):[0-9]+:[0-9]+: " \
     | sed -E 's/^[^:]+:[0-9]+:[0-9]+: //' | sort -u
 }
