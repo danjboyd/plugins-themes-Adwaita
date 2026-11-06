@@ -304,8 +304,10 @@ if [ "$SHADOW" = YES ]; then
   printf 'GNUSTEP_USER_DEFAULTS_DIR=%s\nGNUSTEP_USER_DIR_LIBRARY=%s\n' \
     "$WORK/gsdefaults" "$WORK/gslibrary" >>"$WORK/GNUstep.conf"
   chmod 600 "$WORK/GNUstep.conf"
+  # The menu bar, as below: the menu checks press its titles.
   "${DEMO_ENV[@]}" LD_LIBRARY_PATH="$MUTTER_CHECK_GUI:${LD_LIBRARY_PATH:-}" \
     "$DEMO" -GSTheme "$THEME" -GSBackend libgnustep-backshadow -ThemeDemoLogFrames YES \
+    -GnomeThemeMenuStyle menubar -NSMenuInterfaceStyle NSWindows95InterfaceStyle \
     -ThemeDemoCommandFIFO "$WORK/commands" >"$WORK/demo.log" 2>&1 &
 else
   grep -v '^GNUSTEP_USER_DEFAULTS_DIR=' "${GNUSTEP_CONFIG_FILE:-/etc/GNUstep/GNUstep.conf}" \
