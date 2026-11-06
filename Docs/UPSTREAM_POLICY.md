@@ -9,6 +9,10 @@ line before it leaves this machine.
 Adopted 2026-10-06. Applies to Dan and to every Claude session working for
 him.
 
+Changed 2026-11-06 (Dan's ruling): libobjc2 takes issue reports and
+comments under the standard policy, but no code of ours except as a
+labelled illustration (below).
+
 ## GNUstep's rules, in short
 
 GNUstep's policy (`POLICY_AI.md` in gnustep/apps-gorm, by Gregory Casamento;
@@ -31,8 +35,14 @@ content". It says:
 
 What individual maintainers have added:
 
-- **libobjc2 (David Chisnall): no LLM-derived changes or reports at all.**
-  We send nothing to libobjc2.
+- **libobjc2 (David Chisnall): no AI-generated code.** The standard policy
+  applies, with one exception: we send no patches, pull requests or
+  suggested fixes, because David writes the fix himself. Issue reports and
+  comments are welcome, with the usual disclosure line. Code of ours
+  appears only where it explains the problem, such as a short reproducer,
+  and it's labelled as an illustration, not a proposed change. Quoting
+  libobjc2's own source is fine. Every claim still comes from a run
+  (rule 5).
 - **libs-base (Richard Frith-Macdonald):** one patch per issue, each with
   the code change, its test in GNUstep's regression framework, and a
   ChangeLog entry. Others on the list asked for one pull request per
