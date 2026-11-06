@@ -54,17 +54,6 @@ The first three draws are the first pass (the parent's rect, which is the
 strip's); the last is the second pass, drawing the document over its whole
 rect after the strip. The strip ends up white.
 
-A real case, traced in an app (MarkdownViewer's preview: an NSScrollView
-with an overlay vertical scroller, the horizontal scroller hidden), one
-scroll step:
-
-```
-DRAW  NSScrollView          {0, 0, 735, 747}     <- the ancestors' rect: 13 px short
-DRAW  OMDPreviewCanvasView  {0, 359, 735, 747}
-DRAW  NSScroller            {0, 0, 13, 747}      <- the knob drawn
-DRAW  OMDPreviewCanvasView  {0, 359, 735, 760}   <- second pass: the document over the scroller
-```
-
 ### Expected
 
 After `-displayIfNeeded`, views are drawn back to front: a subview isn't
@@ -138,14 +127,10 @@ it from the scroll view's side:
 - **plugins-themes-Adwaita** (#47): when the content scrolls, the scroll
   view invalidates the clip view's whole area itself, so the first pass
   covers the document's rect and the scrollers are drawn last
-  (`GnomeThemeOverlayScrollers.m`). Measured: during a knob drag the
-  scroller's column had no knob pixels before and the full knob after, in
-  3 of 3 runs.
+  (`GnomeThemeOverlayScrollers.m`).
 - **plugins-themes-winuitheme** (#87, PR #88): after libs-gui's pass, the
   scroll view redraws the scroller strips when the content was dirty
-  (`WinUIThemeScrollers.m`). That project reports, in MarkdownViewer: the
-  scroller missing in 3 of 8 scrolls and partly drawn in 1 before the fix,
-  drawn in 8 of 8 after.
+  (`WinUIThemeScrollers.m`).
 
 Any view that draws above an opaque sibling which redraws itself can show
 the same overdraw, not only scrollers.
