@@ -16,6 +16,10 @@ labelled illustration (below).
 Changed 2026-11-06 (Dan's rule): every report, patch or comment is
 searched for duplicates at filing time (rule 9).
 
+Changed 2026-11-06 (Dan's ruling): the disclosure line names the tool
+actually used: Claude, Codex (OpenAI), or both (rule 2). Reports already
+filed with the Claude line stay as they are.
+
 ## GNUstep's rules, in short
 
 GNUstep's policy (`POLICY_AI.md` in gnustep/apps-gorm, by Gregory Casamento;
@@ -56,11 +60,17 @@ What individual maintainers have added:
 1. **Nothing goes upstream without Dan's sign-off** on the exact version
    sent (see Review, below). No exceptions for "small" things: a one-line
    comment on an upstream issue goes through the same gate.
-2. **Disclose, every time.** Commits end with
-   `AI assistance: this change, its test and this description were written
-   with Claude (Anthropic's Claude Code).` and a `Co-Authored-By: Claude`
-   line. Issue reports and comments carry
+2. **Disclose, every time, naming the tool actually used.** Commits end
+   with `AI assistance: this change, its test and this description were
+   written with Claude (Anthropic's Claude Code).` and a
+   `Co-Authored-By: Claude` line. Issue reports and comments carry
    `Investigated, reproduced and written up with AI assistance (Claude).`
+   For work done with Codex, the line names Codex instead:
+   `... were written with Codex (OpenAI).` and
+   `... with AI assistance (Codex, OpenAI).` When both were used, it names
+   both: `... were written with Claude (Anthropic's Claude Code) and Codex
+   (OpenAI).` and `... with AI assistance (Claude and Codex).` The
+   `Co-Authored-By: Claude` line goes only on commits Claude worked on.
 3. **The GCC check passes** on every code file we send, reproducers
    included: `Tests/Scripts/gcc-syntax-check.sh` (below).
 4. **Patches come with tests, issues with reproducers.** A test fails
