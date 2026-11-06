@@ -157,6 +157,7 @@ ThemeDemoPrintLine(NSString *line)
 - (void) radioSelectionChanged: (id)sender;
 - (void) showDemoMenu: (id)sender;
 - (void) segmentedChanged: (id)sender;
+- (void) contextShare: (id)sender;
 @end
 
 @implementation AppController
@@ -407,7 +408,14 @@ ThemeDemoPrintLine(NSString *line)
   if (item != nil)
     {
       [_tabView selectTabViewItem: item];
+      fprintf (stderr, "ThemeDemo-page %s\n", [name UTF8String]);
     }
+}
+
+/* The context menu's Share items (see -controlsTabItem). */
+- (void) contextShare: (id)sender
+{
+  fprintf (stderr, "ThemeDemo-context %s\n", [[sender title] UTF8String]);
 }
 
 - (void) applyLaunchOptions
@@ -1927,7 +1935,23 @@ ThemeDemoPrintLine(NSString *line)
 - (NSTabViewItem *) controlsTabItem
 {
   NSView *root = [self tabRootView];
-  [self populateControlsCanvas: [self makeCanvasForRoot: root]];
+  NSView *canvas = [self makeCanvasForRoot: root];
+  NSMenu *context = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Context"]);
+  NSMenu *share = AUTORELEASE ([[NSMenu alloc] initWithTitle: @"Share"]);
+  NSMenuItem *shareItem;
+
+  [self populateControlsCanvas: canvas];
+  /* A context menu (a right click on the page's background), with a
+     submenu: Tests/Scripts/run-mutter-check.sh checks that the release of
+     the right click that opens it picks nothing, and that one click picks
+     the item a submenu is entered by. */
+  [context addItemWithTitle: @"Copy" action: NULL keyEquivalent: @""];
+  [context addItemWithTitle: @"Paste" action: NULL keyEquivalent: @""];
+  shareItem = [context addItemWithTitle: @"Share" action: NULL keyEquivalent: @""];
+  [share addItemWithTitle: @"Email" action: @selector(contextShare:) keyEquivalent: @""];
+  [share addItemWithTitle: @"Link" action: @selector(contextShare:) keyEquivalent: @""];
+  [context setSubmenu: share forItem: shareItem];
+  [canvas setMenu: context];
 
   NSTabViewItem *item = AUTORELEASE ([[NSTabViewItem alloc] initWithIdentifier: @"controls"]);
   [item setLabel: @"Controls"];

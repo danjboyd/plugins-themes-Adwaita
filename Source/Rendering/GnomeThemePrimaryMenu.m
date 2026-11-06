@@ -765,6 +765,41 @@ GnomeThemeTrackingIndexForEvent(NSEvent *event)
   return [menuView indexOfItemAtPoint: [menuView convertPoint: location fromView: nil]];
 }
 
+/* Whether a release ends nothing in libs-gui master although it should: a
+   release in a submenu of a transient menu (☰, a context menu), on an item
+   without a submenu of its own. Master ignores the first release in each
+   transient menu it tracks unless the pointer has left the item it was on
+   when that menu's tracking began; meant for the release of the press
+   that opened a context menu, it applies to submenus too, where tracking
+   begins on the item the pointer enters by, so a click there did nothing
+   and needed a second (File > New, as New is File's first item). */
+static BOOL
+GnomeThemeReleaseIsInTransientSubmenu(NSEvent *event)
+{
+  NSWindow *window = [event window];
+  NSMenu *menu = [[GnomeThemeTrackingRootView menu] attachedMenu];
+
+  if (window == nil)
+    {
+      return NO;
+    }
+  while (menu != nil)
+    {
+      NSMenuView *menuView = [menu menuRepresentation];
+
+      if ([menuView window] == window)
+        {
+          NSInteger index = [menuView indexOfItemAtPoint:
+            [menuView convertPoint: [event locationInWindow] fromView: nil]];
+
+          return [menu isTransient] && index >= 0
+            && [[menu itemAtIndex: index] hasSubmenu] == NO;
+        }
+      menu = [menu attachedMenu];
+    }
+  return NO;
+}
+
 /* While a menu tracks in 0.32: a press, or the pointer onto another item,
    is something happening, and the release after it ends tracking as
    usual; a release still on the first item is dropped. */
@@ -784,7 +819,8 @@ GnomeThemeTrackingIndexForEvent(NSEvent *event)
       if (GnomeThemeSpareReleases > 0 && type == NSLeftMouseUp && [event windowNumber] == 0)
         {
           GnomeThemeSpareReleases--;
-          if (GnomeThemeTrackingRootView == nil || GnomeThemeSpareSession != GnomeThemeTrackingSession)
+          if (GnomeThemeTrackingRootView == nil || GnomeThemeSpareSession != GnomeThemeTrackingSession
+            || [mode isEqualToString: NSEventTrackingRunLoopMode] == NO)
             {
               event = originalIMP (self, _cmd, mask, expiration, mode, flag);
               continue;
@@ -836,6 +872,29 @@ GnomeThemeTrackingIndexForEvent(NSEvent *event)
             }
         }
       break;
+    }
+  /* In master, a click in a transient submenu ends tracking whether or not
+     the pointer moved first: a spare release follows the user's, which
+     ends tracking when master ignored the user's, and is dropped when the
+     user's ended it (see GnomeThemeReleaseIsInTransientSubmenu). */
+  if (event != nil && flag && GnomeThemeTrackingRootView != nil
+    && [event type] == NSLeftMouseUp && [event windowNumber] != 0
+    && GnomeThemeMenuTrackingEndsOnFirstRelease () == NO
+    && GnomeThemeReleaseIsInTransientSubmenu (event))
+    {
+      NSEvent *spare = [NSEvent mouseEventWithType: NSLeftMouseUp
+                                          location: NSZeroPoint
+                                     modifierFlags: 0
+                                         timestamp: [event timestamp]
+                                      windowNumber: 0
+                                           context: nil
+                                       eventNumber: 0
+                                        clickCount: 1
+                                          pressure: 0.0];
+
+      [NSApp postEvent: spare atStart: YES];
+      GnomeThemeSpareReleases++;
+      GnomeThemeSpareSession = GnomeThemeTrackingSession;
     }
   return event;
 }
