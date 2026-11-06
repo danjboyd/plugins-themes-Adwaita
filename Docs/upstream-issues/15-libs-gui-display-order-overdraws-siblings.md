@@ -124,11 +124,11 @@ invariant.
 Both GNUstep themes that draw overlay scrollers hit this and worked round
 it from the scroll view's side:
 
-- **plugins-themes-Adwaita** (#47): when the content scrolls, the scroll
+- **plugins-themes-Adwaita** (danjboyd/plugins-themes-Adwaita#47): when the content scrolls, the scroll
   view invalidates the clip view's whole area itself, so the first pass
   covers the document's rect and the scrollers are drawn last
   (`GnomeThemeOverlayScrollers.m`).
-- **plugins-themes-winuitheme** (#87, PR #88): after libs-gui's pass, the
+- **plugins-themes-winuitheme** (danjboyd/plugins-themes-winuitheme#87, fixed by danjboyd/plugins-themes-winuitheme#88): after libs-gui's pass, the
   scroll view redraws the scroller strips when the content was dirty
   (`WinUIThemeScrollers.m`).
 
