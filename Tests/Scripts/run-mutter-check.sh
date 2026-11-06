@@ -37,7 +37,9 @@
 # on the bar, handed to Mutter, takes the window past the screen's left
 # edge (GNUstep's own move loop can't); a drag on the right edge, handed
 # to Mutter, widens it. A menu bar's menu is a _DROPDOWN_MENU, and the
-# window stays the active one while it's open. Last, Alt+F4 closes the
+# window stays the active one while it's open. A context menu stays open
+# after the release of the right click that opens it, and one click picks
+# the item its submenu is entered by. Last, Alt+F4 closes the
 # window through the app, which then quits, rather than Mutter killing it.
 #
 # --shadow runs against a libs-gui and libs-back that draw GNOME's window
@@ -485,6 +487,66 @@ if [ "${TYPE%%,*}" = "$WANTED" ] && [ "$((ACTIVE))" = "$WINDOW" ]; then
 else
   report FAIL "$NAME-menu-type" "$DETAIL (want $WANTED, ThemeDemo $(printf 0x%x "$WINDOW") active)"
 fi
+
+# A context menu (ThemeDemo's Controls page, a right click on its
+# background: Copy, Paste, Share > Email, Link), clicked as a hand does:
+# stepped motion, a short press. The release of the right click that opens
+# it picks nothing; then one click on the item a submenu is entered by
+# (Email, level with Share) picks it. libs-gui master ignored that click,
+# as it ignores the first release in each transient menu while the pointer
+# stays on the item its tracking began on, so it took two (the ☰ menu's
+# File > New, as New is File's first item).
+MAINS=" $(xdotool search --name 'Adwaita Theme Demo' 2>/dev/null | tr '\n' ' ') "
+demo_menus() {
+  local w
+  for w in $(xdotool search --onlyvisible --class ThemeDemo 2>/dev/null); do
+    case "$MAINS" in *" $w "*) ;; *) echo "$w" ;; esac
+  done
+}
+glide() { # x y
+  # getmouselocation also sets SCREEN and WINDOW, the window under the
+  # pointer: kept local, so the script's WINDOW stays ThemeDemo's.
+  local X Y SCREEN WINDOW i
+  eval "$(xdotool getmouselocation --shell)"
+  for i in 1 2 3 4 5 6 7 8; do
+    xdotool mousemove $((X + ($1 - X) * i / 8)) $((Y + ($2 - Y) * i / 8)); sleep 0.03
+  done
+  sleep 0.4
+}
+read -r VX VY VW VH <<<"$(visible)"
+xdotool mousemove $((VX + VW - 40)) $((VY + VH - 40)) click 1
+sleep 0.8
+xdotool mousemove $((VX + VW - 260)) $((VY + VH - 200)); sleep 0.3
+xdotool mousedown 3; sleep 0.12; xdotool mouseup 3; sleep 1
+CONTEXT="$(demo_menus | head -1)"
+if [ -n "$CONTEXT" ]; then
+  report PASS "$NAME-context-menu" "menu $CONTEXT open after the right click's release"
+  eval "$(xwininfo -id "$CONTEXT" | awk '/Absolute upper-left X/ {print "CX=" $NF} /Absolute upper-left Y/ {print "CY=" $NF}')"
+  glide $((CX + 60)) $((CY + 99))
+  sleep 0.8
+  SUBMENU=""
+  for w in $(demo_menus); do
+    [ "$w" != "$CONTEXT" ] && SUBMENU="$w"
+  done
+  if [ -n "$SUBMENU" ]; then
+    eval "$(xwininfo -id "$SUBMENU" | awk '/Absolute upper-left X/ {print "SX=" $NF}')"
+    glide $((SX + 60)) $((CY + 99))
+    BEFORE="$(grep -c 'ThemeDemo-context' "$WORK/demo.log")"
+    xdotool mousedown 1; sleep 0.12; xdotool mouseup 1; sleep 1
+    PICKED="$(grep 'ThemeDemo-context' "$WORK/demo.log" | tail -n +$((BEFORE + 1)) | tr '\n' ' ')"
+    OPEN="$(demo_menus | wc -l)"
+    if [ "$PICKED" = "ThemeDemo-context Email " ] && [ "$OPEN" = 0 ]; then
+      report PASS "$NAME-submenu-first-click" "one click picked Email and closed the menus"
+    else
+      report FAIL "$NAME-submenu-first-click" "one click picked '${PICKED% }', $OPEN menus still open"
+    fi
+  else
+    report FAIL "$NAME-submenu-first-click" "Share's submenu didn't open"
+  fi
+else
+  report FAIL "$NAME-context-menu" "no menu after the right click's release"
+fi
+xdotool key Escape; sleep 0.5; xdotool key Escape; sleep 0.5
 
 if [ "$SHADOW" = YES ]; then
   # A menu: a borderless window with an alpha channel and, from the
