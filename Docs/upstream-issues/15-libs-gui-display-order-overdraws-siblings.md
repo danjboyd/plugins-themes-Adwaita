@@ -42,7 +42,8 @@ pixel from the window's backing store.
 [window displayIfNeeded];
 ```
 
-`./display_order -GSTheme GNUstep`, on master and on 0.32:
+`./display_order -GSTheme GNUstep`, on master 8ac9f1db1 and on 0.32.0
+(three runs each, all the same):
 
 ```
 drawn: parent{x = 180; y = 20; width = 20; height = 180} document{x = 180; y = 20; width = 20; height = 180} strip{x = 0; y = 0; width = 20; height = 180} document{x = 0; y = 0; width = 200; height = 200}
@@ -73,7 +74,7 @@ while the content scrolls.
 
 ### Cause
 
-Source/NSView.m on master (lines 2589-2644), in
+Source/NSView.m on master 8ac9f1db1 (lines 2623-2678), in
 `-displayIfNeededInRectIgnoringOpacity:`. The first pass is limited to the
 receiver's own dirty rect:
 
@@ -83,15 +84,16 @@ receiver's own dirty rect:
 ```
 
 `-displayRectIgnoringOpacity:inContext:` draws the receiver in that rect
-and then every subview that intersects it, in order (lines 2738-2765,
-`[subview displayRectIgnoringOpacity: isect inContext: context]` at 2752).
-A subview's dirty state is cleared only if the drawn rect contains its own
-`_invalidRect` (lines 2700-2710). An opaque subview's `_invalidRect` is its
-own: `_setNeedsDisplayInRect_real:` (line 2975) keeps the rect in the view
-when it is its own opaque ancestor and only sets `needs_display` on its
-superviews (2997-3001), while a non-opaque view passes its rect up to its
-opaque ancestor (2986-2990). So the opaque document stays dirty, and the
-second pass (lines 2608-2641) draws it again:
+and then every subview that intersects it, in order (lines 2772-2798,
+`[subview displayRectIgnoringOpacity: isect inContext: context]` at 2786).
+A subview's dirty state is cleared only if the drawn rect covers its own
+`_invalidRect` (lines 2730-2744). An opaque subview's `_invalidRect` is its
+own: `_setNeedsDisplayInRect_real:` (line 2986) keeps the rect in the view
+when it is its own opaque ancestor (3009-3019) and only sets
+`needs_display` on its superviews (3032-3036), while a non-opaque view
+passes its rect up to its opaque ancestor (3020-3024). So the opaque
+document stays dirty, and the second pass (lines 2642-2675) draws it
+again:
 
 ```objc
               if (subview->_rFlags.needs_display)
@@ -107,7 +109,11 @@ second pass (lines 2608-2641) draws it again:
 
 This draws the subview (and its own subviews), but not the siblings after
 it in `_sub_views` that overlap what it drew; they were drawn in the first
-pass and aren't dirty any more. This code hasn't changed since 2013.
+pass and aren't dirty any more. `-displayIfNeededInRectIgnoringOpacity:`
+hasn't changed since 2013. The covering test was given a 0.01 slack in
+a5fb6a2bc (#940); that doesn't help here, where the first pass covers
+only a 20 by 180 point part of the document's 200 by 200 dirty rect, and
+the program fails on master with it.
 
 ### Suggested fix
 
@@ -146,15 +152,16 @@ the same overdraw, not only scrollers.
 
 ### Environment
 
-- Reproduced 2026-10-08 with libs-gui master 549f639 (2026-10-02, unpatched,
-  run uninstalled through `LD_LIBRARY_PATH`, confirmed with `ldd`) and with
-  the installed gui (a Debian build of the master snapshot 7892137bd,
-  2026-03-31, with two unrelated patches); libs-base 1.31.1 in both runs.
+- Reproduced 2026-11-06 with libs-gui master 8ac9f1db1 (unpatched, run
+  uninstalled through `LD_LIBRARY_PATH`, confirmed with `ldd`) and with the
+  installed 0.32.0 gui (a Debian build of the master snapshot 7892137bd
+  carrying six local patches); libs-base 1.31.1 in both runs. First
+  reproduced 2026-10-08 on master 549f639.
 - Debian 13, clang 19, libobjc2 2.3 (gnustep-2.2 runtime), cairo/xlib
   backend, under Xvfb with no window manager, GNUstep's default theme.
 - No existing issue or pull request found (searched "displayIfNeeded",
   "_invalidRect", "overdraw", "draws over", "scroller redraw",
-  "needs_display subview", 2026-10-08).
+  "needs_display subview", 2026-11-06).
 
 ---
 
