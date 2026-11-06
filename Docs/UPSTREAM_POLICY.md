@@ -13,6 +13,9 @@ Changed 2026-11-06 (Dan's ruling): libobjc2 takes issue reports and
 comments under the standard policy, but no code of ours except as a
 labelled illustration (below).
 
+Changed 2026-11-06 (Dan's rule): every report, patch or comment is
+searched for duplicates at filing time (rule 9).
+
 ## GNUstep's rules, in short
 
 GNUstep's policy (`POLICY_AI.md` in gnustep/apps-gorm, by Gregory Casamento;
@@ -73,6 +76,13 @@ What individual maintainers have added:
    from another project (libadwaita's shadows) are said to be measured.
 8. **Paced.** Items go one at a time, when Dan says so, spaced out; one
    pull request per change.
+9. **No duplicates.** When an item is filed for Dan's review, and again
+   before it is sent, search the upstream project's open and closed
+   issues, open and closed pull requests, and master's log, then and
+   there, not from earlier notes. Say in the filing what was searched,
+   when, and what came up, with links to anything close. A near match
+   becomes a comment on it, or the item is dropped. Also check that no
+   other session has the same item in Dan's queue.
 
 ## Stage 1: Prepare (Claude)
 
@@ -97,6 +107,8 @@ What individual maintainers have added:
       origin/master`, checked to apply to master with `git am`.
 - [ ] `Docs/upstream-patches/README.md` updated: the series, the counts,
       what changed since the last review.
+- [ ] Searched for duplicates at filing time (rule 9): the project's open
+      and closed issues and pull requests, and master's log.
 
 **An issue report** (`Docs/upstream-issues/<n>-<repo>-<slug>.md`):
 
@@ -108,12 +120,14 @@ What individual maintainers have added:
       no blocks, no dot syntax. If the bug is only reachable with blocks
       (libdispatch), say so in the report and use the `_f` functions
       where they exist.
-- [ ] Checked that it isn't already reported or fixed (open and closed
-      issues, open pull requests, master's log).
+- [ ] Checked at filing time that it isn't already reported or fixed
+      (rule 9): open and closed issues, open and closed pull requests,
+      master's log.
 
 **A comment** on an upstream issue, pull request or list thread: drafted in
-the conversation or in a file, with the disclosure line, and every claim in
-it from a run.
+the conversation or in a file, with the disclosure line, every claim in
+it from a run, and the thread read again at filing time for anything that
+already says it (rule 9).
 
 ## Stage 2: Review (Dan)
 
