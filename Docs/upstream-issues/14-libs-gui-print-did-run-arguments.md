@@ -49,17 +49,17 @@ theOperation = [NSPrintOperation printOperationWithView: view];
 ```
 
 `./print_did_run -GSTheme GNUstep -GSPrinting GSLPR` on libs-gui master
-549f639:
+8ac9f1db1:
 
 ```
-printOperation: (nil) (the operation is 0x564dfaa194c8)  FAIL
-success:        -1075220032 (want 0, the sheet was cancelled)  FAIL
-contextInfo:    0x7f636b58f530 (passed 0x564dbfe971c0)  FAIL
+printOperation: (nil) (the operation is 0x55f95a8decc8)  FAIL
+success:        919159232 (want 0, the sheet was cancelled)  FAIL
+contextInfo:    0x7f9afcff3530 (passed 0x55f936c941c0)  FAIL
 ```
 
 The operation argument is `success` (NO, so nil); the other two are not
-what was passed. The installed gui gives the same three FAILs, with other
-`success` and `contextInfo` values.
+what was passed. Three runs on master and three on the installed 0.32.0 gui all give
+the same three FAILs, with other `success` and `contextInfo` values.
 
 ### Expected
 
@@ -111,7 +111,7 @@ Related, from reading the code only (not reproduced here):
 (lines 1405-1421) passes the caller's didRunSelector straight to
 `-[NSPageLayout beginSheetWithPrintInfo:...didEndSelector:...]`, and
 `-[NSApplication beginSheet:...]` calls it as `(sheet, returnCode,
-contextInfo)` (Source/NSApplication.m, lines 2088-2094). A delegate with
+contextInfo)` (Source/NSApplication.m, lines 2099-2105). A delegate with
 Cocoa's `-document:didRunPageLayout:contextInfo:` then gets the page
 layout panel where the document should be.
 
@@ -124,16 +124,17 @@ relying on the callback's first argument.
 
 ### Environment
 
-- Reproduced 2026-10-08 with libs-gui master 549f639 (unpatched, run
-  uninstalled through `LD_LIBRARY_PATH`) and with the installed gui (a
-  Debian build of the master snapshot 7892137bd, 2026-03-31, with two
-  unrelated patches); libs-base 1.31.1; libs-back's GSLPR printing bundle
-  (`-GSPrinting GSLPR`), nothing printed.
+- Reproduced 2026-11-06 with libs-gui master 8ac9f1db1 (unpatched, run
+  uninstalled through `LD_LIBRARY_PATH`, confirmed with `ldd`) and with
+  the installed 0.32.0 gui (a Debian build of the master snapshot
+  7892137bd carrying six local patches); libs-base 1.31.1;
+  libs-back's GSLPR printing bundle (`-GSPrinting GSLPR`), nothing
+  printed. First reproduced 2026-10-08 on master 549f639.
 - Debian 13, clang 19, libobjc2 2.3 (gnustep-2.2 runtime), cairo/xlib
   backend, under Xvfb with no window manager.
 - No existing issue or pull request found (searched "didRunSelector",
   "printOperationDidRun", "runOperationModalForWindow", "print
-  contextInfo", 2026-10-08); NSPrintOperation.m's last change on master
+  contextInfo", 2026-11-06); NSPrintOperation.m's last change on master
   is 4eac748b6 (2011).
 
 ---
