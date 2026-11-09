@@ -4,6 +4,8 @@
 Before filing, confirm the Cocoa behaviour on macOS with the reproducer
 (it builds unchanged with `clang -framework AppKit`).
 
+**Re-run 2026-11-09:** unchanged. On libs-gui master 8ac9f1db1 and on 0.32, `combo_select_string` still prints `string value: ""` and `FAIL`. The 2026-11-09 duplicate search ("selectItemAtIndex combo", "NSComboBox stringValue select") found nothing.
+
 **Title:** NSComboBox: -selectItemAtIndex: doesn't put the item in the field
 
 ### Summary
