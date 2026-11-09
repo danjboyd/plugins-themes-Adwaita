@@ -5,6 +5,8 @@ Before filing, confirm on macOS that Cocoa shows the indicator by itself,
 with the reproducer below (it builds unchanged against Cocoa with
 `clang -framework AppKit`).
 
+**Re-run 2026-11-09:** unchanged. On libs-gui master 8ac9f1db1 and on the installed 0.32.0, `sort_indicator` still prints `FAIL`: no indicator image, no highlighted column, and the header cell is never asked to draw an indicator. The 2026-11-09 duplicate search of libs-gui issues and PRs ("sort indicator", "indicatorImage", "highlightedTableColumn sort") found only #493 and #778, both older than this draft.
+
 **Title:** NSTableView: sorting by a column header shows no sort indicator
 
 ### Summary

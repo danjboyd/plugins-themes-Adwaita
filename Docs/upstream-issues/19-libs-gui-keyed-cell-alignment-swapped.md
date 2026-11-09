@@ -5,6 +5,8 @@
 - check how Cocoa .nib files store a cell's alignment in `NSCellFlags2` (below), with a nib saved on a Mac;
 - Dan's sign-off.
 
+**Re-run 2026-11-09:** unchanged, on libs-gui master 8ac9f1db1 (still unreleased; latest release 0.32.0), twice. Archives written with 0.32 read back correctly with 0.32. With master, the NSArchiver cells still read correctly, but the NSKeyedArchiver "centre" cell is right and the "right" cell is centre. The 2026-11-09 duplicate search ("NSTextAlignment", "alignment keyed archive", "NSCellFlags2", "centered right swapped") found #893 (the renumbering itself), #752 (the request for it) and #926 (a Gorm load bug); none reports this.
+
 The libs-gui master tested is `fdc5cfe83`, 2026-10-13. Master is unreleased, so this is worth raising before the next release.
 
 **Title:** Keyed archives from 0.32 decode centred cells as right-aligned (and the reverse) since the NSTextAlignment renumbering
