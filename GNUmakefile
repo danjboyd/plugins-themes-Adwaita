@@ -47,11 +47,14 @@ Adwaita_INSTALL_DIR = $(GNUSTEP_LIBRARY)/Themes
 # The theme's Info-gnustep.plist is AdwaitaInfo.plist, which gnustep-make
 # merges into the one it generates. Listed as a resource, it raced the
 # generated file and a clean build could ship without GSThemeDomain (#45).
+# ThemeSettings.plist: the user-facing settings, for a theme configurator
+# that reads them without loading the theme.
 # THIRD-PARTY-NOTICES: the licenses of the GNOME icons in ThemeImages,
 # which aren't the theme's LGPL-2.1-or-later.
 Adwaita_RESOURCE_FILES = \
 	Resources/ThemeImages \
 	Resources/ThemeTiles \
+	Resources/ThemeSettings.plist \
 	THIRD-PARTY-NOTICES
 
 Adwaita_OBJC_FILES = \

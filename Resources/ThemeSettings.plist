@@ -1,0 +1,188 @@
+/* The theme's user-facing settings, for a theme configurator that reads
+   this file without loading the theme (gnustep-themes' ThemeSettings
+   schema, version 1). The defaults keys below stay the theme's own: this
+   file only describes them. Each entry names where the theme reads it
+   (paths under Source/).
+
+   An explicit stored value ("default", "auto") is not the same as no
+   value: Unset says what no value means, and dynamic ones carry help text,
+   never a stored token. */
+{
+  SchemaVersion = 1;
+  Theme = Adwaita;
+  ThemeIdentifier = "org.gnustep.themes.adwaita";
+
+  Groups = (
+    { Identifier = appearance; Title = "Appearance"; },
+    { Identifier = layout; Title = "Layout"; },
+    { Identifier = integration; Title = "GNOME integration"; }
+  );
+
+  Settings = (
+    /* Settings/GnomeThemeSettings.m, GnomeThemeForcedColorScheme(). */
+    {
+      Identifier = "adwaita.color-scheme";
+      Key = GnomeThemeColorScheme;
+      Type = enum;
+      CaseInsensitive = YES;
+      Values = (
+        { Value = "force-light"; Title = "Light"; },
+        { Value = "force-dark"; Title = "Dark"; },
+        { Value = default; Title = "GNOME setting only";
+          Help = "Follows GNOME's colour scheme and ignores GTK_THEME."; }
+      );
+      Scopes = (global, application);
+      Group = appearance;
+      Title = "Style";
+      Help = "Light or dark for this app, or follow the system.";
+      Unset = { Behavior = dynamic;
+                Help = "GTK_THEME's variant if set, else GNOME's colour scheme"; };
+      Apply = restart;
+    },
+
+    /* Settings/GnomeThemeSettings.m (-reload, accent-color); the names
+       are Rendering/GnomeThemePalette.m's GnomeThemeAccentHex(). */
+    {
+      Identifier = "adwaita.accent-color";
+      Key = GnomeThemeAccentColor;
+      Type = enum;
+      CaseInsensitive = YES;
+      Values = (
+        { Value = blue; Title = "Blue"; },
+        { Value = teal; Title = "Teal"; },
+        { Value = green; Title = "Green"; },
+        { Value = yellow; Title = "Yellow"; },
+        { Value = orange; Title = "Orange"; },
+        { Value = red; Title = "Red"; },
+        { Value = pink; Title = "Pink"; },
+        { Value = purple; Title = "Purple"; },
+        { Value = slate; Title = "Slate"; }
+      );
+      Scopes = (global, application);
+      Group = appearance;
+      Title = "Accent colour";
+      Help = "Highlight colour for selections, switches and default buttons.";
+      Unset = { Behavior = dynamic; Help = "GNOME's accent colour, else blue"; };
+      Apply = restart;
+    },
+
+    /* Settings/GnomeThemeSettings.m, GnomeThemeWantsCompactMetrics(). A
+       stored value, "auto" included, skips the app's Info.plist. */
+    {
+      Identifier = "adwaita.metrics";
+      Key = GnomeThemeMetrics;
+      Type = enum;
+      CaseInsensitive = YES;
+      Values = (
+        { Value = gnome; Title = "GNOME sizes"; },
+        { Value = compact; Title = "Compact (GNUstep sizes)"; },
+        { Value = auto; Title = "Automatic";
+          Help = "Compact for apps laid out in Gorm or nib files; ignores the app's own preference."; }
+      );
+      Scopes = (global, application);
+      Group = layout;
+      Title = "Control sizes";
+      Help = "GNOME's sizes, GNUstep's compact sizes, or automatic for apps laid out in Gorm.";
+      Unset = { Behavior = dynamic; Help = "the app's own preference, else automatic"; };
+      Precedence = (argument, application, global, applicationInfo);
+      Apply = restart;
+    },
+
+    /* Rendering/GnomeThemePrimaryMenu.m, GnomeThemeUsesPrimaryMenu(): any
+       stored value but "menubar" is the main menu button, and overrides
+       the app's Info.plist. Unset follows the app's Info.plist. */
+    {
+      Identifier = "adwaita.menu-style";
+      Key = GnomeThemeMenuStyle;
+      Type = enum;
+      CaseInsensitive = YES;
+      Values = (
+        { Value = primary; Title = "Main menu button"; },
+        { Value = menubar; Title = "Menu bar"; }
+      );
+      Scopes = (global, application);
+      Group = layout;
+      Title = "Menus";
+      Help = "GNOME's main menu button, or a menu bar.";
+      Unset = { Behavior = dynamic;
+                Help = "a menu bar if the app asks for one, else the main menu button"; };
+      Precedence = (argument, application, global,
+                    { Source = applicationInfo; Values = (menubar); });
+      Apply = restart;
+    },
+
+    /* Rendering/GnomeThemeHeaderBar.m, GnomeThemeHeaderBarToolbarEnabled();
+       applied live from NSUserDefaultsDidChangeNotification
+       (GnomeTheme.m, -defaultsDidChange:). A registered default ranks
+       with the app's Info.plist YES; not modelled here. */
+    {
+      Identifier = "adwaita.header-bar-toolbar";
+      Key = GnomeThemeHeaderBarToolbar;
+      Type = bool;
+      Scopes = (global, application);
+      Group = layout;
+      Title = "Toolbar in header bar";
+      Help = "Put the window's toolbar buttons in the title bar row. Only when GNUstep draws the window decorations; open windows keep their size.";
+      Unset = { Behavior = static; Value = NO; };
+      Precedence = (argument, application,
+                    { Source = applicationInfo; Values = (NO); },
+                    global, applicationInfo);
+      Apply = live;
+    },
+
+    /* Rendering/GnomeThemeOverlayScrollers.m, GnomeThemeUsesOverlayScrollers(). */
+    {
+      Identifier = "adwaita.overlay-scrollbars";
+      Key = GnomeThemeOverlayScrollbars;
+      Type = bool;
+      Scopes = (global, application);
+      Group = appearance;
+      Title = "Overlay scrollbars";
+      Help = "Scrollbars that appear over the content only while scrolling.";
+      Unset = { Behavior = dynamic; Help = "GNOME's overlay-scrolling setting"; };
+      Apply = newWindows;
+    },
+
+    /* Adapters/GnomeThemeFileChooser.m: only a stored NO turns it off. */
+    {
+      Identifier = "adwaita.native-file-dialogs";
+      Key = GnomeThemeNativeFileDialogs;
+      Type = bool;
+      Scopes = (global, application);
+      Group = integration;
+      Title = "GNOME file chooser";
+      Help = "Use GNOME's file chooser for open and save.";
+      Unset = { Behavior = static; Value = YES; };
+      Apply = newWindows;
+    },
+
+    /* Adapters/GnomeThemePrintDialog.m: only a stored NO turns it off. */
+    {
+      Identifier = "adwaita.native-print-dialog";
+      Key = GnomeThemeNativePrintDialog;
+      Type = bool;
+      Scopes = (global, application);
+      Group = integration;
+      Title = "GNOME print dialog";
+      Help = "Use GNOME's print dialog.";
+      Unset = { Behavior = static; Value = YES; };
+      Apply = newWindows;
+    },
+
+    /* Settings/GnomeThemeSettings.m, GnomeThemeResolvedFontScale(): out
+       of range, or not a number, reads as 1.0. */
+    {
+      Identifier = "adwaita.font-scale";
+      Key = GnomeFontScale;
+      Type = number;
+      Minimum = 0.8;
+      Maximum = 2.0;
+      Scopes = (global, application);
+      Group = appearance;
+      Title = "Text size";
+      Help = "Scale the interface font (GNOME's Large Text applies on top).";
+      Unset = { Behavior = static; Value = 1.0; };
+      Apply = restart;
+    }
+  );
+}
