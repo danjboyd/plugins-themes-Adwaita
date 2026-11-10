@@ -31,10 +31,10 @@ Gorm -GnomeThemeDesignSurfaces YES
 | In a design window | With design surfaces on |
 |---|---|
 | Push button margins (rounded, round rect, textured rounded) and bold titles | GNOME's |
-| Check box and radio indicator size | GNOME's |
+| Check box and radio indicator size | GNOME's (from the code; the probe doesn't measure it) |
 | Tab view tab-row height | GNOME's |
-| A button's `-cellSize` (what Gorm's size-to-fit uses) | GNOME's |
 | Fonts | **unchanged:** each control keeps the font Gorm gave it |
+| A button's `-cellSize` (what size-to-fit uses) | **unchanged:** libs-gui sizes the cell from its font, which stays the same |
 | Table row height | **unchanged:** set when a table is made, before it is in a window, or decoded from the file |
 | Menus, scrollers | **unchanged:** they are the app's, not a window's |
 
@@ -51,8 +51,7 @@ Elsewhere, nothing changes:
 Design surfaces change only what the theme reads while it draws and sizes
 controls. The theme writes nothing into the objects you design, so it
 adds nothing to the file. A size you choose yourself is saved, as always.
-Size-to-fit should size a button by GNOME's margins, and the size it picks
-is saved.
+Size-to-fit sizes controls as before.
 
 `make check-design-surfaces` checks both runs, on and off:
 

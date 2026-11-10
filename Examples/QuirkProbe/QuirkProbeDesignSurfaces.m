@@ -112,15 +112,14 @@ QuirkProbeDesignDescription(NSButton *button, NSTabView *tabView)
     QuirkProbeDesignDescription (plainButton, plainTabView)];
   if (on)
     {
-      /* GNOME's margins and taller tab row in the design window only. */
+      /* GNOME's margins and taller tab row in the design window only. The
+         cell's size is libs-gui's, from its font, which stays the same. */
       ok = QuirkProbeDesignMargin (designButton) > QuirkProbeDesignMargin (plainButton)
-        && [[designButton cell] cellSize].height > [[plainButton cell] cellSize].height
         && NSHeight ([designTabView contentRect]) < NSHeight ([plainTabView contentRect]);
     }
   else
     {
       ok = fabs (QuirkProbeDesignMargin (designButton) - QuirkProbeDesignMargin (plainButton)) < 0.01
-        && NSEqualSizes ([[designButton cell] cellSize], [[plainButton cell] cellSize])
         && NSEqualRects ([designTabView contentRect], [plainTabView contentRect]);
     }
   if (ok)
