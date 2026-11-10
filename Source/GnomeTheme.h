@@ -161,12 +161,17 @@ BOOL GnomeThemeViewUsesNibMetrics(NSView *view);
 /* The same for a cell, which may not know its control yet. */
 BOOL GnomeThemeCellUsesNibMetrics(NSCell *cell, NSView *controlView);
 NSView *GnomeThemeSetMetricsView(NSView *view);
+/* Whether `view` (as GnomeThemeViewUsesNibMetrics() finds it) is in one
+   of Gorm's design windows, with GnomeThemeDesignSurfaces on (#26). */
+BOOL GnomeThemeViewIsOnDesignSurface(NSView *view);
+BOOL GnomeThemeCellIsOnDesignSurface(NSCell *cell, NSView *controlView);
 
 @interface GnomeTheme : GSTheme
 {
   GnomeThemeSettings *_settings;
   GnomeThemeMetrics *_metrics;
   GnomeThemeMetrics *_nibMetrics;
+  GnomeThemeMetrics *_designMetrics;
   NSColorList *_palette;
 }
 
@@ -175,7 +180,8 @@ NSView *GnomeThemeSetMetricsView(NSView *view);
 /* The app's metrics. */
 - (GnomeThemeMetrics *) metrics;
 /* The metrics of the window `view` is in: compact ones for a window loaded
-   from a nib or Gorm file in an app that otherwise has GNOME's. With no
+   from a nib or Gorm file in an app that otherwise has GNOME's, and
+   GNOME's for Gorm's design windows with GnomeThemeDesignSurfaces on. With no
    view, the view set by GnomeThemeSetMetricsView(), or the one being
    drawn. */
 - (GnomeThemeMetrics *) metricsForView: (NSView *)view;
