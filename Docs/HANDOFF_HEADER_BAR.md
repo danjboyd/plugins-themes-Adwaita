@@ -569,7 +569,9 @@ is `Docs/PROPOSAL_LIBS_BACK_CSD.md`.
 
 - "Design surfaces" in Gorm (WYSIWYG palette and document windows drawn with
   GNOME metrics while Gorm's own panels stay compact): designed but deferred
-  until Dan has talked to Gorm's maintainer. Notes: the private
+  until Dan has talked to Gorm's maintainer. A theme-only prototype of
+  the metrics part is in Docs/DESIGN_SURFACES.md (2026-11-10, off by
+  default). Notes: the private
   `+[NSFont _fontWithName:size:role:]` can make a default-size system font at
   GNOME's size that archives identically; Gorm's design windows are
   `GormNSWindow`/`GormNSPanel`, the palette area `GormPaletteView`.

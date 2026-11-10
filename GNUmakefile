@@ -93,7 +93,7 @@ include $(GNUSTEP_MAKEFILES)/bundle.make
 
 -include GNUmakefile.postamble
 
-.PHONY: demo installdemo probe check-quirks check-hidpi check-nib-metrics check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
+.PHONY: demo installdemo probe check-quirks check-hidpi check-nib-metrics check-design-surfaces check-text-scaling check-live-settings check-color-scheme check-file-chooser check-print-dialog check-menu-timing check-scroller-drag check-context-menu check-mutter check-mutter-shadow check-wms palette installpalette adwaita-demo adwaita-metrics
 
 demo:
 	$(MAKE) -C Examples/ThemeDemo
@@ -127,6 +127,12 @@ check-hidpi:
 check-nib-metrics:
 	QUIRK_PROBE_ARGS="-GnomeThemeMetrics gnome -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh
 	QUIRK_PROBE_ARGS="-GnomeThemeMetrics compact -ProbeOnly nib-metrics" bash Tests/Scripts/run-quirk-probe.sh --no-build
+
+# Gorm's design windows with GnomeThemeDesignSurfaces (#26, a prototype),
+# run with compact metrics as Gorm is: on, and off.
+check-design-surfaces:
+	QUIRK_PROBE_ARGS="-GnomeThemeMetrics compact -GnomeThemeDesignSurfaces YES -ProbeOnly design-surfaces" bash Tests/Scripts/run-quirk-probe.sh
+	QUIRK_PROBE_ARGS="-GnomeThemeMetrics compact -GnomeThemeDesignSurfaces NO -ProbeOnly design-surfaces" bash Tests/Scripts/run-quirk-probe.sh --no-build
 
 # GNOME's Large Text (#53): fonts and metrics at text-scaling-factor 1.25
 # and 2.0; check-quirks checks 1.0.

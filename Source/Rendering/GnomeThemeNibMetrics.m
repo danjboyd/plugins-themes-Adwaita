@@ -95,6 +95,58 @@ GnomeThemeViewUsesNibMetrics(NSView *view)
   return view != nil && GnomeThemeIsFromNib ([view window]);
 }
 
+/* Design surfaces in Gorm (#26), a prototype behind the
+   GnomeThemeDesignSurfaces default. Gorm has a main Gorm file, so the app
+   and all its own panels (inspectors, palettes, the document window) have
+   compact metrics. The windows a user designs in are GormNSWindow and
+   GormNSPanel: views in those get GNOME's metrics instead, so a layout
+   made there looks as it will in an app with GNOME's.
+
+   Only what the theme reads while drawing and sizing changes: button
+   margins and title weight, indicator sizes, tab heights. Nothing is
+   written into the designed objects, so what Gorm saves is the same with
+   or without it. Not covered: fonts (a control keeps the font Gorm gave it;
+   GNOME's size would be archived), and a table's row height (set when the
+   table is made, before it is in a window). Gorm's palettes, and Gorm's
+   test mode, which runs copies of the windows as ordinary ones, stay
+   compact. */
+static BOOL
+GnomeThemeIsDesignWindow(NSWindow *window)
+{
+  static Class designWindow = Nil;
+  static Class designPanel = Nil;
+  static BOOL looked = NO;
+
+  if (window == nil)
+    {
+      return NO;
+    }
+  if (looked == NO)
+    {
+      designWindow = NSClassFromString (@"GormNSWindow");
+      designPanel = NSClassFromString (@"GormNSPanel");
+      looked = YES;
+    }
+  return (designWindow != Nil && [window isKindOfClass: designWindow])
+    || (designPanel != Nil && [window isKindOfClass: designPanel]);
+}
+
+BOOL
+GnomeThemeViewIsOnDesignSurface(NSView *view)
+{
+  if (view == nil)
+    {
+      view = (GnomeThemeMetricsView != nil) ? GnomeThemeMetricsView : [NSView focusView];
+    }
+  return view != nil && GnomeThemeIsDesignWindow ([view window]);
+}
+
+BOOL
+GnomeThemeCellIsOnDesignSurface(NSCell *cell, NSView *controlView)
+{
+  return GnomeThemeViewIsOnDesignSurface (controlView != nil ? controlView : [cell controlView]);
+}
+
 /* A cell knows its control only once it has drawn in it, and is asked
    for its size before that: the nib's cells are marked too. */
 BOOL

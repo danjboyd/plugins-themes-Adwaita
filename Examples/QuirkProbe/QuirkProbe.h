@@ -102,6 +102,12 @@
 - (void) checkNibMetrics;
 @end
 
+/* -ProbeOnly design-surfaces (QuirkProbeDesignSurfaces.m), not in the full
+   run: it is run as Gorm runs, with compact metrics. */
+@interface QuirkProbe (DesignSurfaces)
+- (void) checkDesignSurfaces;
+@end
+
 @interface QuirkProbe (LiveSettings)
 - (void) checkLiveSettings;
 - (void) checkForcedColorScheme;

@@ -10453,6 +10453,14 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly design-surfaces, for the runs as Gorm (make
+     check-design-surfaces). */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"design-surfaces"])
+    {
+      [self checkDesignSurfaces];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly toolbar-overflow: the » menu by visibilityPriority, in a
      window's toolbar and (with the theme's decorations) the header bar. */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"toolbar-overflow"])

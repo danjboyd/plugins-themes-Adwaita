@@ -32,7 +32,9 @@
 
 - (void) reloadFromSettings: (GnomeThemeSettings *)settings compact: (BOOL)compact
 {
-  CGFloat base = compact ? [settings compactInterfaceFontSize] : [settings interfaceFontSize];
+  /* GNOME's size even in an app with compact metrics: Gorm's design
+     windows (#26) get GNOME's metrics there. */
+  CGFloat base = compact ? [settings compactInterfaceFontSize] : [settings gnomeInterfaceFontSize];
 
   if (base <= 0.0)
     {

@@ -368,6 +368,7 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
       _settings = [GnomeThemeSettings new];
       _metrics = [GnomeThemeMetrics new];
       _nibMetrics = [GnomeThemeMetrics new];
+      _designMetrics = [GnomeThemeMetrics new];
       [self reloadConfiguration];
     }
   return self;
@@ -378,6 +379,7 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
   RELEASE (_settings);
   RELEASE (_metrics);
   RELEASE (_nibMetrics);
+  RELEASE (_designMetrics);
   RELEASE (_palette);
   [super dealloc];
 }
@@ -387,6 +389,7 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
   [_settings reload];
   [_metrics reloadFromSettings: _settings];
   [_nibMetrics reloadFromSettings: _settings compact: YES];
+  [_designMetrics reloadFromSettings: _settings compact: NO];
   DESTROY (_palette);
 }
 
@@ -402,6 +405,10 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
 
 - (GnomeThemeMetrics *) metricsForView: (NSView *)view
 {
+  if ([_settings designSurfaces] && GnomeThemeViewIsOnDesignSurface (view))
+    {
+      return _designMetrics;
+    }
   if ([_settings metricsFollowWindows] && GnomeThemeViewUsesNibMetrics (view))
     {
       return _nibMetrics;
@@ -411,6 +418,10 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
 
 - (GnomeThemeMetrics *) metricsForCell: (NSCell *)cell inView: (NSView *)controlView
 {
+  if ([_settings designSurfaces] && GnomeThemeCellIsOnDesignSurface (cell, controlView))
+    {
+      return _designMetrics;
+    }
   if ([_settings metricsFollowWindows] && GnomeThemeCellUsesNibMetrics (cell, controlView))
     {
       return _nibMetrics;
