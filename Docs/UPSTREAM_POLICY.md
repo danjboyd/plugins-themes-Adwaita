@@ -39,6 +39,9 @@ content". It says:
 - **Never** send material of unverifiable origin, security-critical logic
   without expert review, or made-up references, results or benchmarks.
 - Be ready to give reproduction steps and tests, and to revise or withdraw.
+- **FSF copyright assignment** for contributed work
+  (https://www.gnustep.org/developers/contribute.html); patches may be
+  accepted before it is final if the maintainers agree, so ask.
 
 What individual maintainers have added:
 
@@ -240,9 +243,14 @@ Tests/Scripts/gcc-syntax-check.sh --files Docs/upstream-issues/override_subclass
 - **Sent:** libs-back 0001 (`dbfbe53`) as [libs-back#244](https://github.com/gnustep/libs-back/pull/244), 2026-10-06, from branch `x11-keep-wm-functions` of danjboyd/libs-back.
 - **Prepared, not reviewed:** libs-back 0002–0005 and the libs-gui commit
   in `Docs/upstream-patches/`. GCC check passes.
-- **Copyright assignment:** decided 2026-10-06 to send without it, as
-  GNUstep has already accepted Dan's code; deal with it if a maintainer
-  raises it.
+- **Copyright assignment:** GNUstep asks that contributed work be
+  assigned to the FSF (https://www.gnustep.org/developers/contribute.html).
+  Dan's assignment is in progress (his answer of 2026-11-11). Until it is
+  complete, every patch says so in its opening "Upstream policy:" line and
+  asks the maintainers whether they will review it now or would rather
+  wait; that page allows patches to be accepted before an assignment is
+  final when agreed. Issue reports and comments contribute no code and
+  say so. (This replaces the 2026-10-06 decision to send without it.)
 - **Issue drafts 2, 4 and 11** (the next to file, #29): reproducers pass
   the GCC check and were re-run on master 549f639 on 2026-10-07; ready for
   review, not reviewed.
