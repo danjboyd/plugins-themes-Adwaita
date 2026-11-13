@@ -27,6 +27,13 @@
   NSWindow *_window;
   NSTabView *_tabView;
   ThemeDemoTableDataSource *_tableDataSource;
+  /* Non-owning references; the Data tab hierarchy owns these views. */
+  NSView *_layoutDataCanvas;
+  NSScrollView *_layoutTableScroll;
+  NSScrollView *_layoutOutlineScroll;
+  NSTextField *_layoutTableLabel;
+  NSTextField *_layoutOutlineLabel;
+  NSButton *_wideColumnsButton;
   NSProgressIndicator *_progressIndicator;
   NSTextField *_sliderValueLabel;
   NSTextField *_stepperValueField;
