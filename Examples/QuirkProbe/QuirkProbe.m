@@ -471,6 +471,38 @@ QuirkProbeTopGap (NSView *view, NSRect frame)
   return [view isFlipped] ? NSMinY (frame) : NSMaxY ([view bounds]) - NSMaxY (frame);
 }
 
+/* Runs the run loop after a toolbar is shown or hidden: a visible window
+   animates to its new height (libs-gui's toolbar visibility animation), so
+   the layout is read once the frame has settled. At least 0.35 s, then until
+   the frame has been still for 0.1 s; NO if it hasn't settled within 3 s. */
+static BOOL
+QuirkProbeSettleWindow (NSWindow *window)
+{
+  NSRunLoop *loop = [NSRunLoop currentRunLoop];
+  NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow: 3.0];
+  NSRect last;
+  NSTimeInterval still = 0;
+
+  [loop runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.35]];
+  last = [window frame];
+  while ([deadline timeIntervalSinceNow] > 0)
+    {
+      [loop runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.02]];
+      if (NSEqualRects ([window frame], last))
+        {
+          still += 0.02;
+          if (still >= 0.1)
+            return YES;
+        }
+      else
+        {
+          still = 0;
+          last = [window frame];
+        }
+    }
+  return NO;
+}
+
 /* The header bar's window buttons, left to right. */
 static NSArray *
 QuirkProbeWindowButtons (NSView *frameView)
@@ -5859,17 +5891,22 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
     NSMenuView *bar;
     CGFloat hiddenBar, hiddenGap, shownGap;
 
+    BOOL settled;
+
     [toolbar setVisible: NO];
+    settled = QuirkProbeSettleWindow (_toolbarWindow);
     bar = (NSMenuView *)QuirkProbeFindViewOfClass (toolbarFrame, [NSMenuView class]);
     hiddenBar = NSHeight ([bar frame]);
     hiddenGap = NSMinY ([bar frame]) - NSMaxY ([content frame]);
     [toolbar setVisible: YES];
+    settled = QuirkProbeSettleWindow (_toolbarWindow) && settled;
     toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
     toolbarButton = QuirkProbePrimaryButtonIn (toolbarFrame);
     shownGap = NSMinY ([toolbarView frame]) - NSMaxY ([content frame]);
-    detail = [NSString stringWithFormat: @"toolbar hidden: bar %gpt, %gpt above the content; shown: toolbar %gpt above it, ☰ %@",
-      hiddenBar, hiddenGap, shownGap, NSStringFromRect ([toolbarButton frame])];
-    if (hiddenBar >= 34 && QuirkProbePrimaryButtonIn (bar) != nil && fabs (hiddenGap) <= 1 && fabs (shownGap) <= 1
+    detail = [NSString stringWithFormat: @"toolbar hidden: bar %gpt, %gpt above the content; shown: toolbar %gpt above it, ☰ %@%@",
+      hiddenBar, hiddenGap, shownGap, NSStringFromRect ([toolbarButton frame]),
+      settled ? @"" : @"; the window frame did not settle within 3 s"];
+    if (settled && hiddenBar >= 34 && QuirkProbePrimaryButtonIn (bar) != nil && fabs (hiddenGap) <= 1 && fabs (shownGap) <= 1
       && [toolbarButton window] == _toolbarWindow && NSMinX ([toolbarButton frame]) == NSMaxX ([toolbarView frame]))
       [self pass: @"primary-menu-toolbar-toggle" detail: detail];
     else
@@ -5894,6 +5931,7 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
   NSView *content = [_toolbarWindow contentView];
   NSToolbar *toolbar = [_toolbarWindow toolbar];
   CGFloat hiddenGap, shownGap;
+  BOOL settled;
   NSString *detail;
 
   detail = [NSString stringWithFormat: @"☰ %@ in a %gpt-wide frame, %gpt from the top; ☰ %@ before buttons from %g; menu bar %gpt; toolbar to %g, content to %g",
@@ -5913,13 +5951,16 @@ static NSMutableArray *QuirkProbePopUpListSizes = nil;
 
   /* Hiding the toolbar leaves no bar: the content meets the header bar. */
   [toolbar setVisible: NO];
+  settled = QuirkProbeSettleWindow (_toolbarWindow);
   hiddenGap = QuirkProbeTopGap (toolbarFrame, [content frame]);
   [toolbar setVisible: YES];
+  settled = QuirkProbeSettleWindow (_toolbarWindow) && settled;
   toolbarView = QuirkProbeFindViewOfClass (toolbarFrame, NSClassFromString (@"GSToolbarView"));
   shownGap = QuirkProbeTopGap (toolbarFrame, [toolbarView frame]);
-  detail = [NSString stringWithFormat: @"toolbar hidden: content %gpt from the top; shown: toolbar %gpt from the top, %gpt above the content",
-    hiddenGap, shownGap, NSMinY ([toolbarView frame]) - NSMaxY ([content frame])];
-  if (hiddenGap == 46 && shownGap == 46 && fabs (NSMinY ([toolbarView frame]) - NSMaxY ([content frame])) <= 1
+  detail = [NSString stringWithFormat: @"toolbar hidden: content %gpt from the top; shown: toolbar %gpt from the top, %gpt above the content%@",
+    hiddenGap, shownGap, NSMinY ([toolbarView frame]) - NSMaxY ([content frame]),
+    settled ? @"" : @"; the window frame did not settle within 3 s"];
+  if (settled && hiddenGap == 46 && shownGap == 46 && fabs (NSMinY ([toolbarView frame]) - NSMaxY ([content frame])) <= 1
     && [QuirkProbePrimaryButtonIn (toolbarFrame) superview] == toolbarFrame)
     [self pass: @"primary-menu-toolbar-toggle" detail: detail];
   else
