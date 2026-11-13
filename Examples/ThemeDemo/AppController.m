@@ -18,7 +18,6 @@
    If not, see <http://www.gnu.org/licenses/>.
 */
 
-/* Layout refinements and native diagnostics written with Codex (OpenAI). */
 #import "AppController.h"
 #import "ThemeDemoTableDataSource.h"
 
@@ -2397,7 +2396,12 @@ ThemeDemoPrintLine(NSString *line)
   [scroll reflectScrolledClipView: [scroll contentView]];
   [canvas addSubview: scroll];
   for (NSView *view in [canvas subviews])
-    if (view != scroll) [view setAutoresizingMask: NSViewMinYMargin];
+    {
+      if (view != scroll)
+        {
+          [view setAutoresizingMask: NSViewMinYMargin];
+        }
+    }
 }
 
 - (void) populateDataCanvas: (NSView *)canvas
@@ -2418,16 +2422,18 @@ ThemeDemoPrintLine(NSString *line)
                                    width,
                                    contentHeight);
 
-  [canvas addSubview: [self sectionTitleLabelWithString: @"Table View"
-                                      frame: NSMakeRect (0.0,
-                                                         NSMaxY (bounds) - labelHeight,
-                                                         width,
-                                                         labelHeight)]];
-  [canvas addSubview: [self sectionTitleLabelWithString: @"Outline View"
-                                      frame: NSMakeRect (NSMinX (outlineRect),
-                                                         NSMaxY (bounds) - labelHeight,
-                                                         width,
-                                                         labelHeight)]];
+  _layoutTableLabel = [self sectionTitleLabelWithString: @"Table View"
+                                                frame: NSMakeRect (0.0,
+                                                                   NSMaxY (bounds) - labelHeight,
+                                                                   width,
+                                                                   labelHeight)];
+  [canvas addSubview: _layoutTableLabel];
+  _layoutOutlineLabel = [self sectionTitleLabelWithString: @"Outline View"
+                                                  frame: NSMakeRect (NSMinX (outlineRect),
+                                                                     NSMaxY (bounds) - labelHeight,
+                                                                     width,
+                                                                     labelHeight)];
+  [canvas addSubview: _layoutOutlineLabel];
 
   NSScrollView *scroll = AUTORELEASE ([[NSScrollView alloc] initWithFrame: tableRect]);
   [scroll setHasVerticalScroller: YES];
@@ -2523,20 +2529,19 @@ ThemeDemoPrintLine(NSString *line)
 
 - (void) layoutDataCanvas: (id)sender
 {
-  if (_layoutDataCanvas == nil) return;
+  if (_layoutDataCanvas == nil)
+    {
+      return;
+    }
   if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ThemeDemoLogLayout"])
-    fprintf (stderr, "ThemeDemo-data-layout begin wide=%d\n", [_wideColumnsButton intValue]);
+    {
+      fprintf (stderr, "ThemeDemo-data-layout begin wide=%d\n", [_wideColumnsButton intValue]);
+    }
   NSRect bounds = [_layoutDataCanvas bounds];
   CGFloat width = floor ((NSWidth (bounds) - 20.0) / 2.0);
   CGFloat top = NSMaxY (bounds) - kDemoControlHeight;
-  for (NSView *view in [_layoutDataCanvas subviews]) {
-    if ([view isKindOfClass: [NSTextField class]]) {
-      NSString *title = [(NSTextField *)view stringValue];
-      if ([title isEqualToString: @"Table View"] || [title isEqualToString: @"Outline View"])
-        [view setFrame: NSMakeRect ([title isEqualToString: @"Table View"] ? 0 : width + 20.0,
-          top, width, kDemoControlHeight)];
-    }
-  }
+  [_layoutTableLabel setFrame: NSMakeRect (0, top, width, kDemoControlHeight)];
+  [_layoutOutlineLabel setFrame: NSMakeRect (width + 20.0, top, width, kDemoControlHeight)];
   top -= kDemoControlHeight;
   [_wideColumnsButton setFrame: NSMakeRect (0, top, NSWidth (bounds), kDemoControlHeight)];
   CGFloat height = MAX (80.0, top - kDemoRowSpacing - kDemoPadding);
@@ -2544,30 +2549,35 @@ ThemeDemoPrintLine(NSString *line)
   [_layoutOutlineScroll setFrame: NSMakeRect (width + 20.0, kDemoPadding, width, height)];
   BOOL wide = [_wideColumnsButton intValue] == NSOnState;
   NSArray *scrolls = @[_layoutTableScroll, _layoutOutlineScroll];
-  for (NSUInteger index = 0; index < [scrolls count]; index++) {
-    NSScrollView *scroll = [scrolls objectAtIndex: index];
-    NSTableView *table = (NSTableView *)[scroll documentView];
-    NSArray *columns = [table tableColumns];
-    CGFloat available = MAX (1, NSWidth ([[scroll contentView] bounds]));
-    CGFloat weights[] = {.48, .25, .27};
-    CGFloat used = 0;
-    for (NSUInteger col = 0; col < [columns count]; col++) {
-      CGFloat original = index == 0 ? (col == 0 ? 220 : col == 1 ? 260 : 360) : (col == 0 ? 220 : 280);
-      CGFloat fraction = index == 0 ? weights[col] : (col == 0 ? .44 : .56);
-      CGFloat fit = col + 1 == [columns count] ? available - used : floor (available * fraction);
-      NSTableColumn *column = [columns objectAtIndex: col];
-      [column setMinWidth: 24];
-      [column setWidth: wide ? original : MAX (24, fit)];
-      used += [column width];
+  for (NSUInteger index = 0; index < [scrolls count]; index++)
+    {
+      NSScrollView *scroll = [scrolls objectAtIndex: index];
+      NSTableView *table = (NSTableView *)[scroll documentView];
+      NSArray *columns = [table tableColumns];
+      CGFloat available = MAX (1, NSWidth ([[scroll contentView] bounds]));
+      CGFloat weights[] = {.48, .25, .27};
+      CGFloat used = 0;
+      for (NSUInteger col = 0; col < [columns count]; col++)
+        {
+          CGFloat original = index == 0 ? (col == 0 ? 220 : col == 1 ? 260 : 360) : (col == 0 ? 220 : 280);
+          CGFloat fraction = index == 0 ? weights[col] : (col == 0 ? .44 : .56);
+          CGFloat fit = col + 1 == [columns count] ? available - used : floor (available * fraction);
+          NSTableColumn *column = [columns objectAtIndex: col];
+          [column setMinWidth: 24];
+          [column setWidth: wide ? original : MAX (24, fit)];
+          used += [column width];
+        }
+      /* sizeToFit equalises columns in GNUstep 0.32, including wide mode.
+         tile preserves the explicit fit/overflow widths and native tracking. */
+      [table tile];
+      [scroll reflectScrolledClipView: [scroll contentView]];
+      if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ThemeDemoLogLayout"])
+        {
+          fprintf (stderr, "ThemeDemo-data-layout pane=%lu wide=%d viewport=%.1f columns=%.1f row=%.1f grid=%lu\n",
+                   (unsigned long)index, wide, available, used,
+                   [table rowHeight], (unsigned long)[table gridStyleMask]);
+        }
     }
-    /* sizeToFit equalises columns in GNUstep 0.32, including wide mode.
-       tile preserves the explicit fit/overflow widths and native tracking. */
-    [table tile];
-    [scroll reflectScrolledClipView: [scroll contentView]];
-    if ([[NSUserDefaults standardUserDefaults] boolForKey: @"ThemeDemoLogLayout"])
-      fprintf (stderr, "ThemeDemo-data-layout pane=%lu wide=%d viewport=%.1f columns=%.1f row=%.1f grid=%lu\n",
-        (unsigned long)index, wide, available, used, [table rowHeight], (unsigned long)[table gridStyleMask]);
-  }
 }
 
 - (void) dumpLayoutMetrics
@@ -2575,37 +2585,52 @@ ThemeDemoPrintLine(NSString *line)
   NSTabViewItem *item = [_tabView selectedTabViewItem];
   NSView *root = [item view];
   NSMutableArray *fields = [NSMutableArray array];
-  for (NSTextField *field in [self descendantViewsOfClass: [NSTextField class] inView: root]) {
-    NSRect frame = [_window convertRectToScreen: [field convertRect: [field bounds] toView: nil]];
-    BOOL label = ![field isEditable] && ![field isBezeled] && ![field isBordered];
-    CGFloat needed = ceil ([[field stringValue] boundingRectWithSize: NSMakeSize (MAX (1, NSWidth ([field bounds]) - 4), 1000)
-      options: NSStringDrawingUsesLineFragmentOrigin attributes: @{NSFontAttributeName: [field font]}].size.height);
-    [fields addObject: @{@"text": [field stringValue], @"frame": NSStringFromRect (frame),
-      @"bounds": NSStringFromRect ([field bounds]), @"visible": NSStringFromRect ([field visibleRect]),
-      @"label": @(label), @"neededHeight": @(needed)}];
-  }
-  NSMutableArray *scrolls = [NSMutableArray array];
-  for (NSScrollView *scroll in [self descendantViewsOfClass: [NSScrollView class] inView: root]) {
-    NSView *document = [scroll documentView];
-    NSMutableDictionary *entry = [NSMutableDictionary dictionaryWithDictionary: @{
-      @"frame": NSStringFromRect ([scroll convertRect: [scroll bounds] toView: root]),
-      @"border": @([scroll borderType]), @"viewport": NSStringFromRect ([[scroll contentView] bounds])}];
-    if ([document isKindOfClass: [NSTableView class]]) {
-      NSTableView *table = (NSTableView *)document;
-      CGFloat width = 0; for (NSTableColumn *column in [table tableColumns]) width += [column width];
-      [entry setObject: @(width) forKey: @"columnWidth"];
-      [entry setObject: @([table rowHeight]) forKey: @"rowHeight"];
-      [entry setObject: @([table gridStyleMask]) forKey: @"grid"];
-      [entry setObject: @([table drawsGrid]) forKey: @"drawsGrid"];
+  for (NSTextField *field in [self descendantViewsOfClass: [NSTextField class] inView: root])
+    {
+      NSRect frame = [_window convertRectToScreen: [field convertRect: [field bounds] toView: nil]];
+      BOOL label = ![field isEditable] && ![field isBezeled] && ![field isBordered];
+      NSFont *font = [field font];
+      if (font == nil)
+        {
+          font = [NSFont systemFontOfSize: 0];
+        }
+      CGFloat needed = ceil ([[field stringValue] boundingRectWithSize: NSMakeSize (MAX (1, NSWidth ([field bounds]) - 4), 1000)
+                       options: NSStringDrawingUsesLineFragmentOrigin
+                    attributes: @{NSFontAttributeName: font}].size.height);
+      [fields addObject: @{@"text": [field stringValue], @"frame": NSStringFromRect (frame),
+                          @"bounds": NSStringFromRect ([field bounds]), @"visible": NSStringFromRect ([field visibleRect]),
+                          @"label": @(label), @"neededHeight": @(needed)}];
     }
-    [scrolls addObject: entry];
-  }
+  NSMutableArray *scrolls = [NSMutableArray array];
+  for (NSScrollView *scroll in [self descendantViewsOfClass: [NSScrollView class] inView: root])
+    {
+      NSView *document = [scroll documentView];
+      NSMutableDictionary *entry = [NSMutableDictionary dictionaryWithDictionary: @{
+        @"frame": NSStringFromRect ([scroll convertRect: [scroll bounds] toView: root]),
+        @"documentFrame": NSStringFromRect ([document frame]),
+        @"border": @([scroll borderType]), @"viewport": NSStringFromRect ([[scroll contentView] bounds])}];
+      if ([document isKindOfClass: [NSTableView class]])
+        {
+          NSTableView *table = (NSTableView *)document;
+          CGFloat width = 0;
+          for (NSTableColumn *column in [table tableColumns])
+            {
+              width += [column width];
+            }
+          [entry setObject: @(width) forKey: @"columnWidth"];
+          [entry setObject: @([table rowHeight]) forKey: @"rowHeight"];
+          [entry setObject: @([table gridStyleMask]) forKey: @"grid"];
+          [entry setObject: @([table drawsGrid]) forKey: @"drawsGrid"];
+        }
+      [scrolls addObject: entry];
+    }
   NSRect toggle = [_window convertRectToScreen: [_wideColumnsButton convertRect: [_wideColumnsButton bounds] toView: nil]];
   NSDictionary *result = @{@"page": [item identifier], @"fields": fields, @"scrolls": scrolls,
-    @"wideColumns": @([_wideColumnsButton intValue] == NSOnState), @"wideToggle": NSStringFromRect (toggle),
-    @"rootBounds": NSStringFromRect ([root bounds])};
+                           @"wideColumns": @([_wideColumnsButton intValue] == NSOnState), @"wideToggle": NSStringFromRect (toggle),
+                           @"rootBounds": NSStringFromRect ([root bounds])};
   NSData *data = [NSJSONSerialization dataWithJSONObject: result options: 0 error: NULL];
-  fprintf (stderr, "ThemeDemo-layout-json %s\n", [[[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease] UTF8String]);
+  NSString *json = AUTORELEASE ([[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding]);
+  fprintf (stderr, "ThemeDemo-layout-json %s\n", [json UTF8String]);
   fflush (stderr);
 }
 
@@ -2705,30 +2730,36 @@ ThemeDemoPrintLine(NSString *line)
   y -= (kDemoControlHeight + kDemoRowSpacing);
   NSArray *captions = @[@"Very long primary action label that should still feel balanced",
     @"Secondary label with a slightly longer caption", @"Disabled content should remain readable"];
-  for (NSUInteger index = 0; index < [captions count]; index++) {
-    NSString *caption = [captions objectAtIndex: index];
-    CGFloat captionHeight = ceil ([caption boundingRectWithSize: NSMakeSize (labelWidth - 4.0, 1000)
-      options: NSStringDrawingUsesLineFragmentOrigin attributes: @{NSFontAttributeName: [self labelFont]}].size.height) + 6.0;
-    CGFloat rowHeight = MAX (kDemoControlHeight, captionHeight);
-    y -= rowHeight;
-    NSTextField *label = [self labelWithString: caption frame: NSMakeRect (kDemoPadding, y, labelWidth, rowHeight)];
-    [[label cell] setWraps: YES];
-    [[label cell] setLineBreakMode: NSLineBreakByWordWrapping];
-    [canvas addSubview: label];
-    NSRect field = NSMakeRect (fieldX, y + floor ((rowHeight - kDemoControlHeight) / 2.0), 320, kDemoControlHeight);
-    if (index == 0) {
-      NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: field]);
-      [button setTitle: @"Create and synchronize workspace settings"];
-      [button setBezelStyle: NSRoundedBezelStyle];
-      [button setToolTip: [button title]];
-      [canvas addSubview: button];
-    } else {
-      NSTextField *fieldView = [self fieldWithValue: index == 1
-        ? @"Long field value used to test horizontal padding" : @"Disabled but still legible" frame: field];
-      [fieldView setEnabled: index != 2];[canvas addSubview: fieldView];
+  for (NSUInteger index = 0; index < [captions count]; index++)
+    {
+      NSString *caption = [captions objectAtIndex: index];
+      CGFloat captionHeight = ceil ([caption boundingRectWithSize: NSMakeSize (labelWidth - 4.0, 1000)
+                              options: NSStringDrawingUsesLineFragmentOrigin
+                           attributes: @{NSFontAttributeName: [self labelFont]}].size.height) + 6.0;
+      CGFloat rowHeight = MAX (kDemoControlHeight, captionHeight);
+      y -= rowHeight;
+      NSTextField *label = [self labelWithString: caption frame: NSMakeRect (kDemoPadding, y, labelWidth, rowHeight)];
+      [[label cell] setWraps: YES];
+      [[label cell] setLineBreakMode: NSLineBreakByWordWrapping];
+      [canvas addSubview: label];
+      NSRect field = NSMakeRect (fieldX, y + floor ((rowHeight - kDemoControlHeight) / 2.0), 320, kDemoControlHeight);
+      if (index == 0)
+        {
+          NSButton *button = AUTORELEASE ([[NSButton alloc] initWithFrame: field]);
+          [button setTitle: @"Create and synchronize workspace settings"];
+          [button setBezelStyle: NSRoundedBezelStyle];
+          [button setToolTip: [button title]];
+          [canvas addSubview: button];
+        }
+      else
+        {
+          NSTextField *fieldView = [self fieldWithValue: index == 1
+                                    ? @"Long field value used to test horizontal padding" : @"Disabled but still legible" frame: field];
+          [fieldView setEnabled: index != 2];
+          [canvas addSubview: fieldView];
+        }
+      y -= 8.0;
     }
-    y -= 8.0;
-  }
   /* Keep the original narrow action/field and wide popup as deliberate
      overflow fixtures; only the explanatory captions must remain readable. */
   y -= kDemoControlHeight;
@@ -2811,6 +2842,7 @@ ThemeDemoPrintLine(NSString *line)
   [scroll setAutohidesScrollers: YES];
 
   NSTextView *textView = AUTORELEASE ([[NSTextView alloc] initWithFrame: [[scroll contentView] bounds]]);
+  [textView setAutoresizingMask: (NSViewWidthSizable | NSViewHeightSizable)];
   [textView setFont: [self controlFont]];
   [textView setTextContainerInset: NSMakeSize (6.0, 6.0)];
   [textView setString: @"Use this page to decide whether typography and spacing are genuinely fixed.\n\nIf the theme only looks good on the tidy demo pages but still collapses under long labels, long menu items, mixed states, and disabled fields, Phase 3 is not done yet."];
@@ -2819,7 +2851,12 @@ ThemeDemoPrintLine(NSString *line)
   [scroll reflectScrolledClipView: [scroll contentView]];
   [canvas addSubview: scroll];
   for (NSView *view in [canvas subviews])
-    if (view != scroll) [view setAutoresizingMask: NSViewMinYMargin];
+    {
+      if (view != scroll)
+        {
+          [view setAutoresizingMask: NSViewMinYMargin];
+        }
+    }
 }
 
 #pragma mark - Actions

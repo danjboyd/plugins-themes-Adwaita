@@ -31,6 +31,8 @@
   NSView *_layoutDataCanvas;
   NSScrollView *_layoutTableScroll;
   NSScrollView *_layoutOutlineScroll;
+  NSTextField *_layoutTableLabel;
+  NSTextField *_layoutOutlineLabel;
   NSButton *_wideColumnsButton;
   NSProgressIndicator *_progressIndicator;
   NSTextField *_sliderValueLabel;
