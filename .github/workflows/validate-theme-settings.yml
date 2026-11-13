@@ -1,0 +1,39 @@
+# Checks Resources/ThemeSettings.plist with the gnustep-themes validator:
+# errors fail the job, warnings do not. Foundation only: it never builds or
+# loads the theme's code and touches no defaults. See
+# https://github.com/danjboyd/gnustep-themes/blob/main/docs/theme-ci.md
+name: validate-theme-settings
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    env:
+      THEME_PATH: Resources/ThemeSettings.plist
+      GTS_COMMIT: 89959b5578c4a5fb2a48eeb4e7399c05904dd752
+    steps:
+      - name: Install GNUstep base and make
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            ca-certificates git make gcc gobjc gnustep-make libgnustep-base-dev
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - name: Fetch the validator (pinned)
+        run: |
+          git clone --filter=blob:none https://github.com/danjboyd/gnustep-themes /opt/gnustep-themes
+          git -C /opt/gnustep-themes checkout --quiet "$GTS_COMMIT"
+
+      - name: Validate ThemeSettings.plist
+        run: |
+          useradd -m ci
+          chown -R ci /opt/gnustep-themes
+          su ci -c "/opt/gnustep-themes/scripts/validate-theme.sh '$GITHUB_WORKSPACE/$THEME_PATH'"
