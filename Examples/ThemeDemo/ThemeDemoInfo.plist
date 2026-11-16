@@ -1,4 +1,5 @@
 {
+  CFBundleIdentifier = "org.gnustep.ThemeDemo";
   NSExecutable = "ThemeDemo";
   NSPrincipalClass = "NSApplication";
   NSAppIcon = "";
