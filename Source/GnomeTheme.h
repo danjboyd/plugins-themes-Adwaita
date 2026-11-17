@@ -87,6 +87,9 @@ void GnomeThemeSystemFontsDidChange(void);
    shadow (GnomeThemeSheets.m). */
 void GnomeThemeSheetsStart(void);
 void GnomeThemeSheetsStop(void);
+/* A sheet's outline: square at the top, where it meets its window's bar,
+   rounded at the bottom. */
+NSBezierPath *GnomeThemeSheetOutline(NSRect rect, CGFloat radius);
 /* While the app waits for a modal dialog outside it (the portal's file
    chooser): a press in a header bar that moves its window, which then
    isn't dropped. YES when the press was taken. */

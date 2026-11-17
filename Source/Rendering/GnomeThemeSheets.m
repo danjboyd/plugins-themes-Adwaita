@@ -31,8 +31,10 @@
    above its content view, from NSWindowWillBeginSheetNotification to
    NSWindowDidEndSheetNotification. The sheet's own window covers its
    rectangle, so what shows of the overlay is the dimmed content and the
-   shadow around the sheet. A sheet that went the old way (a separate
-   window) leaves the shadow out; the window is still dimmed. */
+   shadow around the sheet. libs-gui tells the theme each step of the
+   slide (-sheet:revealed:inWindow:), so the dim fades in with it and the
+   shadow follows the part of the sheet that is out. A sheet that went
+   the old way (a separate window) gets the dim whole and no shadow. */
 
 #import <AppKit/AppKit.h>
 #import <GNUstepGUI/GSTheme.h>
@@ -42,6 +44,10 @@
 @interface GnomeThemeSheetOverlay : NSView
 {
   NSWindow *_parent; /* not retained: the overlay is its subview */
+@public
+  CGFloat _shown;    /* how much of an attached sheet is out, 0 to 1;
+			below 0 until the sheet attaches (or if it never
+			does, shown the old way) */
 }
 - (id) initWithParent: (NSWindow *)parent;
 @end
@@ -69,14 +75,70 @@ GnomeThemeSheetCornerRadius (void)
   return radius > 0 ? radius : 12;
 }
 
-/* The sheet's frame in the parent's base coordinates. */
+/* libs-gui with attached sheets has these; older ones don't. */
+@interface GSTheme (GnomeThemeSheetAttachment)
+- (NSRect) sheetAttachmentRectForWindow: (NSWindow *)window;
+@end
+@interface NSObject (GnomeThemeSheetDelegate)
+- (NSRect) window: (NSWindow *)window willPositionSheet: (NSWindow *)sheet
+	usingRect: (NSRect)rect;
+@end
+
+/* Where an attached sheet sits in its parent, in the parent's base
+   coordinates, placed as libs-gui places it: centred on the attachment
+   rect (the delegate's, if it gives one), its top on that rect's line.
+   The sheet's own frame gives only its size: while the backend slides it,
+   its position there follows the moving X window. */
 static NSRect
 GnomeThemeSheetRectInParent (NSWindow *sheet, NSWindow *parent)
 {
-  NSRect frame = [sheet frame];
-  NSPoint origin = [parent convertScreenToBase: frame.origin];
+  GSTheme *theme = [GSTheme theme];
+  NSSize size = [sheet frame].size;
+  id delegate = [parent delegate];
+  NSRect anchor;
 
-  return NSMakeRect (origin.x, origin.y, NSWidth (frame), NSHeight (frame));
+  if ([theme respondsToSelector: @selector(sheetAttachmentRectForWindow:)] == NO)
+    {
+      NSRect frame = [sheet frame];
+      NSPoint origin = [parent convertScreenToBase: frame.origin];
+
+      return NSMakeRect (origin.x, origin.y, size.width, size.height);
+    }
+  anchor = [theme sheetAttachmentRectForWindow: parent];
+  if ([delegate respondsToSelector:
+		  @selector(window:willPositionSheet:usingRect:)])
+    {
+      anchor = [delegate window: parent willPositionSheet: sheet
+		      usingRect: anchor];
+    }
+  return NSMakeRect (NSMinX (anchor) + (NSWidth (anchor) - size.width) / 2,
+		     NSMinY (anchor) - size.height, size.width, size.height);
+}
+
+NSBezierPath *
+GnomeThemeSheetOutline (NSRect rect, CGFloat radius)
+{
+  NSBezierPath *path = [NSBezierPath bezierPath];
+  CGFloat r = MAX (0, MIN (radius, MIN (NSWidth (rect), NSHeight (rect)) / 2));
+
+  [path moveToPoint: NSMakePoint (NSMinX (rect), NSMaxY (rect))];
+  [path lineToPoint: NSMakePoint (NSMinX (rect), NSMinY (rect) + r)];
+  if (r > 0)
+    [path appendBezierPathWithArcWithCenter:
+            NSMakePoint (NSMinX (rect) + r, NSMinY (rect) + r)
+				     radius: r
+				 startAngle: 180
+				   endAngle: 270];
+  [path lineToPoint: NSMakePoint (NSMaxX (rect) - r, NSMinY (rect))];
+  if (r > 0)
+    [path appendBezierPathWithArcWithCenter:
+            NSMakePoint (NSMaxX (rect) - r, NSMinY (rect) + r)
+				     radius: r
+				 startAngle: 270
+				   endAngle: 360];
+  [path lineToPoint: NSMakePoint (NSMaxX (rect), NSMaxY (rect))];
+  [path closePath];
+  return path;
 }
 
 @implementation GnomeThemeSheetOverlay
@@ -89,6 +151,7 @@ GnomeThemeSheetRectInParent (NSWindow *sheet, NSWindow *parent)
   if (self != nil)
     {
       _parent = parent;
+      _shown = -1;
       [self setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
     }
   return self;
@@ -112,22 +175,38 @@ GnomeThemeSheetRectInParent (NSWindow *sheet, NSWindow *parent)
   BOOL dark = GnomeThemeSheetDark ();
   NSRect bounds = [self bounds];
 
-  [[NSColor colorWithCalibratedWhite: 0 alpha: dark ? 0.36 : 0.22] set];
+  /* The dim fades in and out with the slide; a sheet shown the old way
+     gets it whole. */
+  CGFloat amount = _shown < 0 ? 1 : _shown;
+
+  if (amount <= 0)
+    {
+      return;
+    }
+  [[NSColor colorWithCalibratedWhite: 0 alpha: (dark ? 0.36 : 0.22) * amount] set];
   NSRectFillUsingOperation (bounds, NSCompositeSourceOver);
   /* The shadow, only for a sheet inside the window (an attached one): soft
      layers around and below it, then a fine edge. The sheet's corners are
-     rounded (the backend cuts them out of its window), and the layers
-     start below the top corners, so the gaps there show only the dim. */
-  if (sheet != nil && [sheet isVisible])
+     square at the top, where it meets the header bar, and rounded at
+     the bottom (the backend cuts those out of its window). */
+  if (sheet != nil && _shown > 0)
     {
       NSRect rect = [self convertRect: GnomeThemeSheetRectInParent (sheet, _parent)
 			     fromView: nil];
       CGFloat radius = MIN (GnomeThemeSheetCornerRadius (),
 			    MIN (NSWidth (rect), NSHeight (rect)) / 2);
-      CGFloat top = NSMaxY (rect) - radius;
+      CGFloat top = NSMaxY (rect);
       int i, layers = 10;
 
       if (NSContainsRect (NSInsetRect (bounds, -1, -1), rect) == NO)
+	{
+	  return;
+	}
+      /* What is out of the sheet so far: it slides down from under the
+	 header bar, so its top stays put and its bottom moves. */
+      rect.origin.y = NSMaxY (rect) - _shown * NSHeight (rect);
+      rect.size.height = _shown * NSHeight (rect);
+      if (NSHeight (rect) < 1)
 	{
 	  return;
 	}
@@ -143,14 +222,11 @@ GnomeThemeSheetRectInParent (NSWindow *sheet, NSWindow *parent)
 	  [[NSColor colorWithCalibratedWhite: 0
 				       alpha: (dark ? 0.05 : 0.035)]
 	    set];
-	  [[NSBezierPath bezierPathWithRoundedRect: layer
-					   xRadius: radius + grow
-					   yRadius: radius + grow] fill];
+	  [GnomeThemeSheetOutline (layer, radius + grow) fill];
 	}
       [[NSColor colorWithCalibratedWhite: 0 alpha: dark ? 0.6 : 0.16] set];
-      [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect (rect, -0.5, -0.5)
-				       xRadius: radius + 0.5
-				       yRadius: radius + 0.5] stroke];
+      [GnomeThemeSheetOutline (NSInsetRect (rect, -0.5, -0.5), radius + 0.5)
+	stroke];
       [NSGraphicsContext restoreGraphicsState];
     }
 }
@@ -178,7 +254,6 @@ GnomeThemeSheetOverlayOf (NSWindow *parent)
 - (void) willBeginSheet: (NSNotification *)notification
 {
   NSWindow *parent = [notification object];
-  NSWindow *sheet = [parent attachedSheet];
   NSView *frameView = [[parent contentView] superview];
   GnomeThemeSheetOverlay *overlay;
 
@@ -188,28 +263,11 @@ GnomeThemeSheetOverlayOf (NSWindow *parent)
     }
   overlay = [[GnomeThemeSheetOverlay alloc] initWithParent: parent];
   [frameView addSubview: overlay positioned: NSWindowAbove relativeTo: nil];
+  /* An attached sheet's steps come through -sheet:revealed:inWindow:,
+     the first (0) before anything is drawn; a sheet shown the old way gets
+     the dim when the window is next drawn. */
+  [overlay setNeedsDisplay: YES];
   RELEASE (overlay);
-  /* The sheet is framed when it attaches and becomes key just before it
-     slides in: draw the shadow where it will be, before the slide. */
-  if (sheet != nil)
-    {
-      [[NSNotificationCenter defaultCenter]
-	addObserver: self
-	   selector: @selector(sheetPlaced:)
-	       name: NSWindowDidBecomeKeyNotification
-	     object: sheet];
-    }
-  [overlay setNeedsDisplay: YES];
-  [parent displayIfNeeded];
-}
-
-- (void) sheetPlaced: (NSNotification *)notification
-{
-  NSWindow *parent = [[notification object] parentWindow];
-  GnomeThemeSheetOverlay *overlay = GnomeThemeSheetOverlayOf (parent);
-
-  [overlay setNeedsDisplay: YES];
-  [parent displayIfNeeded];
 }
 
 - (void) didEndSheet: (NSNotification *)notification
@@ -217,13 +275,32 @@ GnomeThemeSheetOverlayOf (NSWindow *parent)
   NSWindow *parent = [notification object];
   GnomeThemeSheetOverlay *overlay = GnomeThemeSheetOverlayOf (parent);
 
-  [[NSNotificationCenter defaultCenter]
-    removeObserver: self name: NSWindowDidBecomeKeyNotification object: nil];
   if (overlay != nil)
     {
       [overlay removeFromSuperview];
       [[[parent contentView] superview] setNeedsDisplay: YES];
     }
+}
+@end
+
+@implementation GnomeTheme (Sheets)
+
+/* Each step of an attached sheet's slide (libs-gui calls it before the
+   backend shows the step): the dim and shadow are drawn for it now, into
+   the parent's buffer, which the backend shows with the sheet. */
+- (void) sheet: (NSWindow *)sheet
+      revealed: (CGFloat)fraction
+      inWindow: (NSWindow *)parent
+{
+  GnomeThemeSheetOverlay *overlay = GnomeThemeSheetOverlayOf (parent);
+
+  if (overlay == nil)
+    {
+      return;
+    }
+  overlay->_shown = MAX (0, MIN (1, fraction));
+  [overlay setNeedsDisplay: YES];
+  [parent displayIfNeeded];
 }
 @end
 
