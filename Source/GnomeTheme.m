@@ -444,6 +444,7 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
                  name: GnomeThemeDesktopSettingsDidChangeNotification
                object: nil];
   GnomeThemeSettingsMonitorStart ();
+  GnomeThemeSheetsStart ();
 }
 
 /* GNOME's settings changed while the app runs (#64). What activating the
@@ -492,6 +493,7 @@ GnomeThemeTruncatedTitle(NSString *title, NSDictionary *attributes, CGFloat widt
   [center removeObserver: self name: NSUserDefaultsDidChangeNotification object: nil];
   [center removeObserver: self name: GnomeThemeDesktopSettingsDidChangeNotification object: nil];
   GnomeThemeSettingsMonitorStop ();
+  GnomeThemeSheetsStop ();
   [self removeRuntimeDefaults];
   [super deactivate];
   GnomeThemeForgetOriginalMethods ();

@@ -82,6 +82,11 @@ void GnomeThemeHeaderBarDesktopSettingsChanged(void);
    stop handing out the fonts they cached for the default size
    (Source/Settings/GnomeThemeSystemFonts.m). */
 void GnomeThemeSystemFontsDidChange(void);
+
+/* Sheets: while one is open, its window is dimmed and the sheet casts a
+   shadow (GnomeThemeSheets.m). */
+void GnomeThemeSheetsStart(void);
+void GnomeThemeSheetsStop(void);
 /* While the app waits for a modal dialog outside it (the portal's file
    chooser): a press in a header bar that moves its window, which then
    isn't dropped. YES when the press was taken. */
