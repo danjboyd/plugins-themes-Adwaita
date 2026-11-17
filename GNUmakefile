@@ -67,6 +67,7 @@ Adwaita_OBJC_FILES = \
 	Source/Rendering/GnomeThemeAlerts.m \
 	Source/Rendering/GnomeThemePrimaryMenu.m \
 	Source/Rendering/GnomeThemeHeaderBar.m \
+	Source/Rendering/GnomeThemeSheets.m \
 	Source/Adapters/GnomeThemeWindowManager.m \
 	Source/Adapters/GnomeThemeFileChooser.m \
 	Source/Adapters/GnomeThemePrintDialog.m \

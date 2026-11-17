@@ -1292,18 +1292,17 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
   if (NSEqualRects (contentRect, bounds) == NO && _hasShadow
       && GnomeThemeWindowIsSheet (window))
     {
-      /* A sheet with a shadow margin has rounded corners (the backend
-         rounds them, GSBackWindowCornerRadius in points), and its border
-         follows them. Drawn over the content, which fills the bottom
-         corners. */
+      /* A sheet with a shadow margin has rounded bottom corners (the
+         backend rounds them, GSBackWindowCornerRadius in points) and a
+         square top, where it meets its window's bar; its border follows
+         them. Drawn over the content, which fills the bottom corners. */
       CGFloat shade = [GnomeThemeCurrentSettings () highContrastEnabled]
         ? GnomeThemeHighContrastBorderShade : GnomeThemeWindowBorderShade;
       CGFloat radius = [[NSUserDefaults standardUserDefaults]
                          floatForKey: @"GSBackWindowCornerRadius"];
-      NSBezierPath *edge = [NSBezierPath bezierPathWithRoundedRect:
-        NSInsetRect (bounds, GnomeThemeWindowBorderWidth / 2.0, GnomeThemeWindowBorderWidth / 2.0)
-                                                          xRadius: radius
-                                                          yRadius: radius];
+      NSBezierPath *edge = GnomeThemeSheetOutline (
+        NSInsetRect (bounds, GnomeThemeWindowBorderWidth / 2.0, GnomeThemeWindowBorderWidth / 2.0),
+        radius);
 
       [[background blendedColorWithFraction: shade ofColor: [NSColor controlTextColor]] set];
       [edge setLineWidth: GnomeThemeWindowBorderWidth];
