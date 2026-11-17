@@ -455,7 +455,9 @@ GnomeThemeResolveFont(NSString *preferredName,
      compact metrics are for windows laid out at GNUstep's sizes, whose
      frames don't grow with their text, so larger text would clip. */
   _compactInterfaceFontSize = GnomeThemeCompactInterfaceFontSize * (fontScale / GnomeThemeDefaultFontScale);
+  _gnomeInterfaceFontSize = fontSize;
   _compactMetrics = GnomeThemeWantsCompactMetrics (&_metricsFollowWindows);
+  _designSurfaces = [[NSUserDefaults standardUserDefaults] boolForKey: @"GnomeThemeDesignSurfaces"];
   if (_compactMetrics)
     {
       /* The monospace font keeps its size relative to the interface font. */
@@ -634,6 +636,16 @@ GnomeThemeResolveFont(NSString *preferredName,
 - (CGFloat) compactInterfaceFontSize
 {
   return _compactInterfaceFontSize;
+}
+
+- (CGFloat) gnomeInterfaceFontSize
+{
+  return _gnomeInterfaceFontSize;
+}
+
+- (BOOL) designSurfaces
+{
+  return _designSurfaces;
 }
 
 - (NSString *) monospaceFontName

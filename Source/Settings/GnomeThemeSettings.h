@@ -42,6 +42,8 @@ typedef enum
   CGFloat _textScalingFactor;
   BOOL _compactMetrics;
   BOOL _metricsFollowWindows;
+  BOOL _designSurfaces;
+  CGFloat _gnomeInterfaceFontSize;
   CGFloat _compactInterfaceFontSize;
   NSString *_buttonLayout;
   NSString *_titlebarDoubleClickAction;
@@ -86,6 +88,13 @@ typedef enum
 - (BOOL) metricsFollowWindows;
 /* The interface font's size with compact metrics. */
 - (CGFloat) compactInterfaceFontSize;
+/* The interface font's size with GNOME's metrics, even in an app with
+   compact ones: what GNOME's metrics are measured from. */
+- (CGFloat) gnomeInterfaceFontSize;
+/* The GnomeThemeDesignSurfaces default (NO unless set), a prototype for
+   Gorm (#26): Gorm's design windows get GNOME's metrics while Gorm's own
+   panels stay compact. See GnomeThemeViewIsOnDesignSurface(). */
+- (BOOL) designSurfaces;
 
 /* org.gnome.desktop.wm.preferences: button-layout (for example
    "appmenu:minimize,maximize,close") and the title bar's

@@ -38,6 +38,7 @@ QuirkProbe_OBJC_FILES = \
 	QuirkProbeScrollerDrag.m \
 	QuirkProbeContextMenu.m \
 	QuirkProbeNibMetrics.m \
+	QuirkProbeDesignSurfaces.m \
 	QuirkProbeLiveSettings.m \
 	QuirkProbeLists.m \
 	QuirkProbePopovers.m \
