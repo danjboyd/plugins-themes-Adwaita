@@ -58,6 +58,15 @@ static const CGFloat GnomeThemeHeaderBarTitleSpacing = 6.0;
    into the » menu first. */
 static const CGFloat GnomeThemeHeaderBarMinimumTitleWidth = 100.0;
 
+/* Whether window is shown as a sheet on another window. */
+static BOOL
+GnomeThemeWindowIsSheet(NSWindow *window)
+{
+  NSWindow *parent = [window parentWindow];
+
+  return parent != nil && [parent attachedSheet] == window;
+}
+
 /* rect grown to whole device pixels. At a fractional scale a window's edges
    fall inside a pixel: clearing and filling them there covers that pixel only
    partly, and what's under it (black, in an X window) shows as a dark line. */
@@ -1248,10 +1257,13 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
       NSRectFill (titleBarRect);
       [self drawTitleInRect: titleBarRect];
     }
-  if (NSEqualRects (contentRect, bounds) == NO && _hasShadow)
+  if (NSEqualRects (contentRect, bounds) == NO && _hasShadow
+      && GnomeThemeWindowIsSheet (window) == NO)
     {
       /* The border area takes the window's background: the shadow's
-         outline is the edge, as in libadwaita. */
+         outline is the edge, as in libadwaita. A sheet gets the drawn
+         border instead: attached inside its parent, its shadow is cut
+         off with the margin, and the sheet would have no edge. */
       [background set];
       NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
     }
@@ -1260,8 +1272,13 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
       CGFloat shade = [GnomeThemeCurrentSettings () highContrastEnabled]
         ? GnomeThemeHighContrastBorderShade : GnomeThemeWindowBorderShade;
 
-      [[background blendedColorWithFraction: shade ofColor: [NSColor controlTextColor]] set];
-      NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
+      /* A sheet with a shadow margin gets its rounded border last, over
+         the content. */
+      if (_hasShadow == NO)
+        {
+          [[background blendedColorWithFraction: shade ofColor: [NSColor controlTextColor]] set];
+          NSFrameRectWithWidth (bounds, GnomeThemeWindowBorderWidth);
+        }
     }
   if (NSIntersectsRect (rect, contentRect))
     {
@@ -1271,6 +1288,26 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
 
       NSRectFillUsingOperation (fill, NSCompositeClear);
       [[GSTheme theme] drawWindowBackground: fill view: self];
+    }
+  if (NSEqualRects (contentRect, bounds) == NO && _hasShadow
+      && GnomeThemeWindowIsSheet (window))
+    {
+      /* A sheet with a shadow margin has rounded corners (the backend
+         rounds them, GSBackWindowCornerRadius in points), and its border
+         follows them. Drawn over the content, which fills the bottom
+         corners. */
+      CGFloat shade = [GnomeThemeCurrentSettings () highContrastEnabled]
+        ? GnomeThemeHighContrastBorderShade : GnomeThemeWindowBorderShade;
+      CGFloat radius = [[NSUserDefaults standardUserDefaults]
+                         floatForKey: @"GSBackWindowCornerRadius"];
+      NSBezierPath *edge = [NSBezierPath bezierPathWithRoundedRect:
+        NSInsetRect (bounds, GnomeThemeWindowBorderWidth / 2.0, GnomeThemeWindowBorderWidth / 2.0)
+                                                          xRadius: radius
+                                                          yRadius: radius];
+
+      [[background blendedColorWithFraction: shade ofColor: [NSColor controlTextColor]] set];
+      [edge setLineWidth: GnomeThemeWindowBorderWidth];
+      [edge stroke];
     }
 }
 
