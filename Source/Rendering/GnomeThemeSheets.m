@@ -328,9 +328,26 @@ GnomeThemeSheetsStart (void)
 void
 GnomeThemeSheetsStop (void)
 {
+  NSEnumerator *e;
+  NSWindow *window;
+
   if (observer != nil)
     {
       [[NSNotificationCenter defaultCenter] removeObserver: observer];
       DESTROY (observer);
+    }
+  /* A sheet open while the theme goes: its DidEndSheet will come to no
+     one, and nothing else takes the overlay out of its window (libs-gui
+     keeps the frame view on a theme switch), so it would stay dimmed. */
+  e = [[NSApp windows] objectEnumerator];
+  while ((window = [e nextObject]) != nil)
+    {
+      GnomeThemeSheetOverlay *overlay = GnomeThemeSheetOverlayOf (window);
+
+      if (overlay != nil)
+	{
+	  [overlay removeFromSuperview];
+	  [[[window contentView] superview] setNeedsDisplay: YES];
+	}
     }
 }
