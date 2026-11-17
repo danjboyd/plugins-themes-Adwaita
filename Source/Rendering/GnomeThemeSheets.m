@@ -183,10 +183,11 @@ GnomeThemeSheetOutline (NSRect rect, CGFloat radius)
     {
       return;
     }
-  [[NSColor colorWithCalibratedWhite: 0 alpha: (dark ? 0.36 : 0.22) * amount] set];
+  [[NSColor colorWithCalibratedWhite: 0 alpha: (dark ? 0.24 : 0.12) * amount] set];
   NSRectFillUsingOperation (bounds, NSCompositeSourceOver);
-  /* The shadow, only for a sheet inside the window (an attached one): soft
-     layers around and below it, then a fine edge. The sheet's corners are
+  /* The shadow, only for a sheet inside the window (an attached one): a
+     light, tight one, as Adwaita draws them (a few faint layers a little
+     below it, about a tenth dark at its edge), then a fine edge. The sheet's corners are
      square at the top, where it meets the header bar, and rounded at
      the bottom (the backend cuts those out of its window). */
   if (sheet != nil && _shown > 0)
@@ -196,7 +197,7 @@ GnomeThemeSheetOutline (NSRect rect, CGFloat radius)
       CGFloat radius = MIN (GnomeThemeSheetCornerRadius (),
 			    MIN (NSWidth (rect), NSHeight (rect)) / 2);
       CGFloat top = NSMaxY (rect);
-      int i, layers = 10;
+      int i, layers = 6;
 
       if (NSContainsRect (NSInsetRect (bounds, -1, -1), rect) == NO)
 	{
@@ -213,18 +214,18 @@ GnomeThemeSheetOutline (NSRect rect, CGFloat radius)
       [NSGraphicsContext saveGraphicsState];
       for (i = layers; i > 0; i--)
 	{
-	  CGFloat grow = i * 1.6;
+	  CGFloat grow = i * 1.3;
 	  NSRect layer = NSMakeRect (NSMinX (rect) - grow,
-				     NSMinY (rect) - grow - 3,
+				     NSMinY (rect) - grow - 1,
 				     NSWidth (rect) + 2 * grow,
-				     top - (NSMinY (rect) - grow - 3));
+				     top - (NSMinY (rect) - grow - 1));
 
 	  [[NSColor colorWithCalibratedWhite: 0
-				       alpha: (dark ? 0.05 : 0.035)]
+				       alpha: (dark ? 0.03 : 0.016)]
 	    set];
 	  [GnomeThemeSheetOutline (layer, radius + grow) fill];
 	}
-      [[NSColor colorWithCalibratedWhite: 0 alpha: dark ? 0.6 : 0.16] set];
+      [[NSColor colorWithCalibratedWhite: 0 alpha: dark ? 0.5 : 0.12] set];
       [GnomeThemeSheetOutline (NSInsetRect (rect, -0.5, -0.5), radius + 0.5)
 	stroke];
       [NSGraphicsContext restoreGraphicsState];
