@@ -57,6 +57,8 @@
   NSTimer *_commandFIFOTimer;
   /* The tool tips shown by the "tooltip" command. */
   id _toolTips;
+  /* The Theme Settings panel (ThemeDemoSettingsPanel), once opened. */
+  id _settingsPanel;
 }
 
 @end
