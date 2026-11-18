@@ -570,6 +570,12 @@ GnomeThemeResizeCursor(NSUInteger edges)
 
 @end
 
+/* libs-gui's own layout, which this view uses while another theme is
+   current (GSStandardWindowDecorationView.m declares it privately). */
+@interface GSStandardWindowDecorationView (GnomeThemeLayout)
+- (void) updateRects;
+@end
+
 @interface GnomeThemeHeaderBarDecorationView : GSStandardWindowDecorationView
 {
   NSButton *_zoomButton;
@@ -651,6 +657,16 @@ GnomeThemeResizeCursor(NSUInteger edges)
               window: (NSWindow *)w
 {
   self = [super initWithFrame: frame window: w];
+  if (self != nil)
+    {
+      /* A live switch to another theme keeps this view (GNUstep doesn't
+         make the decoration again): see -themeDidActivate:. */
+      [[NSNotificationCenter defaultCenter]
+        addObserver: self
+           selector: @selector(themeDidActivate:)
+               name: GSThemeDidActivateNotification
+             object: nil];
+    }
   if (self != nil && ([w styleMask] & NSFullScreenWindowMask))
     {
       [closeButton removeFromSuperview];
@@ -669,6 +685,62 @@ GnomeThemeResizeCursor(NSUInteger edges)
       [self updateRects];
     }
   return self;
+}
+
+/* Whether the theme drawing the window now is this one. After a live
+   switch to another theme this view stays the window's decoration, so it
+   then lays out and draws as GNUstep's own does, with that theme's
+   buttons (#149). */
+static BOOL
+GnomeThemeIsCurrent (void)
+{
+  return [[GSTheme theme] isKindOfClass: [GnomeTheme class]];
+}
+
+/* Gives the window the current theme's close and minimise buttons, and
+   this theme's own maximise button only while it is current. */
+- (void) themeDidActivate: (NSNotification *)notification
+{
+  NSUInteger mask = [window styleMask];
+  BOOL ours = GnomeThemeIsCurrent ();
+
+  if ((mask & NSFullScreenWindowMask) == 0)
+    {
+      if (closeButton != nil)
+        {
+          NSButton *button = [NSWindow standardWindowButton: NSWindowCloseButton
+                                               forStyleMask: mask];
+
+          [closeButton removeFromSuperview];
+          closeButton = button;
+          [closeButton setTarget: window];
+          [self addSubview: closeButton];
+        }
+      if (miniaturizeButton != nil)
+        {
+          NSButton *button = [NSWindow standardWindowButton: NSWindowMiniaturizeButton
+                                               forStyleMask: mask];
+
+          [miniaturizeButton removeFromSuperview];
+          miniaturizeButton = button;
+          [miniaturizeButton setTarget: window];
+          [self addSubview: miniaturizeButton];
+        }
+      if (_zoomButton != nil)
+        {
+          [_zoomButton removeFromSuperview];
+          _zoomButton = nil;
+        }
+      if (ours && (mask & NSResizableWindowMask) && hasTitleBar)
+        {
+          _zoomButton = [NSWindow standardWindowButton: NSWindowZoomButton forStyleMask: mask];
+          [_zoomButton setTarget: self];
+          [_zoomButton setAction: @selector(toggleMaximized:)];
+          [self addSubview: _zoomButton];
+        }
+    }
+  [self updateRects];
+  [self setNeedsDisplay: YES];
 }
 
 /* The title shows the unsaved-changes dot. */
@@ -1114,6 +1186,11 @@ GnomeThemeResizeCursor(NSUInteger edges)
 {
   NSRect bounds = [self bounds];
 
+  if (GnomeThemeIsCurrent () == NO)
+    {
+      [super updateRects];
+      return;
+    }
   if (hasTitleBar)
     {
       titleBarRect = NSMakeRect (NSMinX (bounds), NSMaxY (bounds) - GnomeThemeHeaderBarHeight,
@@ -1250,6 +1327,17 @@ GnomeThemeHeaderBarTitle(NSWindow *window, NSString **folder)
 {
   NSRect bounds = [self bounds];
   NSColor *background = [NSColor windowBackgroundColor];
+
+  if (GnomeThemeIsCurrent () == NO)
+    {
+      /* The window keeps this theme's bar height (its frame was made
+         for it): what the other theme's shorter title bar leaves of the
+         bar takes the window's background, not the old drawing. */
+      [background set];
+      NSRectFill (NSIntersectionRect (rect, bounds));
+      [super drawRect: rect];
+      return;
+    }
 
   if (hasTitleBar && NSIntersectsRect (rect, titleBarRect))
     {
