@@ -20,6 +20,9 @@
 
 #import "AppController.h"
 #import "ThemeDemoTableDataSource.h"
+#ifdef THEMEDEMO_THEME_SETTINGS
+#import "ThemeDemoSettingsPanel.h"
+#endif
 
 #import <Foundation/Foundation.h>
 #import <GNUstepGUI/GSDisplayServer.h>
@@ -84,6 +87,11 @@ ThemeDemoPrintLine(NSString *line)
 - (BOOL) performRequestedTabDumpIfNeeded;
 - (BOOL) performRequestedTypographyDumpIfNeeded;
 - (BOOL) performRequestedScreenshotIfNeeded;
+#ifdef THEMEDEMO_THEME_SETTINGS
+- (IBAction) showThemeSettings: (id)sender;
+- (BOOL) performRequestedSettingsIfNeeded;
+- (void) runRequestedSettingsScript;
+#endif
 - (void) openRequestedMenu;
 - (void) startRequestedCommandInterfaceIfNeeded;
 - (void) runRequestedCommandScript;
@@ -198,6 +206,7 @@ ThemeDemoPrintLine(NSString *line)
   RELEASE (_pendingDropdownCaptureName);
   RELEASE (_pendingDropdownCapturePath);
   RELEASE (_commandFIFOBuffer);
+  RELEASE (_settingsPanel);
   [self closeCommandFIFO];
   [super dealloc];
 }
@@ -243,6 +252,12 @@ ThemeDemoPrintLine(NSString *line)
   [_window makeKeyAndOrderFront: self];
   [_window makeFirstResponder: nil];
   [self applyLaunchOptions];
+#ifdef THEMEDEMO_THEME_SETTINGS
+  if ([self performRequestedSettingsIfNeeded])
+    {
+      return;
+    }
+#endif
   if ([self performRequestedScreenshotIfNeeded])
     {
       return;
@@ -277,6 +292,11 @@ ThemeDemoPrintLine(NSString *line)
   [appMenu addItemWithTitle: @"About ThemeDemo"
                      action: @selector(orderFrontStandardAboutPanel:)
               keyEquivalent: @""];
+#ifdef THEMEDEMO_THEME_SETTINGS
+  [[appMenu addItemWithTitle: @"Theme Settings..."
+                      action: @selector(showThemeSettings:)
+               keyEquivalent: @","] setTarget: self];
+#endif
   [appMenu addItem: [NSMenuItem separatorItem]];
   [appMenu addItemWithTitle: @"Quit ThemeDemo"
                      action: @selector(terminate:)
@@ -455,6 +475,90 @@ ThemeDemoPrintLine(NSString *line)
       [NSApp performSelector: @selector(terminate:) withObject: self afterDelay: quitAfter];
     }
 }
+
+#ifdef THEMEDEMO_THEME_SETTINGS
+- (IBAction) showThemeSettings: (id)sender
+{
+  if (_settingsPanel == nil)
+    {
+      _settingsPanel = [[ThemeDemoSettingsPanel alloc] init];
+    }
+  [_settingsPanel show];
+}
+
+/* -ThemeDemoOpenSettings YES opens the Theme Settings panel at launch.
+   -ThemeDemoSettingsScript "action; action; ..." then runs the panel's
+   scripted actions (ThemeDemoSettingsPanel.h), one line each on stderr,
+   -ThemeDemoSettingsCapture PATH writes the panel as a PNG, and with a
+   script or a capture ThemeDemo quits afterwards. For checks and
+   screenshots. */
+- (BOOL) performRequestedSettingsIfNeeded
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *script = [defaults stringForKey: @"ThemeDemoSettingsScript"];
+  NSString *capture = [defaults stringForKey: @"ThemeDemoSettingsCapture"];
+
+  if (![defaults boolForKey: @"ThemeDemoOpenSettings"]
+    && [script length] == 0 && [capture length] == 0)
+    {
+      return NO;
+    }
+  [self showThemeSettings: self];
+  if ([script length] == 0 && [capture length] == 0)
+    {
+      return NO;
+    }
+  [self performSelector: @selector(runRequestedSettingsScript)
+             withObject: nil
+             afterDelay: 0.3];
+  return YES;
+}
+
+- (void) runRequestedSettingsScript
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *script = [defaults stringForKey: @"ThemeDemoSettingsScript"];
+  NSString *capture = [defaults stringForKey: @"ThemeDemoSettingsCapture"];
+  NSEnumerator *e = [[script componentsSeparatedByString: @";"]
+		      objectEnumerator];
+  NSString *action;
+
+  while ((action = [e nextObject]) != nil)
+    {
+      BOOL ok;
+
+      action = [action stringByTrimmingCharactersInSet:
+	[NSCharacterSet whitespaceCharacterSet]];
+      if ([action length] == 0)
+	{
+	  continue;
+	}
+      ok = [_settingsPanel performScriptedAction: action];
+      fprintf (stderr, "ThemeDemo-settings %s %s\n", ok ? "ok" : "FAILED",
+	       [action UTF8String]);
+    }
+  if ([capture length] > 0)
+    {
+      NSView *view = [[_settingsPanel panel] contentView];
+      NSBitmapImageRep *bitmap;
+      NSData *png = nil;
+
+      [[_settingsPanel panel] displayIfNeeded];
+      bitmap = [view bitmapImageRepForCachingDisplayInRect: [view bounds]];
+      if (bitmap != nil)
+	{
+	  [view cacheDisplayInRect: [view bounds] toBitmapImageRep: bitmap];
+	  png = [bitmap representationUsingType: NSPNGFileType
+				     properties: [NSDictionary dictionary]];
+	}
+      if ([png length] == 0 || ![png writeToFile: capture atomically: YES])
+	{
+	  NSLog (@"Failed to capture the Theme Settings panel to %@", capture);
+	}
+    }
+  [NSApp terminate: self];
+}
+#endif
 
 - (BOOL) performRequestedScreenshotIfNeeded
 {

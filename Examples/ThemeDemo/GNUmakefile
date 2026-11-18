@@ -40,6 +40,29 @@ ThemeDemo_HEADER_FILES = \
 
 ThemeDemo_RESOURCE_FILES = ThemeDemoInfo.plist
 
+# The Theme Settings panel (ThemeDemo > Theme Settings...) uses
+# gnustep-themes' ThemeSettingsKit and ThemeSettingsUI. It's built when
+# their headers are found in the GNUstep header path, or set
+# THEME_SETTINGS=yes (or no) to choose. THEME_SETTINGS_PREFIX names a tree
+# that has them instead (as an unpacked package: usr/GNUstep/System/...).
+ifneq ($(THEME_SETTINGS_PREFIX),)
+ THEME_SETTINGS_HEADERS := $(THEME_SETTINGS_PREFIX)/Library/Headers
+ THEME_SETTINGS_LIBS := $(THEME_SETTINGS_PREFIX)/Library/Libraries
+endif
+ifeq ($(THEME_SETTINGS),)
+ THEME_SETTINGS := $(if $(wildcard $(THEME_SETTINGS_HEADERS)/ThemeSettingsUI/ThemeSettingsUI.h $(GNUSTEP_SYSTEM_HEADERS)/ThemeSettingsUI/ThemeSettingsUI.h $(GNUSTEP_LOCAL_HEADERS)/ThemeSettingsUI/ThemeSettingsUI.h $(GNUSTEP_USER_HEADERS)/ThemeSettingsUI/ThemeSettingsUI.h),yes,no)
+endif
+ifeq ($(THEME_SETTINGS),yes)
+ ThemeDemo_OBJC_FILES += ThemeDemoSettingsPanel.m
+ ThemeDemo_HEADER_FILES += ThemeDemoSettingsPanel.h
+ ADDITIONAL_OBJCFLAGS += -DTHEMEDEMO_THEME_SETTINGS=1
+ ifneq ($(THEME_SETTINGS_HEADERS),)
+  ADDITIONAL_INCLUDE_DIRS += -I$(THEME_SETTINGS_HEADERS)
+  ADDITIONAL_LIB_DIRS += -L$(THEME_SETTINGS_LIBS)
+ endif
+ ThemeDemo_GUI_LIBS += -lThemeSettingsUI -lThemeSettingsKit
+endif
+
 ADDITIONAL_OBJCFLAGS += -Wno-import
 
 include $(GNUSTEP_MAKEFILES)/application.make
