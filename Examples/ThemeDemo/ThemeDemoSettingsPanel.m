@@ -42,8 +42,9 @@ ThemeDemoDomain (void)
 @interface ThemeDemoSettingsPanel (Private)
 - (void) buildPanel;
 - (BOOL) targetApplication;
-- (BOOL) confirmDiscard;
+- (BOOL) confirmDiscard: (NSString *)why;
 - (void) toggleAllApplications: (id)sender;
+- (void) logSettings: (NSString *)line;
 @end
 
 @implementation ThemeDemoSettingsPanel
@@ -123,12 +124,47 @@ ThemeDemoDomain (void)
 	}
       return [fm fileExistsAtPath: arg];
     }
+  if ([verb isEqualToString: @"close"])
+    {
+      [_panel performClose: self];
+      return YES;
+    }
+  if ([verb isEqualToString: @"reopen"])
+    {
+      [self show];
+      [self logSettings: [NSString stringWithFormat:
+	@"reopen visible=%d changes=%d", (int)[_panel isVisible],
+	(int)[_model hasChanges]]];
+      return YES;
+    }
   if ([verb isEqualToString: @"confirm"])
     {
       _confirmAnswer = [arg isEqualToString: @"yes"] ? 1 : 0;
       return YES;
     }
   return [_editor performScriptedAction: action];
+}
+
+/* Closing the panel drops what is staged and not applied, so it isn't
+   there again when the panel reopens; the user says first whether that's
+   all right, as when switching what the settings apply to. */
+- (BOOL) windowShouldClose: (id)sender
+{
+  BOOL hadChanges = [_model hasChanges];
+
+  if (![self confirmDiscard: @"Closing the panel discards them."])
+    {
+      [self logSettings: @"close declined"];
+      return NO;
+    }
+  if (hadChanges)
+    {
+      [_model cancel];
+      [_editor reloadFromModel];
+    }
+  [self logSettings: [NSString stringWithFormat: @"close discarded=%d",
+    (int)hadChanges]];
+  return YES;
 }
 
 /* GTSThemeSettingsEditorDelegate.  The outcome, never the message text,
@@ -140,13 +176,10 @@ ThemeDemoDomain (void)
 - (void) themeSettingsEditor: (GTSThemeSettingsEditor *)editor
   didFinishApplyWithOutcome: (GTSApplyOutcome *)outcome
 {
-  if ([[NSUserDefaults standardUserDefaults]
-	boolForKey: @"ThemeDemoSettingsLog"])
-    {
-      fprintf (stderr, "ThemeDemo-settings apply kind=%d wrote=%d"
-	" reload=%d target=%s\n", (int)[outcome kind], (int)[outcome didWrite],
-	(int)[outcome needsReload], [[_model targetTitle] UTF8String]);
-    }
+  [self logSettings: [NSString stringWithFormat:
+    @"apply kind=%d wrote=%d reload=%d target=%@", (int)[outcome kind],
+    (int)[outcome didWrite], (int)[outcome needsReload],
+    [_model targetTitle]]];
 }
 
 @end
@@ -169,6 +202,7 @@ ThemeDemoDomain (void)
   [_panel setTitle: @"Theme Settings"];
   [_panel setReleasedWhenClosed: NO];
   [_panel setMinSize: NSMakeSize (520, 360)];
+  [_panel setDelegate: self];
   content = [_panel contentView];
 
   /* The switch to all applications; the editor says what it applies
@@ -198,9 +232,10 @@ ThemeDemoDomain (void)
 					       infoDictionary]];
 }
 
-/* Switching what the settings apply to drops what is staged and not
-   applied: the user says first whether that's all right. */
-- (BOOL) confirmDiscard
+/* Switching what the settings apply to, or closing the panel, drops
+   what is staged and not applied: the user says first whether that's all
+   right.  why finishes the alert's message. */
+- (BOOL) confirmDiscard: (NSString *)why
 {
   int answer;
 
@@ -215,16 +250,26 @@ ThemeDemoDomain (void)
       return answer == 1;
     }
   return NSRunAlertPanel (@"Discard your changes?",
-    @"You have changes that aren't applied yet. Switching what the"
-    @" settings apply to discards them.",
-    @"Discard", @"Cancel", nil) == NSAlertDefaultReturn;
+    @"You have changes that aren't applied yet. %@",
+    @"Discard", @"Cancel", nil, why) == NSAlertDefaultReturn;
+}
+
+/* With -ThemeDemoSettingsLog YES, a line on stderr for the checks. */
+- (void) logSettings: (NSString *)line
+{
+  if ([[NSUserDefaults standardUserDefaults]
+	boolForKey: @"ThemeDemoSettingsLog"])
+    {
+      fprintf (stderr, "ThemeDemo-settings %s\n", [line UTF8String]);
+    }
 }
 
 - (void) toggleAllApplications: (id)sender
 {
   BOOL global = ([_allApplications state] == NSOnState);
 
-  if (![self confirmDiscard])
+  if (![self confirmDiscard:
+    @"Switching what the settings apply to discards them."])
     {
       [_allApplications setState: global ? NSOffState : NSOnState];
       return;
