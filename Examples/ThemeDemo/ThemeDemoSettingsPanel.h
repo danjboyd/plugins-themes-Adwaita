@@ -43,8 +43,10 @@
    editor's own actions ("choose <settingId> <value>", "reset <settingId>",
    "apply", ...) and the panel's: "all-applications on|off",
    "confirm yes|no" (how the next "discard staged changes?" question is
-   answered, instead of asking) and "wait-file <path>" (waits up to 20 s
-   for the file, so a check can change the defaults from outside at a
-   known point). Returns NO if it couldn't be done. */
+   answered, instead of asking), "close" (as the close button does),
+   "reopen" (shows the panel again and logs whether it has staged
+   changes) and "wait-file <path>" (waits up to 20 s for the file, so a
+   check can change the defaults from outside at a known point). Returns
+   NO if it couldn't be done. */
 - (BOOL) performScriptedAction: (NSString *)action;
 @end
