@@ -92,6 +92,31 @@ QuirkProbeUsesPrimaryMenu(void)
 
 /* A scroll view that says it has a vertical scroller even when its autohiding
    scroller is out of the view tree, as some libs-gui versions do. */
+/* Records the widths -[NSScrollView contentSize] reports to an app that
+   watches its clip view's frame, as apps that size their document from it
+   do (plugins-themes-Adwaita#139). */
+@interface QuirkProbeContentSizeWatcher : NSObject
+{
+@public
+  NSScrollView *scrollView;
+  NSMutableArray *widths;
+}
+- (void) clipFrameChanged: (NSNotification *)notification;
+@end
+
+@implementation QuirkProbeContentSizeWatcher
+- (void) clipFrameChanged: (NSNotification *)notification
+{
+  [widths addObject: [NSNumber numberWithDouble: [scrollView contentSize].width]];
+}
+- (void) dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver: self];
+  RELEASE (widths);
+  [super dealloc];
+}
+@end
+
 @interface QuirkProbeDetachedScrollerScrollView : NSScrollView
 @end
 
@@ -9775,6 +9800,95 @@ QuirkProbeAboutIconInk (NSDictionary *options, QuirkProbePixelTest test)
     }
 }
 
+/* -[NSScrollView contentSize] with overlay scrollers: an app watching
+   the clip view's frame sees one width, the overlay layout's, however the
+   scroll view is tiled; libs-gui's own -tile, which the theme lays out
+   again after, mustn't show it libs-gui's narrower width on the way.
+   With two widths an app that sizes its document from -contentSize can
+   re-wrap and re-tile without end (plugins-themes-Adwaita#139). */
+- (void) checkOverlayContentSize
+{
+  NSWindow *window;
+  NSScrollView *scrollView;
+  NSView *document;
+  QuirkProbeContentSizeWatcher *watcher;
+  NSMutableSet *seen;
+  NSSize final, formula;
+  NSString *detail;
+
+  if ([[NSUserDefaults standardUserDefaults] objectForKey: @"GnomeThemeOverlayScrollbars"] != nil
+    && [[NSUserDefaults standardUserDefaults] boolForKey: @"GnomeThemeOverlayScrollbars"] == NO)
+    {
+      [self skip: @"overlay-content-size" detail: @"GnomeThemeOverlayScrollbars is NO"];
+      return;
+    }
+  window = [self windowWithFrame: NSMakeRect (60, 200, 540, 300) title: @"Probe Overlay Content Size"];
+  scrollView = AUTORELEASE ([[NSScrollView alloc] initWithFrame: NSMakeRect (10, 10, 500, 260)]);
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView setBorderType: NSNoBorder];
+  [scrollView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
+  document = AUTORELEASE ([[NSView alloc] initWithFrame: NSMakeRect (0, 0, 500, 1000)]);
+  [document setAutoresizingMask: NSViewWidthSizable];
+  [scrollView setDocumentView: document];
+  [[window contentView] addSubview: scrollView];
+  [window orderFront: nil];
+  [window display];
+
+  watcher = AUTORELEASE ([QuirkProbeContentSizeWatcher new]);
+  watcher->scrollView = scrollView;
+  watcher->widths = [NSMutableArray new];
+  [[scrollView contentView] setPostsFrameChangedNotifications: YES];
+  [[NSNotificationCenter defaultCenter] addObserver: watcher
+                                           selector: @selector(clipFrameChanged:)
+                                               name: NSViewFrameDidChangeNotification
+                                             object: [scrollView contentView]];
+  /* Tiled as apps do, as a resize does, and as a scroller shown again does. */
+  [scrollView tile];
+  [scrollView setFrameSize: NSMakeSize (480, 260)];
+  [scrollView setFrameSize: NSMakeSize (500, 260)];
+  [scrollView setHasVerticalScroller: NO];
+  [scrollView setHasVerticalScroller: YES];
+  [scrollView tile];
+  [window display];
+  [[NSNotificationCenter defaultCenter] removeObserver: watcher];
+
+  final = [scrollView contentSize];
+  formula = [NSScrollView contentSizeForFrameSize: [scrollView frame].size
+                            hasHorizontalScroller: NO
+                              hasVerticalScroller: YES
+                                       borderType: [scrollView borderType]];
+  /* Widths at 500 wide only (above 480): the resize to 480 is meant to
+     change it. */
+  seen = [NSMutableSet set];
+  {
+    NSEnumerator *e = [watcher->widths objectEnumerator];
+    NSNumber *w;
+
+    while ((w = [e nextObject]) != nil)
+      {
+        if ([w doubleValue] > 480.5)
+          {
+            [seen addObject: w];
+          }
+      }
+  }
+  [window orderOut: nil];
+
+  detail = [NSString stringWithFormat: @"widths seen %@; widths at 500pt %@; final %@; "
+    @"+contentSizeForFrameSize: %@",
+    [watcher->widths componentsJoinedByString: @","],
+    [[seen allObjects] componentsJoinedByString: @","],
+    NSStringFromSize (final), NSStringFromSize (formula)];
+  if ([seen count] == 1 && [[seen anyObject] doubleValue] == final.width)
+    {
+      [self pass: @"overlay-content-size" detail: detail];
+    }
+  else
+    {
+      [self fail: @"overlay-content-size" detail: detail];
+    }
+}
+
 /* Overlay scrollbars (GNOME's overlay-scrolling): the content runs under
    the scroller, which isn't drawn and lets presses through at rest; it
    shows (and takes presses) once the content scrolls, and fades out a
@@ -10463,6 +10577,13 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self finish];
       return;
     }
+  /* -ProbeOnly overlay-content-size: #139 alone. */
+  if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"overlay-content-size"])
+    {
+      [self checkOverlayContentSize];
+      [self finish];
+      return;
+    }
   /* -ProbeOnly accent: GNOME's accent at launch (make check-live-settings). */
   if ([[[NSUserDefaults standardUserDefaults] stringForKey: @"ProbeOnly"] isEqualToString: @"accent"])
     {
@@ -10521,6 +10642,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
       [self checkMenuSeparatorAndShortcut];
       [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayContentSize];
   [self checkOverlayScrollerCursor];
   [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
@@ -10645,6 +10767,7 @@ QuirkProbeInkIn(NSBitmapImageRep *rep, NSRect area, const NSUInteger base[3], lo
   [self checkWindowManagerClose];
   [self checkTemplateImages];
   [self checkOverlayScrollers];
+  [self checkOverlayContentSize];
   [self checkOverlayScrollerCursor];
   [self checkAutohiddenScrollerCursor];
   [self checkSwitch];
