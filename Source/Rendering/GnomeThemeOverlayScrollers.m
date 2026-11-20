@@ -336,7 +336,63 @@ GnomeThemeScrollerIsDragged(NSScroller *scroller)
   return state != nil && state->dragged == scroller;
 }
 
-static void GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state);
+static void GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state, NSRect tiled);
+
+/* libs-gui's -tile, without what it does to the clip view showing.  It
+   sets the clip view's frame to its own layout, with the scroller's strip
+   taken off, and the overlay layout widens it again just after.  Seen from
+   outside, -contentSize changed twice on every tile, narrower then wider,
+   and an app that sizes its document from it could re-wrap the document
+   at the narrow width and tile again, without end
+   (plugins-themes-Adwaita#139).  So while libs-gui tiles, the clip view
+   posts no frame or bounds notifications and doesn't resize the document,
+   and after it the clip view goes back to its frame and scroll point from
+   before, quietly: the overlay layout's frame is the one change seen.
+   Returns the clip view's frame in libs-gui's layout, which the overlay
+   layout starts from. */
+static NSRect
+GnomeThemeQuietOriginalTile(NSScrollView *scrollView, GnomeThemeOverlayState *state,
+                            void (*originalIMP)(id, SEL), SEL cmd)
+{
+  NSClipView *clip = [scrollView contentView];
+  NSRect frame, tiled;
+  NSPoint origin;
+  BOOL postsFrame, postsBounds, resizes;
+
+  if (clip == nil)
+    {
+      originalIMP (scrollView, cmd);
+      return NSZeroRect;
+    }
+  RETAIN (clip);
+  frame = [clip frame];
+  origin = [clip bounds].origin;
+  postsFrame = [clip postsFrameChangedNotifications];
+  postsBounds = [clip postsBoundsChangedNotifications];
+  resizes = [clip autoresizesSubviews];
+  [clip setPostsFrameChangedNotifications: NO];
+  [clip setPostsBoundsChangedNotifications: NO];
+  [clip setAutoresizesSubviews: NO];
+  originalIMP (scrollView, cmd);
+  tiled = [clip frame];
+  /* Its frame put back reflects the scroll, which can tile (auto-hiding
+     scrollers): that tile is skipped, the overlay layout follows. */
+  state->adjusting = YES;
+  if (NSEqualRects ([clip frame], frame) == NO)
+    {
+      [clip setFrame: frame];
+    }
+  if (NSEqualPoints ([clip bounds].origin, origin) == NO)
+    {
+      [clip setBoundsOrigin: origin];
+    }
+  state->adjusting = NO;
+  [clip setPostsFrameChangedNotifications: postsFrame];
+  [clip setPostsBoundsChangedNotifications: postsBounds];
+  [clip setAutoresizesSubviews: resizes];
+  RELEASE (clip);
+  return tiled;
+}
 
 @implementation GnomeTheme (OverlayScrollers)
 
@@ -371,12 +427,14 @@ static void GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayS
      three at most, where auto-hiding never settles. */
   for (pass = 0; pass < 3; pass++)
     {
+      NSRect tiled = [[scrollView contentView] frame];
+
       state->retile = NO;
       if (originalIMP != NULL)
         {
-          originalIMP (self, _cmd);
+          tiled = GnomeThemeQuietOriginalTile (scrollView, state, originalIMP, _cmd);
         }
-      GnomeThemeOverlayLayout (scrollView, state);
+      GnomeThemeOverlayLayout (scrollView, state, tiled);
       if (state->retile == NO)
         {
           break;
@@ -387,9 +445,10 @@ static void GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayS
 }
 
 /* The overlay layout after libs-gui's -tile: the scrollers over the
-   content at the edges, the clip view to those edges. */
+   content at the edges, the clip view to those edges.  It starts from the
+   clip view's frame in libs-gui's layout (tiled). */
 static void
-GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
+GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state, NSRect tiled)
 {
   NSClipView *clip;
   NSRect content;
@@ -400,7 +459,7 @@ GnomeThemeOverlayLayout(NSScrollView *scrollView, GnomeThemeOverlayState *state)
 
   state->adjusting = YES;
   clip = [scrollView contentView];
-  content = [clip frame];
+  content = tiled;
   vertical = [scrollView hasVerticalScroller] ? [scrollView verticalScroller] : nil;
   horizontal = [scrollView hasHorizontalScroller] ? [scrollView horizontalScroller] : nil;
   /* The scrollers at the edges inside the border, over the content, which
